@@ -13,7 +13,7 @@ Currently runs on **Linux** only.
 ## Dependencies
 
 ### Ollama
----
+
 This project relies on Ollama for backend LLM communication services. [Please install](https://ollama.com) it before continuing.
 
 Note: Please make sure you are running the Ollama service and that the service has permissions to access and write to `/usr/share/ollama/.ollama/models`.
@@ -34,4 +34,10 @@ You will also need a `system.json` to provide a custom System prompt for ollama 
 {
     "system": "You are an amazing AI assitant."
 }
+```
+
+Then just run it using:
+
+```
+nodemon
 ```
