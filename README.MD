@@ -1,0 +1,37 @@
+# ☢️ OkuuAI ☢️
+
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
+## Description
+
+OkuuAI is a project built using LLM (Language Model) technology. It aims to provide advanced AI capabilities for assisting in multiple tasks, including programming, providing context using vision and more!
+
+OkuuAI runs locally using your CPU + GPU, providing full privacy.
+
+Currently runs on **Linux** only.
+
+## Dependencies
+
+### Ollama
+---
+This project relies on Ollama for backend LLM communication services. [Please install](https://ollama.com) it before continuing.
+
+Note: Please make sure you are running the Ollama service and that the service has permissions to access and write to `/usr/share/ollama/.ollama/models`.
+
+## Installation
+
+To install the dependencies, run the following command:
+
+```
+npm install
+```
+
+The program will automatically download and install necessary models.
+
+You will also need a `system.json` to provide a custom System prompt for ollama to use. You can make on on the root dir of the project and use this as template:
+
+```
+{
+    "system": "You are an amazing AI assitant."
+}
+```

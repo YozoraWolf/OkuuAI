@@ -1,0 +1,30 @@
+{
+  "name": "okuuai",
+  "version": "0.0.1",
+  "description": "Okuu AI",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "sucrase ./src -d ./dist --transforms typescript,imports"
+  },
+  "keywords": [
+    "okuu",
+    "touhou",
+    "ai"
+  ],
+  "author": "YozoraWolf",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.8",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.7",
+    "nodemon": "^3.1.0",
+    "sucrase": "^3.35.0",
+    "ts-node": "^10.9.2",
+    "tslib": "^2.6.2",
+    "typescript": "^5.4.5"
+  }
+}
