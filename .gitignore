@@ -3,3 +3,4 @@ models
 system.json
 logs
 dist
+.env

@@ -4,7 +4,7 @@ import { Logger } from './logger';
 
 const server: string = 'http://localhost:11434';
 
-export function checkModelAvailability(): Promise<void> {
+export const checkModelAvailability = () : Promise<void> => {
     return new Promise<void>(async (resolve, reject) => {
         try {
             const url = `${server}/api/show`;

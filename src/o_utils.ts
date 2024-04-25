@@ -2,6 +2,7 @@ import fs from 'fs';
 import axios, { AxiosResponse } from 'axios';
 import { exec } from 'child_process';
 import { Logger } from './logger';
+import path from 'path';
 
 export const downloadFile = async (url: string, filePath: string): Promise<any> => {
   const response: AxiosResponse<ReadableStream> = await axios({
@@ -69,7 +70,7 @@ export const checkOllamaService = async () => {
 
       if (error.code === 3) {
         // if the service is not active, start it
-        exec(`sudo systemctl enable ${serviceName} && sudo systemctl start ${serviceName}`, (startError, startStdout, startStderr) => {
+        exec(`sudo systemctl enable ${serviceName} && sudo systemctl start ${serviceName}`, (startError) => {
           if (startError) {
             Logger.ERROR(`Error starting ${serviceName}: ${startError.message}`);
             reject(startError);
@@ -82,3 +83,11 @@ export const checkOllamaService = async () => {
     });
   });
 };
+
+export const checkDir = (path  : string) => {
+  if (!fs.existsSync(path)) {
+    Logger.ERROR(`${path}\nThis directory does not exist, please specify a correct one in the .env file.`);
+    process.exit(1);
+  }
+  return path;
+}

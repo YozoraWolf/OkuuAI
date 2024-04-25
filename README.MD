@@ -20,6 +20,18 @@ Note: Please make sure you are running the Ollama service and that the service h
 
 ## Installation
 
+You will have to create a `.env` file in the src directory to specify some required data.
+
+### .env file template
+```
+# The url of your .gguf file, to be downloaded
+MODEL_URL=MODEL_URL=https://huggingface.co/MaziyarPanahi/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct.Q6_K.gguf?download=true
+# The path where you want the .gguf file to be saved in, make sure it exists!
+MODEL_PATH=/usr/share/ollama/.ollama/models/mymodelfolder
+```
+
+You will need to provide adequate permissions to that folder so that ollama can access it.
+
 To install the dependencies, run the following command:
 
 ```

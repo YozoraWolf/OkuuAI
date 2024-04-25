@@ -3,11 +3,19 @@ import fs from 'fs';
 import { Core, Status } from './core';
 import { checkModelAvailability, createModel } from './ollama_bridge';
 import { Logger } from './logger';
+import path from 'path';
+import dotenv from 'dotenv';
+dotenv.config();
 
 export const init = async () => {
 
+    // Check if all required environment k-v are set.
+    checkEnvs();
+    console.log('model_org_name:', Core.model_org_name);
+    console.log('MODEL_NAME:', process.env.MODEL_URL);
+
     // Download model if doesn't exist
-    const model_url = "https://huggingface.co/QuantFactory/dolphin-2.9-llama3-8b-GGUF/resolve/main/dolphin-2.9-llama3-8b.Q6_K.gguf?download=true";
+    const model_url = process.env.MODEL_URL || '';
     const model_path = `${Core.model_path}${Core.model_org_name}`;
 
     const downloadModelFile = async (url: string, path: string) => {
@@ -38,3 +46,21 @@ export const init = async () => {
 
     Logger.INFO('Initialization complete');
 };
+
+const checkEnvs = () : void => {
+    // If there are new environment variables, add them to the envs array
+    const envs = [
+        'MODEL_URL',
+        'MODEL_PATH',
+    ];
+
+    envs.forEach(env => {
+        if (!process.env[env]) {
+            Logger.ERROR(`Environment variable ${env} is not set`);
+            process.exit(1);
+        }
+    });
+
+    // If all required envs are present, then continue execution.
+    Logger.INFO('All environment variables are set');
+}
