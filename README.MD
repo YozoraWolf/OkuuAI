@@ -16,7 +16,7 @@ Currently runs on **Linux** only.
 
 This project relies on Ollama for backend LLM communication services. [Please install](https://ollama.com) it before continuing.
 
-Note: Please make sure you are running the Ollama service and that the service has permissions to access and write to `/usr/share/ollama/.ollama/models`.
+Note: Please make sure you are running the Ollama service and that the service has permissions to access and write to the folder specified in `MODEL_PATH` (in the env file)
 
 ## Installation
 
