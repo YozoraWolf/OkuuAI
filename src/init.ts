@@ -2,7 +2,8 @@ import { checkOllamaService, downloadFile } from './o_utils';
 import fs from 'fs';
 import { Core, Status } from './core';
 import { checkModelAvailability } from './ollama_bridge';
-import { centeredLogo, centeredLogoTxt } from './intro';
+import { centeredLogoTxt } from './intro';
+import { initTray } from './tray';
 import { Logger } from './logger';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -41,6 +42,8 @@ export const init = async () => {
 
     // check if model is available in ollama
     await checkModelAvailability();
+
+    await initTray();
 
     // set status to active
     Core.status = Status.ACTIVE;
