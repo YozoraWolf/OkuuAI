@@ -1,23 +1,19 @@
 import axios from 'axios';
 import { Core } from './core';
 import { Logger } from './logger';
+import ollama, { ChatResponse } from 'ollama'
 
-const server: string = 'http://localhost:11434';
-
-export const checkModelAvailability = () : Promise<void> => {
+export const checkModelAvailability = (): Promise<void> => {
     return new Promise<void>(async (resolve, reject) => {
         try {
-            const url = `${server}/api/show`;
-            const data = {
-                name: 'okuu'
-            };
-
-            const response = await axios.post(url, data);
+            const response = await ollama.show({ model: 'okuu' });
             Logger.INFO(`Model found!`);
             resolve();
         } catch (error: any) {
-            if (error.response.status === 404) {
+            Logger.WARN(`${error}`);
+            if (error) {
                 try {
+                    Logger.INFO(`Creating model...`);
                     const created = await createModel();
                     resolve();
                 } catch (error: any) {
@@ -37,7 +33,7 @@ export const createModel = async () => {
 
         try {
             // send a POST request to create the model
-            const response = await axios.post('http://localhost:11434/api/create', {
+            const response = await axios.post(`${Core.ollama_settings.host}/api/create`, {
                 name: Core.model_name,
                 modelfile: Core.modelfile,
             });
@@ -51,31 +47,17 @@ export const createModel = async () => {
     });
 }
 
-export const sendChat = async (message: string): Promise<string> => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const url = `${server}/api/chat`;
-            const data = {
-                model: Core.model_name,
-                messages: [
-                    {
-                        role: "user",
-                        content: message
-                    }
-                ],
-                options: {
-                    num_predict: 256
-                },
-                stream: false
-            }
-
-            Logger.DEBUG(`${url} -> ${JSON.stringify(data).substring(0, 128)}`);
-
-            const response = await axios.post(url, data);
-            resolve(response.data);
-        } catch (error: any) {
-            reject(error);
-            Logger.ERROR(`Error sending chat: ${error.response ? error.response.data : error.message}`);
+export const sendChat = async (cnt: string, callback?: (data: string) => void) => {
+    try {
+        const message = { role: 'user', content: cnt };
+        const response: AsyncGenerator<ChatResponse> = await ollama.chat({ model: 'okuu', messages: [message], stream: Core.ollama_settings.stream });
+        if(!Core.ollama_settings.stream) return response; // return the response if not streaming
+        // else stream the response to the callback
+        for await (const part of response) {
+            if (callback) callback(part.message.content);
         }
-    });
+    } catch (error: any) {
+        Logger.ERROR(`Error sending chat: ${error.response ? error.response.data : error.message}`);
+        return null;
+    }
 }

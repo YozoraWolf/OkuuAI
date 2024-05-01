@@ -13,23 +13,33 @@ export enum Status {
 
 export class Core {
     static status: Status = Status.INACTIVE;
-    static server: string = 'http://localhost:11434';
 
     static model_org_name: string = `${process.env.MODEL_URL?.match(/\/([^\/]+)\.gguf/)?.[1]}.gguf` || '';
     static model_path: string = checkDir(process.env.MODEL_PATH || '');
     static model_name: string = 'okuu';
 
-    static model_settings: any = {
+    static chat_settings: any = {
+        prefix: '\x1b[32mOkuu:\x1b[0m'
+    };
+
+    static model_settings: any = { 
         temperature: 1,
         num_ctx: 4096,
         top_k: 10,
         top_p: 1,
         system: system.system
-    }
+    };
 
 
-    // TODO: tinker more to find a stable ggguf model
-    static modelfile: string = `FROM ${Core.model_path}${Core.model_org_name}
+    static ollama_settings: any = {
+        host: 'http://localhost:11434',
+        stream: true
+    };
+
+
+
+// TODO: test a bit more
+static modelfile: string = `FROM ${Core.model_path}${Core.model_org_name}
 ${Object.entries(Core.model_settings)
     .filter(([key]) => key !== 'system')
     .map(([key, value]) => `PARAMETER ${key} ${value}`)

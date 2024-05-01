@@ -2,13 +2,12 @@ import fs from 'fs';
 import axios, { AxiosResponse } from 'axios';
 import { exec } from 'child_process';
 import { Logger } from './logger';
-import path from 'path';
 
 export const downloadFile = async (url: string, filePath: string): Promise<any> => {
   const response: AxiosResponse<ReadableStream> = await axios({
     method: 'get',
     url: url,
-    responseType: 'stream',
+    responseType: 'arraybuffer',
     maxRedirects: 5, // up to 5 redirects
     onDownloadProgress: (progressEvent) => {
       const totalBytes: number = progressEvent.total ?? 0;

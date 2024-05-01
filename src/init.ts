@@ -11,8 +11,8 @@ export const init = async () => {
 
     // Check if all required environment k-v are set.
     checkEnvs();
-    console.log('model_org_name:', Core.model_org_name);
-    console.log('MODEL_NAME:', process.env.MODEL_URL);
+    Logger.DEBUG(`model_org_name: ${Core.model_org_name}`);
+    Logger.DEBUG(`MODEL_NAME: ${process.env.MODEL_URL}`);
 
     // Download model if doesn't exist
     const model_url = process.env.MODEL_URL || '';
