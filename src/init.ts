@@ -1,14 +1,15 @@
 import { checkOllamaService, downloadFile } from './o_utils';
 import fs from 'fs';
 import { Core, Status } from './core';
-import { checkModelAvailability, createModel } from './ollama_bridge';
+import { checkModelAvailability } from './ollama_bridge';
+import { centeredLogo, centeredLogoTxt } from './intro';
 import { Logger } from './logger';
-import path from 'path';
 import dotenv from 'dotenv';
 dotenv.config();
 
 export const init = async () => {
 
+    console.log(centeredLogoTxt);
     // Check if all required environment k-v are set.
     checkEnvs();
     Logger.DEBUG(`model_org_name: ${Core.model_org_name}`);
