@@ -5,7 +5,7 @@ import { checkModelAvailability } from './ollama_bridge';
 import { centeredLogoTxt } from './intro';
 import { initTray } from './tray';
 import { Logger } from './logger';
-import { initDockerChromaDB } from './langchain/chromadb';
+import { initCollection, initDockerChromaDB } from './langchain/chromadb';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -49,6 +49,9 @@ export const init = async () => {
 
     // initialize chromadb
     await initDockerChromaDB();
+
+    // test collection
+    await initCollection();
 
     // set status to active
     Core.status = Status.ACTIVE;
