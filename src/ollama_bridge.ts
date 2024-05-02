@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Core } from './core';
 import { Logger } from './logger';
-import ollama, { ChatResponse } from 'ollama'
+import ollama, { ChatResponse, GenerateResponse } from 'ollama'
 
 export const checkModelAvailability = (): Promise<void> => {
     return new Promise<void>(async (resolve, reject) => {
@@ -50,11 +50,22 @@ export const createModel = async () => {
 export const sendChat = async (cnt: string, callback?: (data: string) => void) => {
     try {
         const message = { role: 'user', content: cnt };
-        const response: AsyncGenerator<ChatResponse> = await ollama.chat({ model: 'okuu', messages: [message], stream: Core.ollama_settings.stream });
+        const response: AsyncGenerator<GenerateResponse> = await ollama.generate({ 
+            model: 'okuu', 
+            prompt: cnt,
+            system: Core.model_settings.system,
+            stream: Core.ollama_settings.stream,
+            options: {
+                temperature: Core.model_settings.temperature,
+                num_ctx: Core.model_settings.num_ctx,
+                top_k: Core.model_settings.top_k,
+                top_p: Core.model_settings.top_p,
+            }
+        });
         if(!Core.ollama_settings.stream) return response; // return the response if not streaming
         // else stream the response to the callback
         for await (const part of response) {
-            if (callback) callback(part.message.content);
+            if (callback) callback(part.response);
         }
     } catch (error: any) {
         Logger.ERROR(`Error sending chat: ${error.response ? error.response.data : error.message}`);
