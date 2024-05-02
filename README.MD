@@ -28,9 +28,25 @@ You will have to create a `.env` file in the src directory to specify some requi
 MODEL_URL=MODEL_URL=https://huggingface.co/MaziyarPanahi/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct.Q6_K.gguf?download=true
 # The path where you want the .gguf file to be saved in, make sure it exists!
 MODEL_PATH=/usr/share/ollama/.ollama/models/mymodelfolder
+# This can be any port you choose, I chose 3009 because... 
+# (お空　009, nine in Japanese can be read as 'Kuu')
+PORT=3009
+# Chroma credentials (set to any you want, but change this)
+CHROMA_USER=username
+CHROMA_PWD=password
+# This can be any port you choose
+CHROMA_PORT=3010
 ```
 
 You will need to provide adequate permissions to that folder so that ollama can access it.
+
+---
+
+### Docker
+
+Make sure you have `docker` installed and that you can [run it without sudo](https://docs.docker.com/engine/install/linux-postinstall/).
+
+---
 
 To install the dependencies, run the following command:
 

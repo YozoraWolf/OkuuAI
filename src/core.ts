@@ -1,4 +1,3 @@
-import path from 'path';
 import system from '../system.json';
 import { checkDir } from './o_utils';
 import dotenv from 'dotenv';
