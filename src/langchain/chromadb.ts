@@ -60,7 +60,7 @@ const restartDockerChromaDB = async () => {
 
 const runDockerChromaDB = async () => {
     return new Promise<number>((resolve, reject) => {
-        exec(`docker run -d --env-file ${chromaDir}/.chroma_env -p ${CHROMA_PORT}:${CHROMA_PORT} --name okuu_chromadb chromadb/chroma`, (error, stdout, stderr) => {
+        exec(`docker run -d --env-file ${chromaDir}/.chroma_env -p ${CHROMA_PORT}:8000 --name okuu_chromadb chromadb/chroma`, (error, stdout, stderr) => {
             if (stderr.includes('Conflict. The container name "/okuu_chromadb" is already in use by container')) {
                 resolve(2);
             } else if (stderr) {
@@ -127,7 +127,7 @@ export const initCollection = async () => {
 
     const vectorStore = await Chroma.fromDocuments(docs, embeddings, {
         collectionName: "test",
-        url: 'http://localhost:3010', // Optional, will default to this value
+        url: 'http://127.0.0.1:3010', // Optional, will default to this value
     });
 
     Logger.INFO('Collection initialized successfully!');
