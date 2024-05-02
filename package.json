@@ -17,8 +17,10 @@
   "dependencies": {
     "axios": "^1.6.8",
     "chalk": "^4.1.2",
+    "chromadb": "^1.8.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "langchain": "^0.1.36",
     "ollama": "^0.5.0",
     "systray": "^1.0.5"
   },

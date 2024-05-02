@@ -4,3 +4,4 @@ system.json
 logs
 dist
 .env
+chromadb

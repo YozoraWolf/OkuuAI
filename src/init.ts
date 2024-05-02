@@ -5,6 +5,7 @@ import { checkModelAvailability } from './ollama_bridge';
 import { centeredLogoTxt } from './intro';
 import { initTray } from './tray';
 import { Logger } from './logger';
+import { initDockerChromaDB } from './langchain/chromadb';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -43,7 +44,11 @@ export const init = async () => {
     // check if model is available in ollama
     await checkModelAvailability();
 
+    // initialize tray icon
     await initTray();
+
+    // initialize chromadb
+    await initDockerChromaDB();
 
     // set status to active
     Core.status = Status.ACTIVE;
@@ -56,6 +61,8 @@ const checkEnvs = () : void => {
     const envs = [
         'MODEL_URL',
         'MODEL_PATH',
+        'CHROMA_USER',
+        'CHROMA_PWD'
     ];
 
     envs.forEach(env => {

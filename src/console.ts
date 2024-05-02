@@ -3,6 +3,7 @@ import { sendChat } from './ollama_bridge';
 import { Logger } from './logger';
 import { Core } from './core';
 import { stdout } from 'process';
+import { invoke } from './langchain/rag';
 
 const reprompt = () => {
     //Logger.DEBUG('Prompting user...');
