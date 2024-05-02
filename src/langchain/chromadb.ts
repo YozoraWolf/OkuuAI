@@ -3,7 +3,9 @@ import { OllamaEmbeddings } from "@langchain/community/embeddings/ollama";
 import { join } from 'path';
 import { exec } from 'child_process';
 import { Logger } from "../logger";
+import { CSVLoader } from "langchain/document_loaders/fs/csv";
 import fs from 'fs';
+import { Core } from "../core";
 
 const projectRoot = process.cwd();
 
@@ -31,12 +33,12 @@ export const initDockerChromaDB = async () => {
     if (res === 2) {
         Logger.INFO('Chroma docker container already exists, restarting container...');
         await restartDockerChromaDB();
-    } else if(res === 1) {
+    } else if (res === 1) {
         Logger.ERROR('Error occurred while starting chromadb/chroma docker container!');
         process.exit(1);
     }
     Logger.INFO(`ChromaDB initialized successfully!
-        Running on https://localhost:${CHROMA_PORT}`);
+        Running on http://localhost:${CHROMA_PORT}`);
 };
 
 const restartDockerChromaDB = async () => {
@@ -114,30 +116,28 @@ const pullChromaImage = async () => {
     });
 };
 
-async function initializeCollection() {
-    const embeddings = new OllamaEmbeddings();
-    const docs = ["I am wolf!", "This is a test!"];
 
-    const vectorStore = new Chroma(embeddings, {
+// TODO: Develop more on this
+export const initCollection = async () => {
+    const embeddings = new OllamaEmbeddings({model: 'okuu'});
+    const loader = new CSVLoader(`${projectRoot}/genshin.csv`);
+    const docs = await loader.load();
+
+    Logger.INFO('Documents loaded successfully!');
+
+    const vectorStore = await Chroma.fromDocuments(docs, embeddings, {
         collectionName: "test",
+        url: 'http://localhost:3010', // Optional, will default to this value
     });
 
+    Logger.INFO('Collection initialized successfully!');
+
+    // Search for the most similar document
+    const response = await vectorStore.similaritySearch("Diluc", 1);
+
+    console.log(response);
 
 
     // Persist the collection (optional)
-    await vectorStore
+    //await vectorStore
 }
-
-//initializeCollection();
-
-
-/*     // Embed the document using OllamaEmbeddings
-const embedding = await embeddings.embed("This is a sample document.");
-
-// Associate the embedding with the document
-await vectorStore.update(doc.id, { embedding });
-
-// Test similarity search is working with our local embeddings
-const question = "What is a sample document about?";
-const docs = await vectorStore.similaritySearch(question);
-console.log(docs.length); */
