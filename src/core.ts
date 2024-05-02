@@ -22,7 +22,7 @@ export class Core {
     };
 
     static model_settings: any = { 
-        temperature: 1,
+        temperature: .5,
         num_ctx: 4096,
         top_k: 10,
         top_p: 1,
