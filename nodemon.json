@@ -1,9 +1,11 @@
 {
-    "watch": ["src/**/*.ts"],
-    "ext": ".ts,.js",
-    "ignore": [],
-    "execMap": {
+  "watch": [
+    "src/**/*.ts"
+  ],
+  "ext": ".ts,.js",
+  "ignore": [],
+  "execMap": {
     "ts": "node -r sucrase/register/ts"
-    },
-    "exec": "npx eslint src && sucrase ./src -d ./dist --transforms typescript,imports && node ./dist/index.js"
-  }
+  },
+  "exec": "sucrase ./src -d ./dist --transforms typescript,imports && node ./dist/index.js"
+}
