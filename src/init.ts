@@ -7,6 +7,7 @@ import { initTray } from './tray';
 import { Logger } from './logger';
 import { initDockerChromaDB } from './langchain/chromadb';
 import dotenv from 'dotenv';
+import { initRedis } from './langchain/memory/redis';
 dotenv.config();
 
 export const init = async () => {
@@ -50,6 +51,9 @@ export const init = async () => {
     // initialize chromadb
     await initDockerChromaDB();
 
+    // initialize redis
+    await initRedis();
+
     // set status to active
     Core.status = Status.ACTIVE;
 
@@ -62,7 +66,8 @@ const checkEnvs = () : void => {
         'MODEL_URL',
         'MODEL_PATH',
         'CHROMA_USER',
-        'CHROMA_PWD'
+        'CHROMA_PWD',
+        'REDIS_PWD',
     ];
 
     envs.forEach(env => {

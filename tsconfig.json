@@ -2,6 +2,12 @@
   "compilerOptions": {
     /* Visit https://aka.ms/tsconfig to read more about this file */
 
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["./*"],
+      "@src/*": ["src/*"]
+    },
+
     /* Projects */
     // "incremental": true,                              /* Save .tsbuildinfo files to allow for incremental compilation of projects. */
     // "composite": true,                                /* Enable constraints that allow a TypeScript project to be used with project references. */
@@ -108,7 +114,6 @@
   },
   "ts-node": {
     "transpiler": "sucrase/ts-node-plugin",
-    "esm": true,
-    "experimentalSpecifierResolution": "node"
+    "esm": true
   }
 }

@@ -23,19 +23,24 @@ Note: Please make sure you are running the Ollama service and that the service h
 You will have to create a `.env` file in the src directory to specify some required data.
 
 ### .env file template
-```
+```python
 # The url of your .gguf file, to be downloaded
 MODEL_URL=MODEL_URL=https://huggingface.co/MaziyarPanahi/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct.Q6_K.gguf?download=true
+
 # The path where you want the .gguf file to be saved in, make sure it exists!
 MODEL_PATH=/usr/share/ollama/.ollama/models/mymodelfolder
+
 # This can be any port you choose, I chose 3009 because... 
 # (お空　009, nine in Japanese can be read as 'Kuu')
 PORT=3009
+# ChromaDB related
 # Chroma credentials (set to any you want, but change this)
-CHROMA_USER=username
-CHROMA_PWD=password
-# This can be any port you choose
-CHROMA_PORT=3010
+CHROMA_USER=username # change this, please
+CHROMA_PWD=password # change this, please
+CHROMA_PORT=3010 # Okuu chromadb port, set it to what you want
+# Redis related
+REDIS_PORT=6009 # Okuu redis port, set it to what you want
+REDIS_PWD=passwd # change this, please.
 ```
 
 You will need to provide adequate permissions to that folder so that ollama can access it.
