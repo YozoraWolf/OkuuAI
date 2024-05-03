@@ -8,7 +8,7 @@ import { Logger } from './logger';
     const app = express();
     const port = process.env.PORT || 3000;
 
-    app.get('/chat', (req, res) => {
+    app.get('/chat', () => {
         // Handle the '/chat' route here
     });
 

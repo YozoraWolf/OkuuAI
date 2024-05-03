@@ -5,5 +5,5 @@
     "execMap": {
     "ts": "node -r sucrase/register/ts"
     },
-    "exec": "sucrase ./src -d ./dist --transforms typescript,imports && node ./dist/index.js"
+    "exec": "npx eslint src && sucrase ./src -d ./dist --transforms typescript,imports && node ./dist/index.js"
   }

@@ -54,7 +54,7 @@ export const checkOllamaService = async () => {
     const serviceName: string = 'ollama';
 
     // check if the service is active
-    exec(`systemctl is-active ${serviceName}`, (error: any, stdout, stderr) => {
+    exec(`systemctl is-active ${serviceName}`, (error: any) => {
       if (!error) {
         Logger.DEBUG(`${serviceName} is already active`);
         resolve();
@@ -89,4 +89,4 @@ export const checkDir = (path  : string) => {
     process.exit(1);
   }
   return path;
-}
+};

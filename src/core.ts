@@ -13,7 +13,7 @@ export enum Status {
 export class Core {
     static status: Status = Status.INACTIVE;
 
-    static model_org_name: string = `${process.env.MODEL_URL?.match(/\/([^\/]+)\.gguf/)?.[1]}.gguf` || '';
+    static model_org_name: string = `${process.env.MODEL_URL?.match(/\/([^/]+)\.gguf/)?.[1]}.gguf`;
     static model_path: string = checkDir(process.env.MODEL_PATH || '');
     static model_name: string = 'okuu';
 

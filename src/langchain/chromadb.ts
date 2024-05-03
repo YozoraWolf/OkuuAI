@@ -1,11 +1,7 @@
-import { Chroma } from "@langchain/community/vectorstores/chroma";
-import { OllamaEmbeddings } from "@langchain/community/embeddings/ollama";
 import { join } from 'path';
 import { exec } from 'child_process';
 import { Logger } from "../logger";
-import { CSVLoader } from "langchain/document_loaders/fs/csv";
 import fs from 'fs';
-import { Core } from "../core";
 
 const projectRoot = process.cwd();
 
@@ -13,12 +9,13 @@ const projectRoot = process.cwd();
 
 const CHROMA_USER = process.env.CHROMA_USER;
 const CHROMA_PWD = process.env.CHROMA_PWD;
-const CHROMA_PORT = process.env.CHROMA_PORT || '3009';
+const CHROMA_PORT = process.env.CHROMA_PORT || '3010';
 const CHROMA_ENV = `
 CHROMA_SERVER_AUTH_CREDENTIALS_FILE="/chromadb/server.htpasswd"
 CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER="chromadb.auth.providers.HtpasswdFileServerAuthCredentialsProvider"
 CHROMA_SERVER_AUTH_PROVIDER="chromadb.auth.basic.BasicAuthServerProvider"
-`
+`;
+//const CHROMA_URL = `http://localhost:${CHROMA_PORT}`;
 
 const chromaDir = join(projectRoot, 'chromadb');
 
@@ -27,7 +24,7 @@ export const initDockerChromaDB = async () => {
     Logger.INFO('Pulling chromadb/chroma image...');
     await pullChromaImage();
     Logger.INFO('Checking server.htpasswd file...');
-    await checkServerPWDFile()
+    await checkServerPWDFile();
     Logger.INFO('Initializing chromadb/chroma...');
     const res = await runDockerChromaDB();
     if (res === 2) {
@@ -56,7 +53,7 @@ const restartDockerChromaDB = async () => {
             resolve(true);
         });
     });
-}
+};
 
 const runDockerChromaDB = async () => {
     return new Promise<number>((resolve, reject) => {
@@ -71,7 +68,7 @@ const runDockerChromaDB = async () => {
             resolve(0);
         });
     });
-}
+};
 
 const checkServerPWDFile = async (): Promise<boolean> => {
     const htpasswdPath = join(chromaDir, 'server.htpasswd');
@@ -97,7 +94,7 @@ const checkServerPWDFile = async (): Promise<boolean> => {
         });
     }
     return Promise.resolve(true);
-}
+};
 
 const pullChromaImage = async () => {
     return new Promise<boolean>((resolve, reject) => {
@@ -118,26 +115,37 @@ const pullChromaImage = async () => {
 
 
 // TODO: Develop more on this
-export const initCollection = async () => {
+/* export const initCollection = async () => {
     const embeddings = new OllamaEmbeddings({model: 'okuu'});
     const loader = new CSVLoader(`${projectRoot}/genshin.csv`);
     const docs = await loader.load();
 
     Logger.INFO('Documents loaded successfully!');
 
-    const vectorStore = await Chroma.fromDocuments(docs, embeddings, {
+    let vectorStore = await Chroma.fromDocuments(docs, embeddings, {
         collectionName: "test",
-        url: 'http://127.0.0.1:3010', // Optional, will default to this value
+        url: CHROMA_URL, // Optional, will default to this value
+    }); 
+
+    let chroma = new Chroma(embeddings, {
+        collectionName: "test",
+        url: CHROMA_URL
     });
 
-    Logger.INFO('Collection initialized successfully!');
+    Logger.INFO('Collection loaded successfully!');
+
+
+    //vectorStore.addDocuments(docs);
+
+    //Logger.INFO('Documents added successfully!');
+
 
     // Search for the most similar document
-    const response = await vectorStore.similaritySearch("Diluc", 1);
+    //const response = await chroma.similaritySearch("Who are Anemo vision holders from Mondstadt?", 5);
 
-    console.log(response);
+    //console.log(response);
 
 
     // Persist the collection (optional)
     //await vectorStore
-}
+} */
