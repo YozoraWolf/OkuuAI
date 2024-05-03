@@ -4,8 +4,5 @@
   ],
   "ext": ".ts,.js",
   "ignore": [],
-  "execMap": {
-    "ts": "node -r sucrase/register/ts"
-  },
-  "exec": "sucrase ./src -d ./dist --transforms typescript,imports && node ./dist/index.js"
+  "exec": "ts-node ./src/index.ts"
 }

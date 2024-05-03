@@ -1,7 +1,7 @@
 // This will be in charge of making sure redis is up and running.
 
 import { exec } from "child_process";
-import { Logger } from "../../logger";
+import { ConsoleColor, Logger } from "@src/logger";
 
 const REDIS_PORT = process.env.REDIS_PORT || '6379';
 const REDIS_PWD = process.env.REDIS_PWD;
@@ -20,12 +20,13 @@ export const initRedis = async () => {
         process.exit(1);
     }
     Logger.INFO(`Redis initialized successfully!`);
+    Logger.INFO(`${ConsoleColor.FgYellow}-------------------------------`);
 };
 
 const restartRedisDocker = async () => {
     // Restart redis docker container
     return new Promise<boolean>((resolve, reject) => {
-        exec('docker restart redis', (error, stdout, stderr) => {
+        exec('docker restart okuu_redis', (error, stdout, stderr) => {
             if (error) {
                 Logger.ERROR(`Error occurred while restarting redis: ${error.message}`);
                 reject(false);
