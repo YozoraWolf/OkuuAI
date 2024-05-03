@@ -3,8 +3,8 @@
   "version": "0.0.1",
   "description": "Okuu AI",
   "main": "index.js",
-  "type": "commonjs",
   "scripts": {
+    "start": "ts-node ./src/index.ts",
     "build": "sucrase ./src -d ./dist --transforms typescript,imports"
   },
   "keywords": [
@@ -33,6 +33,7 @@
     "nodemon": "^3.1.0",
     "sucrase": "^3.35.0",
     "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "tslib": "^2.6.2",
     "typescript": "^5.4.5",
     "typescript-eslint": "^7.8.0"

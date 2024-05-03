@@ -1,6 +1,6 @@
 import { join } from 'path';
 import { exec } from 'child_process';
-import { Logger } from "../logger";
+import { ConsoleColor, Logger } from "../logger";
 import fs from 'fs';
 
 const projectRoot = process.cwd();
@@ -36,6 +36,7 @@ export const initDockerChromaDB = async () => {
     }
     Logger.INFO(`ChromaDB initialized successfully!
         Running on http://localhost:${CHROMA_PORT}`);
+    Logger.INFO(`${ConsoleColor.FgYellow}-------------------------------`);
 };
 
 const restartDockerChromaDB = async () => {
