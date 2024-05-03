@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Core } from './core';
 import { Logger } from './logger';
-import ollama, { ChatResponse, GenerateResponse } from 'ollama'
+import ollama, { GenerateResponse } from 'ollama'
 
 export const checkModelAvailability = (): Promise<void> => {
     return new Promise<void>(async (resolve, reject) => {
@@ -24,7 +24,7 @@ export const checkModelAvailability = (): Promise<void> => {
             }
         }
     });
-}
+};
 
 export const createModel = async () => {
     return new Promise(async (resolve, reject) => {
@@ -45,7 +45,7 @@ export const createModel = async () => {
             reject(error);
         }
     });
-}
+};
 
 export const sendChat = async (cnt: string, callback?: (data: string) => void) => {
     try {
@@ -71,4 +71,4 @@ export const sendChat = async (cnt: string, callback?: (data: string) => void) =
         Logger.ERROR(`Error sending chat: ${error.response ? error.response.data : error.message}`);
         return null;
     }
-}
+};

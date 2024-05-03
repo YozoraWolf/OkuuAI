@@ -7,4 +7,4 @@ const ollamaLlm = new ChatOllama({
 export const invoke = async (prompt: string) => {
     const response = await ollamaLlm.invoke(prompt);
     console.log(response.content);
-}
+};

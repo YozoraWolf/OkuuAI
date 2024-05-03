@@ -1,6 +1,7 @@
-import SysTray from 'systray'
+import SysTray from 'systray';
 import fs from 'fs';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let systray;
 
 export const initTray = async () => {
@@ -27,4 +28,4 @@ export const initTray = async () => {
         debug: false,
         copyDir: true,
     });
-}
+};

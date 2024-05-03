@@ -1,11 +1,11 @@
 import { checkOllamaService, downloadFile } from './o_utils';
 import fs from 'fs';
 import { Core, Status } from './core';
-import { checkModelAvailability } from './ollama_bridge';
+//import { checkModelAvailability } from './ollama_bridge.ts.old';
 import { centeredLogoTxt } from './intro';
 import { initTray } from './tray';
 import { Logger } from './logger';
-import { initCollection, initDockerChromaDB } from './langchain/chromadb';
+import { initDockerChromaDB } from './langchain/chromadb';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -34,7 +34,7 @@ export const init = async () => {
         } else {
             Logger.INFO('Model file exists. Skipping...');
         }
-    }
+    };
 
     await downloadModelFile(model_url, model_path);
   
@@ -42,16 +42,13 @@ export const init = async () => {
     await checkOllamaService();
 
     // check if model is available in ollama
-    await checkModelAvailability();
+    //await checkModelAvailability();
 
     // initialize tray icon
     await initTray();
 
     // initialize chromadb
     await initDockerChromaDB();
-
-    // test collection
-    await initCollection();
 
     // set status to active
     Core.status = Status.ACTIVE;
@@ -77,4 +74,4 @@ const checkEnvs = () : void => {
 
     // If all required envs are present, then continue execution.
     Logger.INFO('All environment variables are set');
-}
+};
