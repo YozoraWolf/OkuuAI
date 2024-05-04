@@ -1,8 +1,8 @@
 import readline from 'readline';
-//import { sendChat } from './ollama_bridge.ts.old';
-/* import { Logger } from './logger';
-import { Core } from './core'; */
+import { Logger } from './logger';
+import { Core } from './core';
 import { stdout } from 'process';
+import { sendChat } from './chat';
 
 const reprompt = () => {
     //Logger.DEBUG('Prompting user...');
@@ -11,10 +11,10 @@ const reprompt = () => {
     rl.prompt();
 };
 
-/* const clearLine = () => {
+const clearLine = () => {
     stdout.clearLine(0);
     stdout.cursorTo(0);
-} */
+};
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -24,12 +24,13 @@ const rl = readline.createInterface({
 
 reprompt();
 
-/* const handleUserInput = async (line: string) => {
+const handleUserInput = async (line: string) => {
     // possibly handle chats
     let msg = '';
     let multiline = false;
 
     const resp: any = await sendChat(line.trim(), (data: string) => {
+        //Logger.DEBUG(`Received data: ${data}`);
         // process data chunk
         msg += data;
 
@@ -51,11 +52,11 @@ reprompt();
         }
     });
 
-    //if (!Core.ollama_settings.stream)
-        //console.log('\x1b[32mOkuu:\x1b[0m ' + resp.message.content);
-} */
+    if (!Core.ollama_settings.stream)
+        console.log('\x1b[32mOkuu:\x1b[0m ' + resp);
+};
 
-/* rl.on('line', async (line: string) => {
+rl.on('line', async (line: string) => {
     if (line.trim().startsWith('/')) {
         handleCommand(line.trim());
     } else {
@@ -80,7 +81,7 @@ function handleCommand(command: string) {
             Logger.INFO(`${Core.chat_settings.prefix}: Command not recognized!`);
             break;
     }
-} */
+};
 
 // keep the script running indefinitely
 process.stdin.resume();

@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "ts-node ./src/index.ts",
-    "build": "sucrase ./src -d ./dist --transforms typescript,imports"
+    "build": "sucrase ./src -d ./dist --transforms typescript,imports",
+    "eslint": "eslint ./src"
   },
   "keywords": [
     "okuu",
@@ -21,8 +22,10 @@
     "d3-dsv": "^2.0.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "ioredis": "^5.4.1",
     "langchain": "^0.1.36",
     "ollama": "^0.5.0",
+    "redis": "^4.6.13",
     "systray": "^1.0.5"
   },
   "devDependencies": {
