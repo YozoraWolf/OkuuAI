@@ -4,10 +4,11 @@ import { Core, Status } from './core';
 //import { checkModelAvailability } from './ollama_bridge.ts.old';
 import { centeredLogoTxt } from './intro';
 import { initTray } from './tray';
-import { Logger } from './logger';
-import { initDockerChromaDB } from './langchain/chromadb';
+import { ConsoleColor, Logger } from './logger';
+//import { initDockerChromaDB } from './langchain/chromadb'; // Perhaps to be deleted.
 import dotenv from 'dotenv';
 import { initRedis } from './langchain/memory/redis';
+import { startSession } from './langchain/memory/memory';
 dotenv.config();
 
 export const init = async () => {
@@ -31,7 +32,7 @@ export const init = async () => {
             }
             Logger.INFO('Downloading model file...');
             await downloadFile(url, path);
-            Logger.INFO('Model file downloaded successfully!');
+            Logger.INFO(`${ConsoleColor.FgGreen}Model file downloaded successfully!`);
         } else {
             Logger.INFO('Model file exists. Skipping...');
         }
@@ -49,15 +50,18 @@ export const init = async () => {
     await initTray();
 
     // initialize chromadb
-    await initDockerChromaDB();
+    //await initDockerChromaDB();
 
     // initialize redis
     await initRedis();
 
+    // initialize chat session
+    Core.chat_session = startSession();
+
     // set status to active
     Core.status = Status.ACTIVE;
 
-    Logger.INFO('Initialization complete');
+    Logger.INFO(`${ConsoleColor.FgGreen}Initialization complete`);
 };
 
 const checkEnvs = () : void => {

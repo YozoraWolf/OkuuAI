@@ -34,7 +34,7 @@ export const initDockerChromaDB = async () => {
         Logger.ERROR('Error occurred while starting chromadb/chroma docker container!');
         process.exit(1);
     }
-    Logger.INFO(`ChromaDB initialized successfully!
+    Logger.INFO(`${ConsoleColor.FgGreen}ChromaDB initialized successfully!
         Running on http://localhost:${CHROMA_PORT}`);
     Logger.INFO(`${ConsoleColor.FgYellow}-------------------------------`);
 };

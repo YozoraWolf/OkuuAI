@@ -1,3 +1,4 @@
+import { ConversationChain } from 'langchain/chains';
 import system from '../system.json';
 import { checkDir } from './o_utils';
 import dotenv from 'dotenv';
@@ -34,6 +35,8 @@ export class Core {
         host: 'http://localhost:11434',
         stream: true
     };
+
+    static chat_session: ConversationChain;
 
 
 

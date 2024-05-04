@@ -19,7 +19,7 @@ export const initRedis = async () => {
         Logger.ERROR('Error occurred while starting redis docker container!');
         process.exit(1);
     }
-    Logger.INFO(`Redis initialized successfully!`);
+    Logger.INFO(`${ConsoleColor.FgGreen}Redis initialized successfully!`);
     Logger.INFO(`${ConsoleColor.FgYellow}-------------------------------`);
 };
 
