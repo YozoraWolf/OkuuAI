@@ -7,7 +7,7 @@ import { initTray } from './tray';
 import { ConsoleColor, Logger } from './logger';
 //import { initDockerChromaDB } from './langchain/chromadb'; // Perhaps to be deleted.
 import dotenv from 'dotenv';
-import { initRedis } from './langchain/memory/redis';
+import { initRedis } from './langchain/redis';
 import { SESSION_SETTINGS, getAllSessionsTable, getLatestHistory, startSession } from './langchain/memory/memory';
 dotenv.config();
 

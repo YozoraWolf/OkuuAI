@@ -8,7 +8,8 @@ const REDIS_PORT: number = parseInt(process.env.REDIS_PORT || '6379', 10);
 const REDIS_PWD = process.env.REDIS_PWD;
 export const REDIS_URL = `redis://default:${REDIS_PWD}@localhost:${REDIS_PORT}/0`;
 
-export let redisClient: Redis;
+export let redisClientMemory: Redis;
+export let redisClientRAG: Redis;
 
 export const initRedis = async () => {
     // Pull redis docker image
@@ -28,18 +29,30 @@ export const initRedis = async () => {
     
     // create and connect redis client to db
     Logger.DEBUG(`Connecting Redis Client to: ${REDIS_URL}`);
-    redisClient = await new Redis({
+    redisClientMemory = await new Redis({
         port: REDIS_PORT, // Redis port
         host: "localhost", // Redis host
         username: "default", // needs Redis >= 6
         password: REDIS_PWD,
-        db: 0, // Defaults to 0
+        db: 0
+      });    
+      
+      redisClientRAG = await new Redis({
+        port: REDIS_PORT, // Redis port
+        host: "localhost", // Redis host
+        username: "default", // needs Redis >= 6
+        password: REDIS_PWD,
+        db: 1
       });
 
       Logger.DEBUG(`Redis client connected successfully!`);
 
-    redisClient.on('error', (error: any) => {
-        console.error(`Redis client error:`, error);
+    redisClientMemory.on('error', (error: any) => {
+        Logger.ERROR(`Redis Memory Client error: ${error}`);
+    });
+    
+    redisClientRAG.on('error', (error: any) => {
+        Logger.ERROR(`Redis RAG Client error: ${error}`);
     });
 };
 
