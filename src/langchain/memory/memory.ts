@@ -4,9 +4,24 @@ import { RedisChatMessageHistory } from "@langchain/community/stores/message/ior
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { Core } from "@src/core";
 import { ConversationChain } from "langchain/chains";
-import { REDIS_URL, redisClient } from "./redis";
+import { redisClient } from "./redis";
 import { Logger } from "@src/logger";
-import { Redis } from "ioredis";
+import fs from "fs";
+
+const SESSION_JSON = "session.json";
+
+export const loadSettings = (): any => {
+  if (fs.existsSync(SESSION_JSON)) {
+    return JSON.parse(fs.readFileSync(SESSION_JSON, "utf-8"));
+  } else {
+    Logger.INFO("Session settings file not found.");
+    generateSessionSettings();
+    return loadSettings();
+  }
+};
+
+export const SESSION_SETTINGS = loadSettings();
+
 let session: BufferMemory;
 
 const prompt = ChatPromptTemplate.fromMessages([
@@ -22,8 +37,14 @@ const model = new ChatOllama({
   ...settings
 });
 
+const newSessionDate = () => {
+  const date = new Date().toISOString();
+  saveSessionIdToSettings(date);
+  return date;
+};
+
 export const startSession = async (sessionId: any) : Promise<ConversationChain> => {
-  sessionId = sessionId !== null ? sessionId : new Date().toISOString();
+  sessionId = sessionId !== null ? sessionId : newSessionDate();
   Logger.DEBUG(`Starting session with sessionId: ${sessionId}`);
   session = new BufferMemory({
     chatHistory: new RedisChatMessageHistory({
@@ -55,4 +76,63 @@ export const getLatestHistory = async (): Promise<string | null> => {
 
   // Return the latest key
   return keys[0];
+};
+
+export const getAllSessionsTable = async (): Promise<string> => {
+  const sessionsData = await getAllSessions();
+
+  // generate the table with fixed column widths
+  const sessionsTable = sessionsData.map((session: any) => {
+    return [
+      session.index.toString().padStart(1),
+      session.lastMessage.padEnd(20),
+      session.date
+    ].join('\t');
+  });
+
+  // construct the table header and join with the session rows
+  return `INDEX   LAST_MESSAGE                    DATE\n${sessionsTable.join('\n')}`;
+};
+
+export interface SessionData {
+  index: number;
+  lastMessage: string;
+  date: string;
+}
+
+export const getAllSessions = async (): Promise<Array<SessionData>> => {
+  const sessions = await redisClient.keys('*');
+  const sessionsData = await Promise.all(sessions.map(async (sessionId) => {
+    const lastMessage = JSON.parse((await redisClient.lindex(sessionId, 0)) || "{}");
+    const type = lastMessage.type;
+    const msg = lastMessage.data.content.substring(0, 20); // truncate message to 20 characters
+    const date = new Date(sessionId).toISOString();
+    return { index: sessions.indexOf(sessionId), lastMessage: `${type}: ${msg}`, date }; // format
+  }));
+  return sessionsData || [{}];
+};
+
+
+export const switchToSession = async (sessionId: string | null) => {
+  Core.chat_session = await startSession(sessionId);
+  Logger.INFO(`Switched to session: ${sessionId}`);
+  if(sessionId !== null) saveSessionIdToSettings(sessionId); // save to settings if not null
+};
+
+const generateSessionSettings = () => {
+  fs.writeFileSync(SESSION_JSON, JSON.stringify({}, null, 2));
+  Logger.INFO("Session settings generated successfully.");
+};
+
+export const saveSessionIdToSettings = (sessionId: string) => {
+  let settings: any = {}; // initialize empty
+  if(!fs.existsSync(SESSION_JSON)) {
+    Logger.INFO("Session settings file not found, generating new settings...");
+    generateSessionSettings(); // if not found, generate new settings
+  } else {
+    settings = JSON.parse(fs.readFileSync(SESSION_JSON, "utf-8")); // read existing settings
+  }
+  settings.sessionId = sessionId;
+  fs.writeFileSync(SESSION_JSON, JSON.stringify(settings, null, 2)); // save
+  Logger.INFO("Session ID saved to settings successfully.");
 };

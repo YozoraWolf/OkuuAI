@@ -6,3 +6,4 @@ dist
 .env
 chromadb
 *.old
+session.json
