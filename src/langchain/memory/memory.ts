@@ -4,14 +4,15 @@ import { RedisChatMessageHistory } from "@langchain/community/stores/message/ior
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { Core } from "@src/core";
 import { ConversationChain } from "langchain/chains";
-//import Redis from "redis";
-
+import { REDIS_URL, redisClient } from "./redis";
+import { Logger } from "@src/logger";
+import { Redis } from "ioredis";
 let session: BufferMemory;
 
 const prompt = ChatPromptTemplate.fromMessages([
   ["system", Core.model_settings.system],
   new MessagesPlaceholder("history"),
-  ["human", "{input}"],
+  ["user", "{input}"],
 ]);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -21,10 +22,12 @@ const model = new ChatOllama({
   ...settings
 });
 
-export const startSession = () => {
+export const startSession = async (sessionId: any) : Promise<ConversationChain> => {
+  sessionId = sessionId !== null ? sessionId : new Date().toISOString();
+  Logger.DEBUG(`Starting session with sessionId: ${sessionId}`);
   session = new BufferMemory({
     chatHistory: new RedisChatMessageHistory({
-      sessionId: new Date().toISOString(), // Or some other unique identifier for the conversation
+      sessionId, // Or some other unique identifier for the conversation
       url: `redis://localhost:${process.env.REDIS_PORT}`, // Default value, override with your own instance's URL
     }),
     returnMessages: true,
@@ -37,39 +40,19 @@ export const startSession = () => {
   return new ConversationChain({ llm: model, memory: session, prompt });
 };
 
-/* const getLatestHistory = async () => {
-  const historyKey = `history:${session.id}`;
-  const history = await session.get(historyKey);
-  return history;
-} */
+export const getLatestHistory = async (): Promise<string | null> => {
+  Logger.DEBUG("Getting latest history");
 
-/* const getLatestHistory = async (sessionId: string): Promise<string[]> => {
-  // Assuming you have a Redis client instance named "redisClient"
-  const historyKey = `history:${sessionId}`;
-  const history = await redisClient.lrange(historyKey, 0, -1);
-  return history;
-}; */
+  // Get all keys
+  const keys = await redisClient.keys('*');
 
-/* export const startSession = () => {
-  return new RunnableWithMessageHistory({
-    runnable: chain, // Your existing chain
-    chatHistory: new RedisChatMessageHistory({
-      sessionId: new Date().toISOString(), // Or some other unique identifier for the conversation
-      url: `redis://localhost:${process.env.REDIS_PORT}`, // Default value, override with your own instance's URL
-    }),
-    inputMessagesKey: "human", // Key for storing user input
-    historyMessagesKey: "chat_history", // Key for storing conversation history
-  });
-}; */
+  if (keys.length === 0) {
+      return null;
+  }
 
-/* export const startSession = () => {
-  return new RunnableWithMessageHistory({
-    runnable: chain,
-    getMessageHistory: () => new RedisChatMessageHistory({
-      sessionId: new Date().toISOString(), // Or some other unique identifier for the conversation
-      url: `redis://localhost:${process.env.REDIS_PORT}`, // Default value, override with your own instance's URL
-    }),
-    inputMessagesKey: "question",
-    historyMessagesKey: "history",
-  });
-}; */
+  // Sort keys by descending order (latest first)
+  keys.sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+
+  // Return the latest key
+  return keys[0];
+};

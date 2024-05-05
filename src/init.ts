@@ -8,7 +8,7 @@ import { ConsoleColor, Logger } from './logger';
 //import { initDockerChromaDB } from './langchain/chromadb'; // Perhaps to be deleted.
 import dotenv from 'dotenv';
 import { initRedis } from './langchain/memory/redis';
-import { startSession } from './langchain/memory/memory';
+import { getLatestHistory, startSession } from './langchain/memory/memory';
 dotenv.config();
 
 export const init = async () => {
@@ -55,9 +55,12 @@ export const init = async () => {
     // initialize redis
     await initRedis();
 
-    // initialize chat session
-    Core.chat_session = startSession();
+    // get latest history
+    const latestSessionId = await getLatestHistory();
 
+    // initialize chat session
+    Core.chat_session = await startSession(latestSessionId);
+    //Logger.DEBUG(`Latest history: ${await getLatestHistory()}`);
     // set status to active
     Core.status = Status.ACTIVE;
 
