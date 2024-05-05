@@ -3,6 +3,14 @@ import { Core } from "./core";
 import { SessionData, getAllSessionsTable, switchToSession, getAllSessions, startSession } from "./langchain/memory/memory";
 import { Logger } from "./logger";
 
+const helpStr = `
+/help - Displays this help output with all available commands
+/sessions - Lists all available memory sessions
+/switch new - Creates a new memory session (if none available it will create one)
+/switch <index> - Switches between memory sessions based on their index
+/exit - Exit OkuuAI
+`
+
 export const handleCommand = async (command: string) => {
     const [commandName, ...args] = command.trim().substring(1).split(" ");
     //console.log(`Command: ${commandName}, Args: ${args}`);
@@ -29,6 +37,7 @@ export const handleCommand = async (command: string) => {
 // TODO: make docs for this with annotations?
 const help = () => {
     Logger.INFO(`${Core.chat_settings.prefix}: Displaying help...`);
+    console.log(helpStr);
 };
 
 const getSessions = async () => {

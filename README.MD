@@ -74,3 +74,15 @@ Then just run it using:
 ```
 npm start
 ```
+
+# Commands
+
+For now OkuuAI runs in pure nodejs, so I implemented some commands to work on her on runtime:
+
+```
+/help - Displays this help output with all available commands
+/sessions - Lists all available memory sessions
+/switch new - Creates a new memory session (if none available it will create one)
+/switch <index> - Switches between memory sessions based on their index
+/exit - Exit OkuuAI
+```
