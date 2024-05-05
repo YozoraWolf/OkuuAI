@@ -26,6 +26,7 @@ export const handleCommand = async (command: string) => {
     }
 };
 
+// TODO: make docs for this with annotations?
 const help = () => {
     Logger.INFO(`${Core.chat_settings.prefix}: Displaying help...`);
 };
