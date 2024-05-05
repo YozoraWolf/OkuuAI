@@ -4,7 +4,7 @@ import { RedisChatMessageHistory } from "@langchain/community/stores/message/ior
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { Core } from "@src/core";
 import { ConversationChain } from "langchain/chains";
-import { redisClient } from "./redis";
+import { redisClientMemory } from "../redis";
 import { Logger } from "@src/logger";
 import fs from "fs";
 
@@ -65,7 +65,7 @@ export const getLatestHistory = async (): Promise<string | null> => {
   Logger.DEBUG("Getting latest history");
 
   // Get all keys
-  const keys = await redisClient.keys('*');
+  const keys = await redisClientMemory.keys('*');
 
   if (keys.length === 0) {
       return null;
@@ -101,9 +101,9 @@ export interface SessionData {
 }
 
 export const getAllSessions = async (): Promise<Array<SessionData>> => {
-  const sessions = await redisClient.keys('*');
+  const sessions = await redisClientMemory.keys('*');
   const sessionsData = await Promise.all(sessions.map(async (sessionId) => {
-    const lastMessage = JSON.parse((await redisClient.lindex(sessionId, 0)) || "{}");
+    const lastMessage = JSON.parse((await redisClientMemory.lindex(sessionId, 0)) || "{}");
     const type = lastMessage.type;
     const msg = lastMessage.data.content.substring(0, 20); // truncate message to 20 characters
     const date = new Date(sessionId).toISOString();
