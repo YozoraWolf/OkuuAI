@@ -2,9 +2,13 @@
 
 import { exec } from "child_process";
 import { ConsoleColor, Logger } from "@src/logger";
+import Redis from "ioredis";
 
-const REDIS_PORT = process.env.REDIS_PORT || '6379';
+const REDIS_PORT: number = parseInt(process.env.REDIS_PORT || '6379', 10);
 const REDIS_PWD = process.env.REDIS_PWD;
+export const REDIS_URL = `redis://default:${REDIS_PWD}@localhost:${REDIS_PORT}/0`;
+
+export let redisClient: Redis;
 
 export const initRedis = async () => {
     // Pull redis docker image
@@ -21,6 +25,22 @@ export const initRedis = async () => {
     }
     Logger.INFO(`${ConsoleColor.FgGreen}Redis initialized successfully!`);
     Logger.INFO(`${ConsoleColor.FgYellow}-------------------------------`);
+    
+    // create and connect redis client to db
+    Logger.DEBUG(`Connecting Redis Client to: ${REDIS_URL}`);
+    redisClient = await new Redis({
+        port: REDIS_PORT, // Redis port
+        host: "localhost", // Redis host
+        username: "default", // needs Redis >= 6
+        password: REDIS_PWD,
+        db: 0, // Defaults to 0
+      });
+
+      Logger.DEBUG(`Redis client connected successfully!`);
+
+    redisClient.on('error', (error: any) => {
+        console.error(`Redis client error:`, error);
+    });
 };
 
 const restartRedisDocker = async () => {
