@@ -72,5 +72,5 @@ You will also need a `system.json` to provide a custom System prompt for ollama 
 Then just run it using:
 
 ```
-nodemon
+npm start
 ```
