@@ -3,6 +3,7 @@ import { Logger } from './logger';
 import { Core } from './core';
 import { stdout } from 'process';
 import { sendChat } from './chat';
+import { handleCommand } from './commands';
 
 const reprompt = () => {
     //Logger.DEBUG('Prompting user...');
@@ -11,10 +12,16 @@ const reprompt = () => {
     rl.prompt();
 };
 
+
+const history: string | any[] = [];
+let historyIndex = -1;
+
 const clearLine = () => {
     stdout.clearLine(0);
     stdout.cursorTo(0);
 };
+
+readline.emitKeypressEvents(process.stdin);
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -58,30 +65,34 @@ const handleUserInput = async (line: string) => {
 
 rl.on('line', async (line: string) => {
     if (line.trim().startsWith('/')) {
-        handleCommand(line.trim());
+        await handleCommand(line.trim());
     } else {
         await handleUserInput(line);
     }
+
+    // Push latest input
+    history.push(line);
+    historyIndex = history.length - 1;
     reprompt();
 }).on('close', () => {
     Logger.INFO('Bye!');
     process.exit(0);
 });
 
-function handleCommand(command: string) {
-    // handle commands
-    switch (command) {
-        case '/help':
-            Logger.INFO(`${Core.chat_settings.prefix}: Displaying help...`);
-            break;
-        case '/exit':
-            rl.close();
-            break;
-        default:
-            Logger.INFO(`${Core.chat_settings.prefix}: Command not recognized!`);
-            break;
+// TODO: Work on history navigation
+process.stdin.on('keypress', (char, key) => {
+    if (key.name === 'up' && historyIndex > 0) {
+        historyIndex--;
+        rl.write(history[historyIndex]);
+    } else if (key.name === 'down' && historyIndex < history.length - 1) {
+        historyIndex++;
+        rl.write(history[historyIndex]);
+    } else if (key.name === 'q') {
+        Logger.INFO('Bye!');
+        process.exit(0);
     }
-};
+});
 
 // keep the script running indefinitely
+//process.stdin.setRawMode(true);
 process.stdin.resume();
