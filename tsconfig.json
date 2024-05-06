@@ -103,18 +103,8 @@
     // "allowUnreachableCode": true,                     /* Disable error reporting for unreachable code. */
     /* Completeness */
     // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
-    "skipLibCheck": true, /* Skip type checking all .d.ts files. */
-
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "useDefineForClassFields": true,
-
-    /* Bundler mode */
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "jsx": "preserve",
+    "skipLibCheck": true /* Skip type checking all .d.ts files. */
   },
-  "include": ["src-gui/src/**/*.ts", "src-gui/src/**/*.tsx", "src-gui/src/**/*.vue", "vite-env.d.ts"],
-  "references": [{ "path": "./tsconfig.node.json" }],
   "ts-node": {
     "require": ["tsconfig-paths/register"]
   }
