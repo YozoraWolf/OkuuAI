@@ -59,6 +59,8 @@
         "height": 600,
         "resizable": false,
         "maximized": true,
+        "transparent": true,
+        "decorations": false,
         "title": "okuuai",
         "width": 800
       }
