@@ -4,7 +4,8 @@ import { Core } from './core';
 import { stdout } from 'process';
 import { sendChat } from './chat';
 import { handleCommand } from './commands';
-import { platform } from 'os';
+import { exec } from 'child_process';
+
 
 const reprompt = () => {
     //Logger.DEBUG('Prompting user...');
@@ -66,8 +67,20 @@ rl.on('line', async (line: string) => {
 
     reprompt();
 }).on('close', () => {
-    Logger.INFO('Bye!');
-    process.exit(0);
+    exit();
 });
+
+process.on('SIGINT', () => {
+    exit();
+});
+
+// TODO: find out where that "Terminated is coming from"
+const exit = () => {
+    Logger.INFO('Bye!!');
+    stdout.write('\n');
+    //killTauri();
+    exec('pkill -f "okuuai"');
+}
+
 
 process.stdin.resume();

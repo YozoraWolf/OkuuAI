@@ -29,7 +29,7 @@
     // "useDefineForClassFields": true,                  /* Emit ECMAScript-standard-compliant class fields. */
     // "moduleDetection": "auto",                        /* Control what method is used to detect module-format JS files. */
     /* Modules */
-    "module": "CommonJS", /* Specify what module code is generated. */
+    "module": "CommonJS",
     // "rootDir": "./",                                  /* Specify the root folder within your source files. */
     "moduleResolution": "node", /* Specify how TypeScript looks up a file from a given module specifier. */
     // "baseUrl": "./",                                  /* Specify the base directory to resolve non-relative module names. */
@@ -103,8 +103,18 @@
     // "allowUnreachableCode": true,                     /* Disable error reporting for unreachable code. */
     /* Completeness */
     // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
-    "skipLibCheck": true /* Skip type checking all .d.ts files. */
+    "skipLibCheck": true, /* Skip type checking all .d.ts files. */
+
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "useDefineForClassFields": true,
+
+    /* Bundler mode */
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "jsx": "preserve",
   },
+  "include": ["src-gui/src/**/*.ts", "src-gui/src/**/*.tsx", "src-gui/src/**/*.vue", "vite-env.d.ts"],
+  "references": [{ "path": "./tsconfig.node.json" }],
   "ts-node": {
     "require": ["tsconfig-paths/register"]
   }
