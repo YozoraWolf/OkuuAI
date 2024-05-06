@@ -1,14 +1,14 @@
 import { checkOllamaService, downloadFile } from './o_utils';
 import fs from 'fs';
 import { Core, Status } from './core';
-//import { checkModelAvailability } from './ollama_bridge.ts.old';
 import { centeredLogoTxt } from './intro';
 import { initTray } from './tray';
 import { ConsoleColor, Logger } from './logger';
 //import { initDockerChromaDB } from './langchain/chromadb'; // Perhaps to be deleted.
 import dotenv from 'dotenv';
 import { initRedis } from './langchain/redis';
-import { SESSION_SETTINGS, getAllSessionsTable, getLatestHistory, startSession } from './langchain/memory/memory';
+import { SESSION_SETTINGS, startSession } from './langchain/memory/memory';
+import { initTauri } from './gui';
 dotenv.config();
 
 export const init = async () => {
@@ -62,6 +62,9 @@ export const init = async () => {
 
     // initialize chat session
     Core.chat_session = await startSession(sessionId);
+
+    // init gui
+    initTauri();
 
     //Logger.DEBUG(`Latest history: ${await getLatestHistory()}`);
     // set status to active
