@@ -4,9 +4,11 @@
   "description": "Okuu AI",
   "main": "index.js",
   "scripts": {
-    "start": "vite build && ts-node ./src/index.ts",
+    "start": "ts-node ./src/index.ts",
     "nodemon": "nodemon --no-stdin",
     "build": "sucrase ./src -d ./dist --transforms typescript,imports",
+    "vite:run": "vite",
+    "vite:build": "vite build",
     "eslint": "eslint ./src"
   },
   "keywords": [
