@@ -1,10 +1,11 @@
 import readline from 'readline';
 import { Logger } from './logger';
 import { Core } from './core';
-import { stdout } from 'process';
+import { kill, stdout } from 'process';
 import { sendChat } from './chat';
 import { handleCommand } from './commands';
 import { exec } from 'child_process';
+import { killTauri } from './gui';
 
 
 const reprompt = () => {
@@ -77,9 +78,8 @@ process.on('SIGINT', () => {
 // TODO: find out where that "Terminated is coming from"
 const exit = () => {
     Logger.INFO('Bye!!');
-    stdout.write('\n');
-    //killTauri();
-    exec('pkill -f "okuuai"');
+    killTauri();
+    process.exit(0);
 }
 
 
