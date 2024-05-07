@@ -82,11 +82,3 @@ export const checkOllamaService = async () => {
     });
   });
 };
-
-export const checkDir = (path  : string) => {
-  if (!fs.existsSync(path)) {
-    Logger.ERROR(`${path}\nThis directory does not exist, please specify a correct one in the .env file.`);
-    process.exit(1);
-  }
-  return path;
-};

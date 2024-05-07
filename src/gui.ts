@@ -1,5 +1,6 @@
 import { ChildProcess, SpawnOptions, exec, spawn } from "child_process";
 import { Logger } from "./logger";
+import { promisify } from "util";
 
 let tauriProc: ChildProcess;
 
@@ -10,7 +11,7 @@ const defaultConfig: SpawnOptions = debug ? { stdio: 'inherit' } : { stdio: 'ign
 export const initTauri = () => {
     tauriProc = spawn('tauri', ['dev'], defaultConfig);
 
-    tauriProc.on('exit', (code: number) => {
+    tauriProc.on('exit', () => {
         //process.exit(code);
         killTauri();
     });
@@ -20,11 +21,22 @@ export const initTauri = () => {
     return tauriProc;
 };
 
-export const killTauri = () => {
-    const res = exec('pkill -f "(?=.*okuuai)(?=.*tauri)"');
-    if (res) {
+export const killTauri = async () => {
+    const execAsync = promisify(exec);
+    try {
+        // Get the PIDs of processes that contain 'okuuai' and 'tauri' in their command
+        const { stdout } = await execAsync('ps aux | grep -E "okuuai.*tauri|tauri.*okuuai|okuuai.*vite|vite.*okuuai" | grep -v grep | awk \'{print $2}\'');
+
+        // Split the output by newlines and remove any empty lines
+        const pids = stdout.split('\n').filter(pid => pid.trim() !== '');
+
+        // Terminate each related process
+        for (const pid of pids) {
+            await execAsync(`kill -9 ${pid}`);
+        }
+
         Logger.DEBUG('GUI killed successfully!');
-    } else  {
-        Logger.ERROR(`Failed to kill GUI!\nError: ${res}`);
+    } catch (error) {
+        Logger.ERROR(`Failed to kill GUI: ${error}`);
     }
 };

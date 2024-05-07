@@ -7,3 +7,4 @@ dist
 chromadb
 *.old
 session.json
+*.bak
