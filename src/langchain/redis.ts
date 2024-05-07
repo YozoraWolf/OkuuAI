@@ -11,6 +11,14 @@ export const REDIS_URL = `redis://default:${REDIS_PWD}@localhost:${REDIS_PORT}/0
 export let redisClientMemory: Redis;
 export let redisClientRAG: Redis;
 
+const hanldeRedisError = (error: any) => {
+    if(error.code === "ECONNREFUSED") {
+        Logger.ERROR("Redis Memory Client error: Redis is not running!");
+    } else if (error.includes("EPIPE")) {
+        Logger.ERROR("Redis Memory Client error: Check credentials");
+    }
+};
+
 export const initRedis = async () => {
     // Pull redis docker image
     Logger.INFO('Pulling redis image...');
@@ -49,10 +57,12 @@ export const initRedis = async () => {
 
     redisClientMemory.on('error', (error: any) => {
         Logger.ERROR(`Redis Memory Client error: ${error}`);
+        hanldeRedisError(error);
     });
     
     redisClientRAG.on('error', (error: any) => {
         Logger.ERROR(`Redis RAG Client error: ${error}`);
+        hanldeRedisError(error);
     });
 };
 

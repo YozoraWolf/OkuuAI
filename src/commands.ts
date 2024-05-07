@@ -1,6 +1,5 @@
-import { start } from "repl";
 import { Core } from "./core";
-import { SessionData, getAllSessionsTable, switchToSession, getAllSessions, startSession } from "./langchain/memory/memory";
+import { SessionData, getAllSessionsTable, switchToSession, getAllSessions } from "./langchain/memory/memory";
 import { Logger } from "./logger";
 
 const helpStr = `
@@ -9,7 +8,7 @@ const helpStr = `
 /switch new - Creates a new memory session (if none available it will create one)
 /switch <index> - Switches between memory sessions based on their index
 /exit - Exit OkuuAI
-`
+`;
 
 export const handleCommand = async (command: string) => {
     const [commandName, ...args] = command.trim().substring(1).split(" ");
@@ -58,7 +57,7 @@ const switchSession = async (index: string) => {
         return;
     }
 
-    let id: number = parseInt(index);
+    const id: number = parseInt(index);
 
     const sessions: Array<SessionData> = await getAllSessions();
     const sessionId = sessions[id].date;

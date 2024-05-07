@@ -9,34 +9,41 @@ import dotenv from 'dotenv';
 import { initRedis } from './langchain/redis';
 import { SESSION_SETTINGS, startSession } from './langchain/memory/memory';
 import { initTauri } from './gui';
+import { loadEnv } from './config';
 dotenv.config();
 
-export const init = async () => {
+const downloadModelFile = async (url: string, path: string) => {
+    if (!fs.existsSync(path)) {
+        if(!fs.existsSync(Core.model_path)) {
+            Logger.INFO('Creating model directory...');
+            await fs.promises.mkdir(Core.model_path, { recursive: true });
+            Logger.INFO('Model directory created successfully!');
+        }
+        Logger.INFO('Downloading model file...');
+        await downloadFile(url, path);
+        Logger.INFO(`${ConsoleColor.FgGreen}Model file downloaded successfully!`);
+    } else {
+        Logger.INFO('Model file exists. Skipping...');
+    }
+};
+
+export const init = async () => 
+    new Promise<void>(async (resolve) => {
 
     console.log(centeredLogoTxt);
-    // Check if all required environment k-v are set.
-    checkEnvs();
+
+    Logger.INFO("Checking envs...");
+    if (!fs.existsSync('.env')) {
+        loadEnv();
+        return;
+    }
+
     Logger.DEBUG(`model_org_name: ${Core.model_org_name}`);
     Logger.DEBUG(`MODEL_NAME: ${process.env.MODEL_URL}`);
 
     // Download model if doesn't exist
     const model_url = process.env.MODEL_URL || '';
     const model_path = `${Core.model_path}${Core.model_org_name}`;
-
-    const downloadModelFile = async (url: string, path: string) => {
-        if (!fs.existsSync(path)) {
-            if(!fs.existsSync(Core.model_path)) {
-                Logger.INFO('Creating model directory...');
-                await fs.promises.mkdir(Core.model_path, { recursive: true });
-                Logger.INFO('Model directory created successfully!');
-            }
-            Logger.INFO('Downloading model file...');
-            await downloadFile(url, path);
-            Logger.INFO(`${ConsoleColor.FgGreen}Model file downloaded successfully!`);
-        } else {
-            Logger.INFO('Model file exists. Skipping...');
-        }
-    };
 
     await downloadModelFile(model_url, model_path);
   
@@ -71,25 +78,5 @@ export const init = async () => {
     Core.status = Status.ACTIVE;
 
     Logger.INFO(`${ConsoleColor.FgGreen}Initialization complete`);
-};
-
-const checkEnvs = () : void => {
-    // If there are new environment variables, add them to the envs array
-    const envs = [
-        'MODEL_URL',
-        'MODEL_PATH',
-        'CHROMA_USER',
-        'CHROMA_PWD',
-        'REDIS_PWD',
-    ];
-
-    envs.forEach(env => {
-        if (!process.env[env]) {
-            Logger.ERROR(`Environment variable ${env} is not set`);
-            process.exit(1);
-        }
-    });
-
-    // If all required envs are present, then continue execution.
-    Logger.INFO('All environment variables are set');
-};
+    resolve();
+});

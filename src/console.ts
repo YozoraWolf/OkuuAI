@@ -1,12 +1,12 @@
 import readline from 'readline';
 import { Logger } from './logger';
 import { Core } from './core';
-import { kill, stdout } from 'process';
+import { stdout } from 'process';
 import { sendChat } from './chat';
 import { handleCommand } from './commands';
-import { exec } from 'child_process';
 import { killTauri } from './gui';
 
+let rl: readline.Interface;
 
 const reprompt = () => {
     //Logger.DEBUG('Prompting user...');
@@ -20,12 +20,7 @@ const clearLine = () => {
     stdout.cursorTo(0);
 };
 
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
 
-reprompt();
 
 const handleUserInput = async (line: string) => {
     // possibly handle chats
@@ -59,7 +54,16 @@ const handleUserInput = async (line: string) => {
         console.log('\x1b[32mOkuu:\x1b[0m ' + resp);
 };
 
-rl.on('line', async (line: string) => {
+export const initConsole = async () =>
+    new Promise<void>((resolve) => {
+
+    rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+        
+
+    rl.on('line', async (line: string) => {
     if (line.trim().startsWith('/')) {
         await handleCommand(line.trim());
     } else {
@@ -67,20 +71,22 @@ rl.on('line', async (line: string) => {
     }
 
     reprompt();
-}).on('close', () => {
-    exit();
-});
+    }).on('close', () => {
+        exitOkuuAI();
+    });
 
-process.on('SIGINT', () => {
-    exit();
+    process.on('SIGINT', () => {
+        exitOkuuAI();
+    });
+
+    reprompt();
+    process.stdin.resume();
+    resolve();
 });
 
 // TODO: find out where that "Terminated is coming from"
-const exit = () => {
+export const exitOkuuAI = async () => {
     Logger.INFO('Bye!!');
-    killTauri();
+    await killTauri();
     process.exit(0);
-}
-
-
-process.stdin.resume();
+};

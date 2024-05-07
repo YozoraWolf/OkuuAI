@@ -1,6 +1,5 @@
 import { ConversationChain } from 'langchain/chains';
 import system from '../system.json';
-import { checkDir } from './o_utils';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -15,7 +14,7 @@ export class Core {
     static status: Status = Status.INACTIVE;
 
     static model_org_name: string = `${process.env.MODEL_URL?.match(/\/([^/]+)\.gguf/)?.[1]}.gguf`;
-    static model_path: string = checkDir(process.env.MODEL_PATH || '');
+    static model_path: string = process.env.MODEL_PATH || '';
     static model_name: string = 'okuu';
 
     static chat_settings: any = {
