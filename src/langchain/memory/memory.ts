@@ -135,3 +135,7 @@ export const saveSessionIdToSettings = (sessionId: string) => {
   fs.writeFileSync(SESSION_JSON, JSON.stringify(settings, null, 2)); // save
   Logger.INFO("Session ID saved to settings successfully.");
 };
+
+export const getLatestMsgs = async (msg_limit: number) => {
+  return (await session.chatHistory.getMessages()).slice(-msg_limit);
+} 

@@ -2,6 +2,22 @@ import readline from 'readline';
 import fs from 'fs';
 import { Logger } from './logger';
 import chalk from 'chalk';
+import path from 'path';
+
+// Util
+const envToJSON = (env: string) => {
+    const envLines = env.split('\n');
+    let envObj: Config = {};
+    for (const line of envLines) {
+        if (line.trim() === '') {
+            continue;
+        }
+        const [key, ...values] = line.split('=');
+        const value = values.join('=');
+        envObj[key.toLowerCase()] = value;
+    }
+    return envObj;
+};
 
 // Load OVERRIDE if present in arguments
 const arg = process.argv[2];
@@ -21,6 +37,11 @@ const defaultConfigAI: Config = {
     front_port: 8009
 };
 
+const defaultConfigFrontend: Config = {
+    vite_port: 8009,
+    okuuai_port: 3009
+};
+
 let currentConfig: Config = {};
 const newConfig: Config = {};
 
@@ -36,7 +57,7 @@ const configName: Config = {
 
 let rl: readline.Interface;
 
-export const initConfig = () => new Promise<void>((resolve) => {
+export const initConfig = () => new Promise<void>(() => {
 
     rl = readline.createInterface({
         input: process.stdin,
@@ -157,6 +178,7 @@ const interactiveConfig = async () => {
 
     try {
         createEnvFile(newConfig);
+        updateFrontEnv();
     } catch (error) {
         Logger.ERROR(`Failed to create .env file\n${error}`);
         exitConfig(1);
@@ -166,4 +188,41 @@ const interactiveConfig = async () => {
     exitConfig(0);
 };
 
+// gui frontend configuration related
+const guiRootPath = path.resolve(__dirname, "../src-gui");
 
+const createFrontendEnv = (config: Config = defaultConfigFrontend) => {
+    Logger.INFO('Creating .env file for GUI...');
+    Logger.DEBUG(`Config: ${JSON.stringify(config)}`);
+    try {
+        let envStr = '';
+        for (const key in config) {
+            envStr += `${key.toUpperCase()}=${config[key]}\n`;
+        }
+        Logger.DEBUG(`Env String: ${envStr}`);
+        fs.writeFileSync(`${guiRootPath}/.env`, envStr, { encoding: 'utf-8', flag: 'w' });
+    } catch (error) {
+        Logger.ERROR(`Failed to create .env file for GUI\n${error}`);
+    }
+    return config;
+};    
+
+
+const updateFrontEnv = () => {
+    let env;
+    if (!fs.existsSync(`${guiRootPath}/.env`)) {
+        Logger.WARN('Failed to load GUI\'s .env file. Creating new one...');
+        env = createFrontendEnv();
+        
+    } else {
+        Logger.INFO('Updating frontend .env file...');
+        env = envToJSON(fs.readFileSync(`${guiRootPath}/.env`, 'utf8'));
+    }
+    env.vite_port = newConfig.front_port;
+    env.okuuai_port = newConfig.port;
+    createFrontendEnv(env);
+};
+
+if (arg === 'OVERRIDE') {
+    initConfig(); // this will first check if there's an existing .env file, if not, it will start the interactive configuration
+}

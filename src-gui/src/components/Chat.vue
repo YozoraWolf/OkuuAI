@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { io } from 'socket.io-client';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useSendingStore } from '../stores/chatStore';
 
 const sendingStore = useSendingStore();
@@ -46,10 +46,22 @@ socket.on('chat', (data: ChatMessage) => {
     console.log('Messages:', messages);
 });
 
+const chatLog = ref<HTMLElement | null>(null);
+
+const scrollToNewContent = () => {
+    if(chatLog.value === null) return;
+        chatLog.value.scrollTop = chatLog.value.scrollHeight;
+};
+
+// Call the scroll function whenever new content is added
+watch(messages, () => {
+    scrollToNewContent();
+});
+
 </script>
 
 <template>
-    <ul class="chat_log">
+    <ul ref="chat_log" class="chat_log">
         <div v-if="messages.length === 0" class="no-messages">No messages</div>
         <li class="chat_msg" v-for="msg in messages" :key="msg.id">
             <div class="name">{{ msg.type === 'ai' ? 'Okuu' : "User" }}</div>
@@ -67,6 +79,8 @@ socket.on('chat', (data: ChatMessage) => {
     justify-content: left;
 
     flex-direction: column;
+
+    overflow-y: scroll;
 
     .chat_msg {
 
