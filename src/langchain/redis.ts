@@ -12,9 +12,10 @@ export let redisClientMemory: Redis;
 export let redisClientRAG: Redis;
 
 const hanldeRedisError = (error: any) => {
+    if(error === null) return;
     if(error.code === "ECONNREFUSED") {
         Logger.ERROR("Redis Memory Client error: Redis is not running!");
-    } else if (error.includes("EPIPE")) {
+    } else if (error.code.includes("EPIPE")) {
         Logger.ERROR("Redis Memory Client error: Check credentials");
     }
 };
@@ -26,8 +27,8 @@ export const initRedis = async () => {
     Logger.INFO('Checking redis container status...');
     const res = await runRedisDocker();
     if (res === 2) {
-        Logger.INFO('Redis docker container already exists, restarting container...');
-        await restartRedisDocker();
+        //Logger.INFO('Redis docker container already exists, restarting container...');
+        //await restartRedisDocker();
     } else if (res === 1) {
         Logger.ERROR('Error occurred while starting redis docker container!');
         process.exit(1);
@@ -45,13 +46,13 @@ export const initRedis = async () => {
         db: 0
       });    
       
-      redisClientRAG = await new Redis({
+ /*      redisClientRAG = await new Redis({
         port: REDIS_PORT, // Redis port
         host: "localhost", // Redis host
         username: "default", // needs Redis >= 6
         password: REDIS_PWD,
         db: 1
-      });
+      }); */
 
       Logger.DEBUG(`Redis client connected successfully!`);
 
@@ -60,10 +61,10 @@ export const initRedis = async () => {
         hanldeRedisError(error);
     });
     
-    redisClientRAG.on('error', (error: any) => {
+/*     redisClientRAG.on('error', (error: any) => {
         Logger.ERROR(`Redis RAG Client error: ${error}`);
         hanldeRedisError(error);
-    });
+    }); */
 };
 
 const restartRedisDocker = async () => {

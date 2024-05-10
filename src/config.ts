@@ -34,10 +34,21 @@ const configName: Config = {
     front_port: "Frontend Port",
 };
 
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
+let rl: readline.Interface;
+
+export const initConfig = () => new Promise<void>((resolve) => {
+
+    rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+
+
+    if (arg === 'OVERRIDE') {
+        loadEnv(); // this will first check if there's an existing .env file, if not, it will start the interactive configuration
+    }
 });
+
 
 const question = (prompt: string) => {
     return new Promise<string | null>((resolve, reject) => {
@@ -55,7 +66,7 @@ const question = (prompt: string) => {
 const exitConfig = (code: number) => {
     if (code === 0) {
         Logger.INFO('Configuration completed successfully');
-        if(arg !== 'OVERRIDE') {
+        if (arg !== 'OVERRIDE') {
             Logger.INFO('Please restart the application to apply the new configuration');
         };
     }
@@ -156,7 +167,3 @@ const interactiveConfig = async () => {
 };
 
 
-
-if (arg === 'OVERRIDE') {
-    loadEnv(); // this will first check if there's an existing .env file, if not, it will start the interactive configuration
-}

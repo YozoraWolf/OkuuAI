@@ -2,6 +2,9 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import postcssNesting from 'postcss-nesting';
 import dotenv from 'dotenv';
+import postcssPresetEnv from 'postcss-preset-env';
+import autoprefixer from 'autoprefixer';
+import cssnano from 'cssnano';
 
 dotenv.config();
 
@@ -18,7 +21,10 @@ export default defineConfig({
   css: {
     postcss: {
       plugins: [
-        postcssNesting
+        postcssNesting,
+        postcssPresetEnv,
+        autoprefixer,
+        cssnano,
       ],
     },
   },

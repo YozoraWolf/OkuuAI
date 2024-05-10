@@ -5,6 +5,7 @@ import { stdout } from 'process';
 import { sendChat } from './chat';
 import { handleCommand } from './commands';
 import { killTauri } from './gui';
+import { io } from './index';
 
 let rl: readline.Interface;
 
@@ -22,7 +23,7 @@ const clearLine = () => {
 
 
 
-const handleUserInput = async (line: string) => {
+export const handleUserInput = async (line: string) => {
     // possibly handle chats
     let msg = '';
     let multiline = false;
@@ -68,9 +69,9 @@ export const initConsole = async () =>
         await handleCommand(line.trim());
     } else {
         await handleUserInput(line);
+        reprompt();
     }
 
-    reprompt();
     }).on('close', () => {
         exitOkuuAI();
     });
@@ -79,8 +80,11 @@ export const initConsole = async () =>
         exitOkuuAI();
     });
 
+    Logger.INFO('Console initialized');
+
+    clearLine();
     reprompt();
-    process.stdin.resume();
+
     resolve();
 });
 
@@ -90,3 +94,5 @@ export const exitOkuuAI = async () => {
     await killTauri();
     process.exit(0);
 };
+
+process.stdin.resume();
