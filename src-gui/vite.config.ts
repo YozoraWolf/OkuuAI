@@ -1,12 +1,10 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import postcssNesting from 'postcss-nesting';
-import dotenv from 'dotenv';
 import postcssPresetEnv from 'postcss-preset-env';
 import autoprefixer from 'autoprefixer';
 import cssnano from 'cssnano';
-
-dotenv.config();
+import env from './env.json';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -15,7 +13,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: Number(process.env.FRONT_PORT),
+    port: Number(env.gui_port),
   },
   plugins: [vue()],
   css: {
@@ -26,6 +24,11 @@ export default defineConfig({
         autoprefixer,
         cssnano,
       ],
+    },
+  },
+  resolve: {
+    alias: {
+      '@': '/',
     },
   },
 })

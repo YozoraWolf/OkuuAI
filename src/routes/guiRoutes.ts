@@ -1,10 +1,8 @@
-// usersRoutes.ts
-
 import express from 'express';
 const router = express.Router();
 import { guiCloseApp } from '../controllers/guiController';
 
-// Route for GET /users
+// Route to close app from GUI
 router.get('/close', guiCloseApp);
 
 export default router;

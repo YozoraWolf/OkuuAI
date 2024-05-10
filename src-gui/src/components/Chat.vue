@@ -2,6 +2,8 @@
 import { io } from 'socket.io-client';
 import { ref, watch } from 'vue';
 import { useSendingStore } from '../stores/chatStore';
+import env from '../../env.json';
+import axios from 'axios';
 
 const sendingStore = useSendingStore();
 
@@ -12,12 +14,31 @@ interface ChatMessage {
     done: boolean;
 }
 
+const scrollToNewContent = () => {
+    if(chatLog.value === null) return;
+        chatLog.value.scrollTop = chatLog.value.scrollHeight;
+};
 
-const socket = io('ws://localhost:3009', {
+const socket = io(`ws://localhost:${env.okuuai_port}`, {
     transports: ['websocket'],
 });
 const messages = ref<ChatMessage[]>([]);
 
+// Load messages from server
+
+(async () => {
+    try {
+        const response = await axios.get(`http://localhost:${env.okuuai_port}/memory`, {
+            params: {
+                msg_limit: 20
+            }
+        });
+        messages.value = response.data;
+        scrollToNewContent();
+    } catch (error) {
+        console.error('Error loading messages:', error);
+    }
+})();
 
 // Listen for events from the server
 socket.on('chat', (data: ChatMessage) => {
@@ -48,10 +69,7 @@ socket.on('chat', (data: ChatMessage) => {
 
 const chatLog = ref<HTMLElement | null>(null);
 
-const scrollToNewContent = () => {
-    if(chatLog.value === null) return;
-        chatLog.value.scrollTop = chatLog.value.scrollHeight;
-};
+
 
 // Call the scroll function whenever new content is added
 watch(messages, () => {
