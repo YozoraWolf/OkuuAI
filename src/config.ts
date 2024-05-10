@@ -4,55 +4,94 @@ import { Logger } from './logger';
 import chalk from 'chalk';
 import path from 'path';
 
-// Util
-const envToJSON = (env: string) => {
-    const envLines = env.split('\n');
-    let envObj: Config = {};
-    for (const line of envLines) {
-        if (line.trim() === '') {
-            continue;
-        }
-        const [key, ...values] = line.split('=');
-        const value = values.join('=');
-        envObj[key.toLowerCase()] = value;
-    }
-    return envObj;
-};
-
-// Load OVERRIDE if present in arguments
-const arg = process.argv[2];
+// Interfaces & Defaults
 
 // TODO: Set VITE configs too like frontend port, etc.
 interface Config {
-    [key: string]: string | number;
+    model_url?: string;
+    model_path?: string;
+    port?: number;
+    srv_url?: string;
+    redis_port?: number;
+    redis_pwd?: string;
+    gui_port?: number;
+    [key: string]: any;
+}
+
+interface ConfigGUI {
+    vite_port?: number;
+    okuuai_port?: number;
+    [key: string]: any;
 }
 
 const defaultConfigAI: Config = {
     model_url: "https://huggingface.co/MaziyarPanahi/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct.Q6_K.gguf?download=true",
     model_path: "/usr/share/ollama/.ollama/models/okuu/",
     port: 3009,
-    URL: "http://localhost",
+    srv_url: "http://localhost",
     redis_port: 6009,
     redis_pwd: "1234",
-    front_port: 8009
+    gui_port: 8009
 };
 
-const defaultConfigFrontend: Config = {
+const defaultConfigFrontend: ConfigGUI = {
     vite_port: 8009,
     okuuai_port: 3009
 };
 
-let currentConfig: Config = {};
-const newConfig: Config = {};
 
-const configName: Config = {
+// Util
+function envToJSON(env: string): Config {
+    const envLines = env.split('\n');
+    const config: Config = { ...defaultConfigAI };
+    for (const line of envLines) {
+        if (line.trim() === '') {
+            continue;
+        }
+        const [key, value] = line.split('=');
+        if (Object.keys(defaultConfigAI).includes(key.toLowerCase())) {
+            config[key.toLowerCase()] = value;
+        } else {
+            // Handle unknown key (e.g., throw error, log warning)
+            Logger.WARN(`Unknown key in .env file: ${key}`);
+        }
+    }
+    return config;
+}
+
+// Load OVERRIDE if present in arguments
+const arg = process.argv[2];
+
+const envJsonName = 'env.json';
+
+
+let currentConfig: Config = {
+    model_url: "",
+    model_path: "",
+    port: 0,
+    srv_url: "",
+    redis_port: 0,
+    redis_pwd: "",
+    gui_port: 0
+};
+const newConfig: Config = {
+    model_url: "",
+    model_path: "",
+    port: 0,
+    srv_url: "",
+    redis_port: 0,
+    redis_pwd: "",
+    gui_port: 0
+};
+
+const configName: any = {
     model_url: "Model URL",
     model_path: "Model Path",
     port: "Port",
-    URL: "OkuuAI URL",
+    srv_url: "OkuuAI URL",
     redis_port: "Redis Port",
     redis_pwd: "Redis Password",
-    front_port: "Frontend Port",
+    gui_port: "GUI Port",
 };
 
 let rl: readline.Interface;
@@ -120,17 +159,10 @@ export const loadEnv = () => {
         return;
     }
     try {
-        const env = fs.readFileSync('.env', 'utf8');
-        const envLines = env.split('\n');
-        for (const line of envLines) {
-            if (line.trim() === '') {
-                continue;
-            }
-            const [key, ...values] = line.split('=');
-            const value = values.join('=');
+        const env = envToJSON(fs.readFileSync('.env', 'utf8'));
+        for (const key in env) {
             const lowercaseKey = key.toLowerCase();
-            currentConfig[lowercaseKey] = value; // Store the key-value pair in the object with lowercase key
-            process.env[lowercaseKey] = value;
+            currentConfig[lowercaseKey] = env[key]; // Store the key-value pair in the object with lowercase key
         }
         // Check if the user wants to override the existing configuration
         if (arg === 'OVERRIDE') {
@@ -192,33 +224,28 @@ const interactiveConfig = async () => {
 const guiRootPath = path.resolve(__dirname, "../src-gui");
 
 const createFrontendEnv = (config: Config = defaultConfigFrontend) => {
-    Logger.INFO('Creating .env file for GUI...');
+    Logger.INFO('Creating env.json file for GUI...');
     Logger.DEBUG(`Config: ${JSON.stringify(config)}`);
     try {
-        let envStr = '';
-        for (const key in config) {
-            envStr += `${key.toUpperCase()}=${config[key]}\n`;
-        }
-        Logger.DEBUG(`Env String: ${envStr}`);
-        fs.writeFileSync(`${guiRootPath}/.env`, envStr, { encoding: 'utf-8', flag: 'w' });
+        fs.writeFileSync(`${guiRootPath}/${envJsonName}`, JSON.stringify(config, null, 2), { encoding: 'utf-8', flag: 'w' });
     } catch (error) {
-        Logger.ERROR(`Failed to create .env file for GUI\n${error}`);
+        Logger.ERROR(`Failed to create env.json file for GUI\n${error}`);
     }
     return config;
-};    
+};
 
 
 const updateFrontEnv = () => {
-    let env;
-    if (!fs.existsSync(`${guiRootPath}/.env`)) {
-        Logger.WARN('Failed to load GUI\'s .env file. Creating new one...');
-        env = createFrontendEnv();
-        
+    let env: ConfigGUI;
+    if (!fs.existsSync(`${guiRootPath}/${envJsonName}`)) {
+        Logger.WARN(`Failed to load GUI\'s ${envJsonName} file. Creating new one...`);
+        env = {};
+
     } else {
-        Logger.INFO('Updating frontend .env file...');
-        env = envToJSON(fs.readFileSync(`${guiRootPath}/.env`, 'utf8'));
+        Logger.INFO(`Updating frontend ${envJsonName} file...`);
+        env = JSON.parse(fs.readFileSync(`${guiRootPath}/${envJsonName}`, 'utf8'));
     }
-    env.vite_port = newConfig.front_port;
+    env.gui_port = newConfig.gui_port;
     env.okuuai_port = newConfig.port;
     createFrontendEnv(env);
 };

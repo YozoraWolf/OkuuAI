@@ -20,7 +20,16 @@ export const loadSettings = (): any => {
   }
 };
 
-export const SESSION_SETTINGS = loadSettings();
+interface ChatMessage {
+  type: string;
+  content: string;
+};
+
+interface SessionSettings {
+  sessionId: string;
+};
+
+export const SESSION_SETTINGS: SessionSettings = loadSettings();
 
 let session: BufferMemory;
 
@@ -136,6 +145,22 @@ export const saveSessionIdToSettings = (sessionId: string) => {
   Logger.INFO("Session ID saved to settings successfully.");
 };
 
-export const getLatestMsgs = async (msg_limit: number) => {
-  return (await session.chatHistory.getMessages()).slice(-msg_limit);
-} 
+export const getLatestMsgs = async (msg_limit: number): Promise<any[]> => {
+  const latestSession = SESSION_SETTINGS.sessionId || await getLatestHistory();
+  if (latestSession === null) {
+    return [];
+  }
+  Logger.DEBUG(`Getting latest messages from session: ${latestSession}`);
+  const result = await redisClientMemory.lrange(latestSession, 0, msg_limit);
+
+
+  const messages = result.map((msg: string) => {
+    const { type, data } = JSON.parse(msg);
+    const obj: ChatMessage = { type, content: data["content"] };
+    return obj;
+  });
+
+  //Logger.DEBUG(`Latest messages: ${messages.map(msg => JSON.stringify(msg)).join('\n')}`);
+
+  return messages;
+};

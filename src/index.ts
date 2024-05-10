@@ -2,11 +2,11 @@ import express, { Application } from 'express';
 import http from 'http'; // Import http module
 import { init } from './init';
 import { Logger } from './logger';
-import guiRoutes from './routes/guiRoute';
 import { handleUserInput, initConsole } from './console';
 import { Server } from 'socket.io';
-import cors from 'cors';
 import { initTauri } from './gui';
+import memoryRoutes from './routes/memoryRoutes';
+import guiRoutes from './routes/guiRoutes';
 
 export let io: Server;
 
@@ -19,11 +19,7 @@ export let io: Server;
     io = new Server(server); // Create Socket.io server
 
     app.use('/gui', guiRoutes);
-    app.use(cors());
-
-    app.get('/chat', () => {
-        // Handle the '/chat' route here
-    });
+    app.use('/memory', memoryRoutes);
 
     io.on('connection', (socket) => {
         console.log('A client connected');
