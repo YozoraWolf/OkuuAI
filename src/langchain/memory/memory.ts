@@ -27,7 +27,7 @@ let session: BufferMemory;
 const prompt = ChatPromptTemplate.fromMessages([
   ["system", Core.model_settings.system],
   new MessagesPlaceholder("history"),
-  ["user", "{input}"],
+  ["user", "{input}"]
 ]);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -53,8 +53,7 @@ export const startSession = async (sessionId: any) : Promise<ConversationChain> 
     }),
     returnMessages: true,
     memoryKey: "history",
-    inputKey: "input",
-    outputKey: "response"
+    inputKey: "input"
   });
 
 

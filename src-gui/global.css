@@ -1,0 +1,10 @@
+:root {
+    --color-primary: rgba(0, 50, 7, 1);
+    --darker-primary: rgba(0, 0, 0, 0.4);
+}
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}

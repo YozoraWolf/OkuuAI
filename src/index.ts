@@ -1,26 +1,50 @@
-    import express, { Application } from 'express';
-    import { init } from './init';
-    import { Logger } from './logger';
-    import guiRoutes from './routes/guiRoute';
+import express, { Application } from 'express';
+import http from 'http'; // Import http module
+import { init } from './init';
+import { Logger } from './logger';
+import guiRoutes from './routes/guiRoute';
+import { handleUserInput, initConsole } from './console';
+import { Server } from 'socket.io';
+import cors from 'cors';
+import { initTauri } from './gui';
 
-    (async () => {
-        await init();
-        
-        const app: Application = express();
-        const port = process.env.PORT || 3000;
+export let io: Server;
 
-        app.use('/gui', guiRoutes);
+(async () => {
+    await init();
 
+    const app: Application = express();
+    const port = process.env.PORT || 3000;
+    const server = http.createServer(app); // Create HTTP server
+    io = new Server(server); // Create Socket.io server
 
-        app.get('/chat', () => {
-            // Handle the '/chat' route here
+    app.use('/gui', guiRoutes);
+    app.use(cors());
+
+    app.get('/chat', () => {
+        // Handle the '/chat' route here
+    });
+
+    io.on('connection', (socket) => {
+        console.log('A client connected');
+
+        socket.on('chat', async (data: any) => {
+            console.log('Received chat message:', data);
+            await handleUserInput(data.content);
         });
 
-        app.listen(port, async () => {
-            Logger.INFO(`Server is running on port ${port} ${/09$/.test(port.toString()) ? '(☢️)':''}`);
-            // Start console
-            //await initConsole();
+        socket.on('disconnect', () => {
+            console.log('Client disconnected');
         });
+    });
+
+    server.listen(port, async () => {
+        Logger.INFO(`Server is running on port ${port} ${/09$/.test(port.toString()) ? '(☢️)' : ''}`);
 
 
-    })();
+        // init gui
+        initTauri();
+        // Start console
+        await initConsole();
+    });
+})();

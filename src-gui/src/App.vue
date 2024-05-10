@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Chat from './components/Chat.vue';
+import GUI from './views/GUI.vue';
 import axios from 'axios';
 
 const OKUUAI_PORT = 3009;
@@ -19,19 +19,14 @@ const close = async () => {
             <button class="btn" id="close" @click="close()">X</button>
         </div>
 
-        <Chat/>
+        <GUI/>
     </div>
 
 </template>
 
 <style>
-h1 {
-    color: red;
-    font-size: 4rem;
-}
-
 :root {
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.7);
 }
 
 #app {
