@@ -1,6 +1,6 @@
 :root {
     --color-primary: rgba(0, 50, 7, 1);
-    --darker-primary: rgba(0, 0, 0, 0.4);
+    --color-primary-darker: color-mix(in srgb,var(--color-primary),#000 40%);
 }
 
 body {

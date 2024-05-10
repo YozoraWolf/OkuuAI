@@ -12,8 +12,8 @@ const socket = io('ws://localhost:3009', {
 // TODO: Work on special key combos Shift, Ctrl, Alt.
 const userMsg = ref('');
 const sendMsg = (event: any) => {
-    if (event.key === 'Enter' && event.shiftKey && event.ctrlKey && event.altKey) {
-        event.preventDefault();
+    if(event.key !== 'Enter') return;
+    if (event.shiftKey || event.ctrlKey || event.altKey) {
         return;
     }
     if (userMsg.value === '') return;
@@ -49,7 +49,7 @@ const sendMsg = (event: any) => {
     flex-direction: row;
     align-items: center;
 
-    background-color: var(--darker-primary);
+    background-color: var(--color-primary-darker);
 
     padding: 10px;
 
@@ -63,10 +63,13 @@ const sendMsg = (event: any) => {
         margin: 5px;
 
         font-size: calc(1em * var(--chat-size-scale));
+
+        color: white;
+        background-color: var(--color-primary);
     }
 
     .input:disabled {
-        background-color: #f0f0f0;
+        background-color: #0e0e0e;
     }
 
     .send-btn {
