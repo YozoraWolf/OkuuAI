@@ -9,7 +9,7 @@ import dotenv from 'dotenv';
 import { initRedis } from './langchain/redis';
 import { SESSION_SETTINGS, startSession } from './langchain/memory/memory';
 import { initConfig, loadEnv } from './config';
-import { initTauri } from './gui';
+
 dotenv.config();
 
 const downloadModelFile = async (url: string, path: string) => {
