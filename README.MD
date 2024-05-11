@@ -59,9 +59,13 @@ To install the dependencies, run the following command:
 npm install
 ```
 
-The program will automatically download and install necessary models.
+Before running it for the first time, please execute the config script to set all env variables properly. Feel free to choose any port you want, other than that make sure you set the rest properly to avoid errors.
 
-You will also need a `system.json` to provide a custom System prompt for ollama to use. You can make on on the root dir of the project and use this as template:
+```
+npm run config
+```
+
+You will also need a `system.json` to provide a custom System prompt for ollama to use. So just edit the one provided by the config script.
 
 ```
 {
@@ -74,6 +78,8 @@ Then just run it using:
 ```
 npm start
 ```
+
+The program will automatically download and install necessary models.
 
 # Commands
 

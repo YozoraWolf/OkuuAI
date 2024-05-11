@@ -15,6 +15,7 @@ interface Config {
     redis_port?: number;
     redis_pwd?: string;
     gui_port?: number;
+    system?: string;
     [key: string]: any;
 }
 
@@ -31,7 +32,8 @@ const defaultConfigAI: Config = {
     srv_url: "http://localhost",
     redis_port: 6009,
     redis_pwd: "1234",
-    gui_port: 8009
+    gui_port: 8009,
+    system: "You're an AI assistant."
 };
 
 const defaultConfigFrontend: ConfigGUI = {
@@ -73,7 +75,8 @@ let currentConfig: Config = {
     srv_url: "",
     redis_port: 0,
     redis_pwd: "",
-    gui_port: 0
+    gui_port: 0,
+    system: ""
 };
 const newConfig: Config = {
     model_url: "",
@@ -82,7 +85,8 @@ const newConfig: Config = {
     srv_url: "",
     redis_port: 0,
     redis_pwd: "",
-    gui_port: 0
+    gui_port: 0,
+    system: ""
 };
 
 const configName: any = {
@@ -93,6 +97,7 @@ const configName: any = {
     redis_port: "Redis Port",
     redis_pwd: "Redis Password",
     gui_port: "GUI Port",
+    system: "System Prompt"
 };
 
 let rl: readline.Interface;
@@ -165,6 +170,7 @@ export const loadEnv = () => {
             const lowercaseKey = key.toLowerCase();
             currentConfig[lowercaseKey] = env[key]; // Store the key-value pair in the object with lowercase key
         }
+        env.system = loadSystemPrompt(); // Load system prompt
         // Check if the user wants to override the existing configuration
         if (arg === 'OVERRIDE') {
             rl.question(`${chalk.white('>> Do you want to override the existing configuration?')} (Y/N): `, async (answer) => {
@@ -209,9 +215,12 @@ const interactiveConfig = async () => {
         }
     }
 
+    const { system, ...settings } = newConfig;
+
     try {
-        createEnvFile(newConfig);
+        createEnvFile(settings);
         updateFrontEnv();
+        updateSystemPromptJSON();
     } catch (error) {
         Logger.ERROR(`Failed to create .env file\n${error}`);
         exitConfig(1);
@@ -249,6 +258,45 @@ const updateFrontEnv = () => {
     env.gui_port = newConfig.gui_port;
     env.okuuai_port = newConfig.port;
     createFrontendEnv(env);
+};
+
+// System Prompt Configuration
+
+const systemPromptFile = 'system.json';
+
+const loadSystemPrompt = () => {
+    let sys;
+    if (!fs.existsSync('system.json')) {
+        Logger.WARN(`Failed to load ${systemPromptFile} file. Creating new one...`);
+        sys = createSystemPromptJSON();
+    } else {
+        Logger.INFO(`Loading system prompt from ${systemPromptFile} file...`);
+        sys = JSON.parse(fs.readFileSync('system.json', 'utf8'));
+    }
+    return sys.system;
+};
+
+const createSystemPromptJSON = () => {
+    Logger.INFO('Creating system.json file...');
+    const newSystem = { system: defaultConfigAI.system };
+    const sys = JSON.stringify(newSystem, null, 2);
+    try {
+        fs.writeFileSync('system.json', sys);
+    } catch (error) {
+        Logger.ERROR(`Failed to create system.json file\n${error}`);
+        return null;
+    }
+    return newSystem;
+};
+
+const updateSystemPromptJSON = () => {
+    const system = newConfig.system;
+    try {
+        fs.writeFileSync('system.json', JSON.stringify({ system }, null, 2));
+    }
+    catch (error) {
+        Logger.ERROR(`Failed to update system.json file\n${error}`);
+    }
 };
 
 if (arg === 'OVERRIDE') {
