@@ -2,10 +2,9 @@ import readline from 'readline';
 import { Logger } from './logger';
 import { Core } from './core';
 import { stdout } from 'process';
-import { sendChat } from './chat';
+import { ChatMessage, getMessagesCount, incrementMessagesCount, sendChat } from './chat';
 import { handleCommand } from './commands';
 import { killTauri } from './gui';
-import { io } from './index';
 
 let rl: readline.Interface;
 
@@ -23,15 +22,30 @@ const clearLine = () => {
 
 
 
-export const handleUserInput = async (line: string) => {
+export const handleUserInput = async (line: string, msg?: ChatMessage) => {
     // possibly handle chats
-    let msg = '';
     let multiline = false;
 
-    const resp: any = await sendChat(line.trim(), (data: string) => {
+    let id = getMessagesCount();
+
+    if(msg === undefined) {
+        id = incrementMessagesCount(); // increment the message count and assign it to the id
+        msg = {
+            id,
+            type: 'user',
+            content: line,
+            done: false
+        };
+    } else {
+        incrementMessagesCount(); // else just increment the message count
+    }
+
+    let reply = '';
+
+    const resp: any = await sendChat(msg, (data: string) => {
         //Logger.DEBUG(`Received data: ${data}`);
         // process data chunk
-        msg += data;
+        reply += data;
 
         const terminalWidth = process.stdout.columns;
         const prefixLength = Core.chat_settings.prefix.length;
@@ -41,12 +55,12 @@ export const handleUserInput = async (line: string) => {
 
         // write buffer, if it exceeds a line (multiline), do not include prefix.
         clearLine();
-        stdout.write(`${!multiline ? Core.chat_settings.prefix + " " : ""}${msg.trim()}`);
+        stdout.write(`${!multiline ? Core.chat_settings.prefix + " " : ""}${reply.trim()}`);
 
         // break if the message is too long or contains a newline
-        if (msg.includes('\n') || msg.length >= effectiveWidth) {
+        if (reply.includes('\n') || reply.length >= effectiveWidth) {
             stdout.write('\n');
-            msg = ''; // clear the message after starting new line
+            reply = ''; // clear the message after starting new line
             multiline = true;
         }
     });

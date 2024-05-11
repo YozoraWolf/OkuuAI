@@ -23,9 +23,11 @@ export class Core {
 
     static model_settings: any = { 
         temperature: .3,
-        num_ctx: 4096,
-        top_k: 10,
-        top_p: 1,
+        //numCtx: 4096,
+        topK: 10,
+        topP: 1,
+        repeatPenalty: 1.15,
+        numPredict: 250,
         system: system.system
     };
 

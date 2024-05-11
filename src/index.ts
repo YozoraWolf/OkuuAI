@@ -1,5 +1,6 @@
 import express, { Application } from 'express';
-import http from 'http'; // Import http module
+import http from 'http';
+import cors from 'cors';
 import { init } from './init';
 import { Logger } from './logger';
 import { handleUserInput, initConsole } from './console';
@@ -18,6 +19,7 @@ export let io: Server;
     const server = http.createServer(app); // Create HTTP server
     io = new Server(server); // Create Socket.io server
 
+    app.use(cors());
     app.use('/gui', guiRoutes);
     app.use('/memory', memoryRoutes);
 
@@ -26,7 +28,7 @@ export let io: Server;
 
         socket.on('chat', async (data: any) => {
             console.log('Received chat message:', data);
-            await handleUserInput(data.content);
+            await handleUserInput(data.content, data);
         });
 
         socket.on('disconnect', () => {

@@ -36,7 +36,8 @@ const defaultConfigAI: Config = {
 
 const defaultConfigFrontend: ConfigGUI = {
     vite_port: 8009,
-    okuuai_port: 3009
+    okuuai_port: 3009,
+    msg_limit: 20
 };
 
 
@@ -238,7 +239,7 @@ const createFrontendEnv = (config: Config = defaultConfigFrontend) => {
 const updateFrontEnv = () => {
     let env: ConfigGUI;
     if (!fs.existsSync(`${guiRootPath}/${envJsonName}`)) {
-        Logger.WARN(`Failed to load GUI\'s ${envJsonName} file. Creating new one...`);
+        Logger.WARN(`Failed to load GUI's ${envJsonName} file. Creating new one...`);
         env = {};
 
     } else {

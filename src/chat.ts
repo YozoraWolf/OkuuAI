@@ -2,29 +2,49 @@ import { io } from "./index";
 import { Core } from "./core";
 import { Logger } from "./logger";
 
-interface ChatMessage {
+export interface ChatMessage {
     id: number;
     type: string;
-    content: string;
+    content?: string;
     done: boolean;
 }
 
-let messagesSent = 0;
+let messagesCount = 0;
 
-export const sendChat = async (cnt: string, callback?: (data: string) => void) => {
+export const setMessagesCount = (cnt: number) => {
+    messagesCount = cnt;
+};
+
+export const getMessagesCount = () => {
+    return messagesCount;
+};
+
+export const incrementMessagesCount = () => {
+    return messagesCount++;
+};
+
+export const sendChat = async (msg: ChatMessage, callback?: (data: string) => void) => {
     try {
-        //Logger.DEBUG(`Sending chat: ${cnt}`);
-        io.emit('chat', { id:  messagesSent++, type: 'user', content: cnt, done: true });
+        Logger.DEBUG(`Sending chat: ${msg.id}`);
+        const reply: ChatMessage = {
+            id: incrementMessagesCount(),
+            type: 'ai',
+            content: '',
+            done: false
+        
+        };
+        io.emit('chat', msg); // send back user input (for GUI to display)
+        io.emit('chat', reply); // send back AI response (for GUI to display and await)
         if(Core.ollama_settings.stream) {
             await Core.chat_session.stream({
-                input: cnt
+                input: msg.content
             }, {
                 callbacks: [
                     {
                         async handleLLMNewToken(token: string) {
-                            //console.log(token);
-                            io.emit('chat', { id:  messagesSent, type: 'ai', content: token, done: false });
                             if (callback) callback(token);
+                            reply.content += token;
+                            io.emit('chat', reply);
                         }
                     }
                 ]
@@ -33,12 +53,12 @@ export const sendChat = async (cnt: string, callback?: (data: string) => void) =
             //Logger.DEBUG(`Response: ${stream}`);
         } else {
             const resp = await Core.chat_session.invoke({
-                input: cnt,
+                input: msg.content,
             });
             return resp.content;
         }
-        io.emit('chat', { id: messagesSent++, type: 'ai', done: true });
-
+        reply.done = true;
+        io.emit('chat', reply);
     } catch (error: any) {
         Logger.ERROR(`Error sending chat: ${error.response ? error.response.data : error.message}`);
         return null;
