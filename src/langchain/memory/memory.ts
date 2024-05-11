@@ -7,6 +7,7 @@ import { ConversationChain } from "langchain/chains";
 import { redisClientMemory } from "../redis";
 import { Logger } from "@src/logger";
 import fs from "fs";
+import { setMessagesCount } from "@src/chat";
 
 const SESSION_JSON = "session.json";
 
@@ -20,9 +21,11 @@ export const loadSettings = (): any => {
   }
 };
 
-interface ChatMessage {
+interface ChatMessageGUI {
+  id: number;
   type: string;
   content: string;
+  done: boolean;
 };
 
 interface SessionSettings {
@@ -145,18 +148,22 @@ export const saveSessionIdToSettings = (sessionId: string) => {
   Logger.INFO("Session ID saved to settings successfully.");
 };
 
-export const getLatestMsgs = async (msg_limit: number): Promise<any[]> => {
+export const getLatestMsgs = async (msg_limit: number): Promise<ChatMessageGUI[]> => {
   const latestSession = SESSION_SETTINGS.sessionId || await getLatestHistory();
   if (latestSession === null) {
     return [];
   }
   Logger.DEBUG(`Getting latest messages from session: ${latestSession}`);
   const result = await redisClientMemory.lrange(latestSession, 0, msg_limit);
+  result.reverse();
 
+  //Logger.DEBUG(`Latest messages: ${result.join('\n')}`);
 
-  const messages = result.map((msg: string) => {
+  setMessagesCount(result.length);
+
+  const messages = result.map((msg: string, index: number) => {
     const { type, data } = JSON.parse(msg);
-    const obj: ChatMessage = { type, content: data["content"] };
+    const obj: ChatMessageGUI = { id: index, type, content: data["content"], done: true };
     return obj;
   });
 

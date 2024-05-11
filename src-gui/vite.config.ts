@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { fileURLToPath, URL } from "url";
 import vue from '@vitejs/plugin-vue'
 import postcssNesting from 'postcss-nesting';
 import postcssPresetEnv from 'postcss-preset-env';
@@ -27,8 +28,8 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      '@': '/',
-    },
+    alias: [
+      { find: '@', replacement: fileURLToPath(new URL('./', import.meta.url)) },
+    ],
   },
 })

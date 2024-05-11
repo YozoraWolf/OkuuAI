@@ -38,6 +38,7 @@ import InputBox from '../components/InputBox.vue';
 .input-box {
     position: relative;
     bottom: 0;
+    padding: 0;
 }
 
 

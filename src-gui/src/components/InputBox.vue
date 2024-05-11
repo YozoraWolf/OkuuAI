@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import { io } from 'socket.io-client';
+import { socket } from '@/src/main'
 import { ref } from 'vue';
-import { useSendingStore } from '../stores/chatStore';
+import { useSendingStore, useChatHistoryStore, ChatMessage } from '../stores/chatStore';
 
 const sendingStore = useSendingStore();
-
-const socket = io('ws://localhost:3009', {
-    transports: ['websocket'],
-});
+const chatHistoryStore = useChatHistoryStore();
 
 // TODO: Work on special key combos Shift, Ctrl, Alt.
 const userMsg = ref('');
@@ -17,25 +14,38 @@ const sendMsg = (event: any) => {
         return;
     }
     if (userMsg.value === '') return;
-    console.log(`Store sending: ${sendingStore.sending}`);
+    //console.log(`Store sending: ${sendingStore.sending}`);
     if (sendingStore.sending) return;
-    console.log(`Sending message: ${userMsg.value}`);
-    sendingStore.setSending(true)
-    console.log(`Store sending: ${sendingStore.sending} (A)`);
+    //console.log(`Sending message: ${userMsg.value}`);
+    sendingStore.setSending(true);
+    //console.log(`Store sending: ${sendingStore.sending} (A)`);
 
-    socket.emit('chat', {
+
+    const msg: ChatMessage = {
+        id: chatHistoryStore.getChatHistory().length,
         type: 'user',
         content: userMsg.value,
-    });
+        done: true,
+    };
+
+    socket.emit('chat', msg);
     userMsg.value = '';
 }
+
+const inputBox = ref<HTMLElement | null>(null);
+const resizeInput = () => {
+    if (inputBox.value === null) return;
+    inputBox.value.style.height = 'auto';
+    inputBox.value.style.height = (inputBox.value.scrollHeight-30) + 'px';
+};
 
 </script>
 
 <template>
     <div class="input-cont">
-        <textarea :disabled="sendingStore.sending" class="input" v-model="userMsg" @keydown="sendMsg($event)"></textarea>
-        <button :disabled="sendingStore.sending" class="send-btn" @click="sendMsg($event)">></button>
+        <textarea :disabled="sendingStore.sending" ref="inputBox" class="input" v-model="userMsg" 
+        @keydown="sendMsg($event)" @input="resizeInput()"></textarea>
+        <button :disabled="sendingStore.sending" class="send-btn">></button>
         <!-- <p>Sending state: {{ sendingStore.sending }}</p> -->
     </div>
 </template>
@@ -55,11 +65,13 @@ const sendMsg = (event: any) => {
 
 
     .input {
+
         width: 95%;
         height: 30px;
+
+        max-height: 200px;
         border: 1px solid black;
         border-radius: 5px;
-        padding: 5px;
         margin: 5px;
 
         font-size: calc(1em * var(--chat-size-scale));

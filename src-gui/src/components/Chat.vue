@@ -1,89 +1,75 @@
 <script setup lang="ts">
-import { io } from 'socket.io-client';
-import { ref, watch } from 'vue';
-import { useSendingStore } from '../stores/chatStore';
-import env from '../../env.json';
-import axios from 'axios';
+import { Ref, onMounted, onUnmounted, ref } from 'vue';
+import { useSendingStore, useChatHistoryStore, ChatMessage } from '../stores/chatStore';
+import { socket } from '@/src/main'
 
 const sendingStore = useSendingStore();
-
-interface ChatMessage {
-    id: number;
-    type: string;
-    content: string;
-    done: boolean;
-}
+const chatHistoryStore = useChatHistoryStore();
 
 const scrollToNewContent = () => {
-    if(chatLog.value === null) return;
-        chatLog.value.scrollTop = chatLog.value.scrollHeight;
+    if (chatLog.value === null) return;
+    chatLog.value.scrollTop = chatLog.value.scrollHeight;
 };
 
-const socket = io(`ws://localhost:${env.okuuai_port}`, {
-    transports: ['websocket'],
-});
-const messages = ref<ChatMessage[]>([]);
+
 
 // Load messages from server
+let messages: Ref<ChatMessage[]> = ref([]);
 
-(async () => {
-    try {
-        const response = await axios.get(`http://localhost:${env.okuuai_port}/memory`, {
-            params: {
-                msg_limit: 20
-            }
-        });
-        messages.value = response.data;
-        scrollToNewContent();
-    } catch (error) {
-        console.error('Error loading messages:', error);
-    }
-})();
+onMounted(async () => {
+    const chatHistory = await chatHistoryStore.loadChatHistory();
+    messages.value = chatHistory; 
+});
+
 
 // Listen for events from the server
-socket.on('chat', (data: ChatMessage) => {
-    console.log('!');
+socket.on('chat', (data: ChatMessage) => { 
+    console.log(`ID: ${data.id}`);
     if (messages.value[data.id] === undefined) {
-        messages.value.push({
-            ...data,
-            id: data.id,
-            content: ''
-        });
+        console.log(`Adding message: ${data.content}`);
+        chatHistoryStore.addMessage(data);
     }
 
-    const content: string = messages.value[data.id].content + (data.content || '');
+    if(data.type === 'ai' && !data.done) {
+        sendingStore.setSending(true);
+    }
 
-    messages.value[data.id] = {
-        ...messages.value[data.id],
-        content: content,
-        done: data.done,
-    };
+    messages.value[data.id] = data;
 
 
     if(data.type === 'ai' && data.done) {
         sendingStore.setSending(false);
     }
+
+    scrollToNewContent();
     
-    console.log('Messages:', messages);
+    //console.log('Messages:', messages);
 });
 
 const chatLog = ref<HTMLElement | null>(null);
 
+let okuuThinking = ref('');
 
+const okuuThinkInt = setInterval(() => {
+    okuuThinking.value += '.';
+    if (okuuThinking.value.length > 3) {
+        okuuThinking.value = '';
+    }
+}, 500);
 
-// Call the scroll function whenever new content is added
-watch(messages, () => {
-    scrollToNewContent();
+onUnmounted(() => {
+    clearInterval(okuuThinkInt);
 });
 
 </script>
 
 <template>
-    <ul ref="chat_log" class="chat_log">
-        <div v-if="messages.length === 0" class="no-messages">No messages</div>
-        <li class="chat_msg" v-for="msg in messages" :key="msg.id">
+    <ul ref="chatLog" class="chat_log">
+        <div v-if="messages === undefined || messages.length === 0" class="no-messages">No messages</div>
+        <li class="chat_msg" v-for="msg in messages" :key="msg.id"> 
             <div class="name">{{ msg.type === 'ai' ? 'Okuu' : "User" }}</div>
             <div class="msg">{{ msg.content }}</div>
+            <div class="thinking">{{ msg.type === 'ai' && !msg.done && msg.content.length === 0 ? okuuThinking : '' }}</div>
         </li>
     </ul>
 </template>
@@ -91,14 +77,17 @@ watch(messages, () => {
 <style>
 .chat_log {
     display: flex;
-
-    --chat-size-scale: 1.5;
-
     justify-content: left;
-
     flex-direction: column;
 
+    margin: 10px;
+    padding-right: 25px;
+
+    margin-bottom: 0;
+
     overflow-y: scroll;
+
+    --chat-size-scale: 1.5;
 
     .chat_msg {
 
@@ -116,6 +105,18 @@ watch(messages, () => {
             font-weight: bold;
             margin-top: 5px;
             margin-bottom: 5px;
+        }
+
+        .msg {
+            white-space: pre-wrap;
+            margin-left: 20px;
+        }
+
+        .thinking {
+            font-style: italic;
+            color: #fff;
+            font-size: 2rem;
+            min-height: 1rem;
         }
     }
 }

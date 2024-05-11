@@ -1,6 +1,6 @@
 import { getLatestMsgs } from "@src/langchain/memory/memory";
 
-export const getLatestMsgsCont = (req: any, res: any) => {
+export const getLatestMsgsCont = async (req: any, res: any) => {
     const { msg_limit } = req.query;
 
     // Validate msg_limit parameter
@@ -12,5 +12,5 @@ export const getLatestMsgsCont = (req: any, res: any) => {
     const limit = Number(msg_limit);
 
     // Send the memory data as a response
-    res.json(getLatestMsgs(limit));
-}
+    res.json(await getLatestMsgs(limit));
+};
