@@ -3,6 +3,7 @@
 import { exec } from "child_process";
 import { ConsoleColor, Logger } from "@src/logger";
 import Redis from "ioredis";
+import { init } from "@src/init";
 
 const REDIS_PORT: number = parseInt(process.env.REDIS_PORT || '6379', 10);
 const REDIS_PWD = process.env.REDIS_PWD;
@@ -11,12 +12,14 @@ export const REDIS_URL = `redis://default:${REDIS_PWD}@localhost:${REDIS_PORT}/0
 export let redisClientMemory: Redis;
 export let redisClientRAG: Redis;
 
-const hanldeRedisError = (error: any) => {
+const hanldeRedisError = async (error: any) => {
     if(error === null) return;
     if(error.code === "ECONNREFUSED") {
         Logger.ERROR("Redis Memory Client error: Redis is not running!");
+        await restartRedisDocker();
+        initRedis();
     } else if (error.code.includes("EPIPE")) {
-        Logger.ERROR("Redis Memory Client error: Check credentials");
+        Logger.ERROR("Redis Memory Client error: Check credentials or rerun.");
     }
 };
 
@@ -56,9 +59,9 @@ export const initRedis = async () => {
 
       Logger.DEBUG(`Redis client connected successfully!`);
 
-    redisClientMemory.on('error', (error: any) => {
+    redisClientMemory.on('error', async (error: any) => {
         Logger.ERROR(`Redis Memory Client error: ${error}`);
-        hanldeRedisError(error);
+        await hanldeRedisError(error);
     });
     
 /*     redisClientRAG.on('error', (error: any) => {

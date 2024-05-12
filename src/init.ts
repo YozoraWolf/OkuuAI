@@ -9,8 +9,13 @@ import dotenv from 'dotenv';
 import { initRedis } from './langchain/redis';
 import { SESSION_SETTINGS, startSession } from './langchain/memory/memory';
 import { initConfig, loadEnv } from './config';
+import { initVoice } from './voice/voice';
+import path from 'path';
 
 dotenv.config();
+
+const rootDir = process.cwd();
+const rootDirPath = path.resolve(__dirname);
 
 const downloadModelFile = async (url: string, path: string) => {
     if (!fs.existsSync(path)) {
@@ -32,8 +37,11 @@ export const init = async () =>
 
     console.log(centeredLogoTxt);
 
+    Logger.INFO(`Root directory: ${rootDir}`);
+    Logger.INFO(`Root directory path: ${rootDirPath}`);
+
     Logger.INFO("Checking envs...");
-    if (!fs.existsSync('.env')) {
+    if (!fs.existsSync(`${rootDirPath}/../.env`)) {
         await initConfig();
         loadEnv();
         return;
@@ -62,6 +70,9 @@ export const init = async () =>
 
     // initialize redis
     await initRedis();
+
+    // init stt
+    //await initVoice();
 
     // get latest history
     const sessionId = SESSION_SETTINGS.sessionId;

@@ -8,3 +8,4 @@ chromadb
 *.old
 session.json
 *.bak
+*.wav

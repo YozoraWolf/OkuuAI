@@ -18,7 +18,8 @@ let messages: Ref<ChatMessage[]> = ref([]);
 
 onMounted(async () => {
     const chatHistory = await chatHistoryStore.loadChatHistory();
-    messages.value = chatHistory; 
+    messages.value = chatHistory;
+    scrollToNewContent();
 });
 
 
