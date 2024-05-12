@@ -1,13 +1,13 @@
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
 import { BufferMemory } from "langchain/memory";
 import { RedisChatMessageHistory } from "@langchain/community/stores/message/ioredis";
-import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { Core } from "@src/core";
 import { ConversationChain } from "langchain/chains";
 import { redisClientMemory } from "../redis";
 import { Logger } from "@src/logger";
 import fs from "fs";
 import { setMessagesCount } from "@src/chat";
+import { model } from "@src/chat";
 
 const SESSION_JSON = "session.json";
 
@@ -42,12 +42,6 @@ const prompt = ChatPromptTemplate.fromMessages([
   ["user", "{input}"]
 ]);
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const { system, ...settings } = Core.model_settings;
-const model = new ChatOllama({
-  model: Core.model_name,
-  ...settings
-});
 
 const newSessionDate = () => {
   const date = new Date().toISOString();

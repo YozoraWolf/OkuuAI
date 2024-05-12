@@ -1,6 +1,7 @@
 import { io } from "./index";
 import { Core } from "./core";
 import { Logger } from "./logger";
+import { ChatOllama } from "@langchain/community/chat_models/ollama";
 
 export interface ChatMessage {
     id: number;
@@ -8,6 +9,13 @@ export interface ChatMessage {
     content?: string;
     done: boolean;
 }
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const { system, ...settings } = Core.model_settings;
+export const model = new ChatOllama({
+  model: Core.model_name,
+  ...settings
+});
 
 let messagesCount = 0;
 

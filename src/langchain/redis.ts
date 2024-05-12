@@ -46,13 +46,13 @@ export const initRedis = async () => {
         db: 0
       });    
       
- /*      redisClientRAG = await new Redis({
+    redisClientRAG = await new Redis({
         port: REDIS_PORT, // Redis port
         host: "localhost", // Redis host
         username: "default", // needs Redis >= 6
         password: REDIS_PWD,
         db: 1
-      }); */
+      });
 
       Logger.DEBUG(`Redis client connected successfully!`);
 
@@ -61,10 +61,10 @@ export const initRedis = async () => {
         hanldeRedisError(error);
     });
     
-/*     redisClientRAG.on('error', (error: any) => {
+    redisClientRAG.on('error', (error: any) => {
         Logger.ERROR(`Redis RAG Client error: ${error}`);
         hanldeRedisError(error);
-    }); */
+    });
 };
 
 const restartRedisDocker = async () => {
