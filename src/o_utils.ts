@@ -82,3 +82,8 @@ export const checkOllamaService = async () => {
     });
   });
 };
+
+export const getFileExtFromPath = (filePath: string): string => {
+  if(filePath.includes('http')) return 'html';
+  return filePath !== undefined ? filePath.split('.').pop() ?? '' : '';
+};

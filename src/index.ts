@@ -8,6 +8,7 @@ import { Server } from 'socket.io';
 import { initTauri } from './gui';
 import memoryRoutes from './routes/memoryRoutes';
 import guiRoutes from './routes/guiRoutes';
+import { getLatestMsgs } from './langchain/memory/memory';
 
 export let io: Server;
 
@@ -24,15 +25,15 @@ export let io: Server;
     app.use('/memory', memoryRoutes);
 
     io.on('connection', (socket) => {
-        console.log('A client connected');
+        //console.log('A client connected');
 
         socket.on('chat', async (data: any) => {
-            console.log('Received chat message:', data);
+            //console.log('Received chat message:', data);
             await handleUserInput(data.content, data);
         });
 
         socket.on('disconnect', () => {
-            console.log('Client disconnected');
+            //console.log('Client disconnected');
         });
     });
 
@@ -41,7 +42,11 @@ export let io: Server;
 
 
         // init gui
-        initTauri();
+        if (process.argv[2] === 'gui') {
+            initTauri();
+        } else {
+            await getLatestMsgs(20);
+        }
         // Start console
         await initConsole();
     });

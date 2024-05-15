@@ -1,0 +1,68 @@
+{
+    "characters": [
+        {
+            "name": "Diluc Ragnvindr",
+            "nation": "Mondstadt",
+            "vision": "Pyro",
+            "sex": "Male",
+            "weapon_type": "Claymore",
+            "rarity": "5-star"
+        },
+        {
+            "name": "Jean Gunnhildr",
+            "nation": "Mondstadt",
+            "vision": "Anemo",
+            "sex": "Female",
+            "weapon_type": "Sword",
+            "rarity": "5-star"
+        },
+        {
+            "name": "Keqing",
+            "nation": "Liyue",
+            "vision": "Electro",
+            "sex": "Female",
+            "weapon_type": "Sword",
+            "rarity": "5-star"
+        },
+        {
+            "name": "Zhongli",
+            "nation": "Liyue",
+            "vision": "Geo",
+            "sex": "Male",
+            "weapon_type": "Polearm",
+            "rarity": "5-star"
+        },
+        {
+            "name": "Eula Lawrence",
+            "nation": "Mondstadt",
+            "vision": "Cryo",
+            "sex": "Female",
+            "weapon_type": "Claymore",
+            "rarity": "5-star"
+        },
+        {
+            "name": "Ganyu",
+            "nation": "Liyue",
+            "vision": "Cryo",
+            "sex": "Female",
+            "weapon_type": "Bow",
+            "rarity": "5-star"
+        },
+        {
+            "name": "Xiao",
+            "nation": "Liyue",
+            "vision": "Anemo",
+            "sex": "Male",
+            "weapon_type": "Polearm",
+            "rarity": "5-star"
+        },
+        {
+            "name": "Klee",
+            "nation": "Mondstadt",
+            "vision": "Pyro",
+            "sex": "Female",
+            "weapon_type": "Catalyst",
+            "rarity": "5-star"
+        }
+    ]
+}

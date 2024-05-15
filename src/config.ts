@@ -231,7 +231,7 @@ const interactiveConfig = async () => {
 };
 
 // gui frontend configuration related
-const guiRootPath = path.resolve(__dirname, "../src-gui");
+const guiRootPath = process.cwd();
 
 const createFrontendEnv = (config: Config = defaultConfigFrontend) => {
     Logger.INFO('Creating env.json file for GUI...');

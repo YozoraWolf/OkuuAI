@@ -5,7 +5,7 @@ import fs from 'fs';
 let systray;
 
 export const initTray = async () => {
-    // Read the SVG file as a buffer
+/*     // Read the SVG file as a buffer
     const svgBuffer = fs.readFileSync('./src/assets/radioa_d.svg');
 
     // Convert the buffer to a base64 string
@@ -27,5 +27,7 @@ export const initTray = async () => {
         },
         debug: false,
         copyDir: true,
-    });
+    }); */
+
+    // TBD
 };

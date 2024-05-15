@@ -1,6 +1,9 @@
+import dialog, { DialogType } from "node-file-dialog";
 import { Core } from "./core";
 import { SessionData, getAllSessionsTable, switchToSession, getAllSessions } from "./langchain/memory/memory";
 import { Logger } from "./logger";
+import { exitOkuuAI, handleUserInput, reprompt } from "./console";
+import readline from 'readline';
 
 const helpStr = `
 /help - Displays this help output with all available commands
@@ -27,6 +30,12 @@ export const handleCommand = async (command: string) => {
         case 'exit':
             exit();
             break;
+        case 'rag':
+            await rag();
+            break;
+        case 'ws':
+            await ws();
+            break;
         default:
             Logger.ERROR(`Command not found: ${commandName}`);
             break;
@@ -45,14 +54,14 @@ const getSessions = async () => {
 };
 
 const switchSession = async (index: string) => {
-    if(index === "new") {
+    if (index === "new") {
         Logger.INFO(`Starting new session...`);
         await switchToSession(null);
         return;
     }
 
 
-    if(isNaN(Number(index))) {
+    if (isNaN(Number(index))) {
         Logger.ERROR(`Invalid session index: ${index}`);
         return;
     }
@@ -62,6 +71,31 @@ const switchSession = async (index: string) => {
     const sessions: Array<SessionData> = await getAllSessions();
     const sessionId = sessions[id].date;
     await switchToSession(sessionId);
+};
+
+const rag = async () => {
+    const config = { type: 'open-file' as DialogType };
+    try {
+        const filePath = await dialog(config);
+        Logger.INFO(`Opening file: ${filePath}`);
+        Logger.INFO(`Input your question next...`);
+        const msg_content = await reprompt();
+        await handleUserInput(msg_content, undefined, filePath[0]);
+    } catch (error) {
+        Logger.ERROR(`Error opening file: ${error}`);
+    }
+};
+
+const ws = async () => {
+    Logger.INFO(`Please enter the URL:`);
+    const url = await reprompt();
+    Logger.INFO(`Please enter the question:`);
+    const question = await reprompt();
+    try {
+        await handleUserInput(question, undefined, url);
+    } catch (error) {
+        Logger.ERROR(`Error sending chat: ${error}`);
+    }
 };
 
 const exit = () => {

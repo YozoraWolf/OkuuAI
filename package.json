@@ -3,14 +3,15 @@
   "version": "0.0.1",
   "description": "Okuu AI",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "start": "ts-node ./src/index.ts",
+    "start": "npx tsx ./src/index.ts",
     "nodemon": "nodemon --no-stdin",
     "build": "sucrase ./src -d ./dist --transforms typescript,imports",
     "vite:run": "vite",
     "vite:build": "vite build",
     "eslint": "eslint ./src",
-    "config": "ts-node ./src/config.ts OVERRIDE"
+    "config": "npx tsx ./src/config.ts OVERRIDE"
   },
   "keywords": [
     "okuu",
@@ -22,13 +23,16 @@
   "dependencies": {
     "axios": "^1.6.8",
     "chalk": "^4.1.2",
+    "cheerio": "^1.0.0-rc.12",
     "chromadb": "^1.8.1",
     "cors": "^2.8.5",
     "d3-dsv": "^2.0.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "html-to-text": "^9.0.5",
     "ioredis": "^5.4.1",
     "langchain": "^0.1.36",
+    "node-file-dialog": "^1.0.3",
     "ollama": "^0.5.0",
     "socket.io": "^4.7.5",
     "systray": "^1.0.5",

@@ -32,7 +32,7 @@ export const ConsoleColor: ConsoleColorMap = {
 };
 
 export class Logger {
-    private static logFilePath = path.join(__dirname, '..', 'logs', 'log.txt');
+    private static logFilePath = path.join(process.cwd(), '..', 'logs', 'log.txt');
     private static settings = {
         log: true,
         logToFile: false,

@@ -42,6 +42,8 @@ const prompt = ChatPromptTemplate.fromMessages([
   ["user", "{input}"]
 ]);
 
+export let currentMemory: RedisChatMessageHistory;
+
 
 const newSessionDate = () => {
   const date = new Date().toISOString();
@@ -52,11 +54,14 @@ const newSessionDate = () => {
 export const startSession = async (sessionId: any) : Promise<ConversationChain> => {
   sessionId = sessionId !== null ? sessionId : newSessionDate();
   Logger.DEBUG(`Starting session with sessionId: ${sessionId}`);
+
+  currentMemory = new RedisChatMessageHistory({
+    sessionId, // Or some other unique identifier for the conversation
+    url: `redis://localhost:${process.env.REDIS_PORT}`, // Default value, override with your own instance's URL
+  });
+
   session = new BufferMemory({
-    chatHistory: new RedisChatMessageHistory({
-      sessionId, // Or some other unique identifier for the conversation
-      url: `redis://localhost:${process.env.REDIS_PORT}`, // Default value, override with your own instance's URL
-    }),
+    chatHistory: currentMemory,
     returnMessages: true,
     memoryKey: "history",
     inputKey: "input"
