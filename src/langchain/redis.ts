@@ -15,7 +15,11 @@ const hanldeRedisError = async (error: any) => {
     if(error === null) return;
     if(error.code === "ECONNREFUSED") {
         Logger.ERROR("Redis Memory Client error: Redis is not running!");
-        await restartRedisDocker();
+        if(await !isRedisContainerRunning())
+            await restartRedisDocker();
+        else {
+            Logger.ERROR("Redis Memory Client error: Redis is already running, there must be another issue that requires checking.");
+        }
     } else if (error.code.includes("EPIPE")) {
         Logger.ERROR("Redis Memory Client error: Check credentials");
     }
@@ -67,6 +71,21 @@ export const initRedis = async () => {
         hanldeRedisError(error);
     });
 };
+
+const isRedisContainerRunning = () => new Promise<boolean>((resolve, _) => {
+    exec('docker inspect -f \'{{.State.Running}}\' okuu_redis', (error, stdout, stderr) => {
+        if (error) {
+            Logger.ERROR(`Error occurred while checking redis container status: ${error.message}`);
+            resolve(false);
+        }
+        if (stderr) {
+            Logger.ERROR(`stderr: ${stderr}`);
+            resolve(false);
+        }
+        resolve(stdout.trim() === 'true');
+    });
+});
+
 
 const restartRedisDocker = async () => {
     // Restart redis docker container

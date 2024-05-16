@@ -11,7 +11,7 @@ import { RunnableSequence } from '@langchain/core/runnables'
 import {
     RunnableConfig,
     RunnableWithMessageHistory,
-  } from "@langchain/core/runnables"; 
+} from "@langchain/core/runnables";
 import { formatDocumentsAsString } from 'langchain/util/document';
 import { DocxLoader } from "langchain/document_loaders/fs/docx";
 
@@ -21,13 +21,28 @@ import { io } from '@src/index';
 import { Logger } from '@src/logger';
 import { getFileExtFromPath } from '@src/o_utils';
 import { Core } from '@src/core';
-import { SESSION_SETTINGS, currentMemory, session } from '../memory/memory';
+import { SESSION_SETTINGS, currentMemory, getSessionMemory, session } from '../memory/memory';
 
 import { RedisChatMessageHistory } from "@langchain/community/stores/message/ioredis";
+import { get } from 'http';
 
 export const dynamic = 'force-dynamic'
 
-const TEMPLATE = `
+let currentContext: string = '';
+
+const TEMPLATE_noctx = `
+system prompt: {system}
+
+Chat History:
+{history}
+
+
+user: {input}
+assistant:`;
+
+const TEMPLATE_ctx = `
+system prompt: {system}
+
 Chat History:
 {history}
 
@@ -35,10 +50,10 @@ Answer the user's questions based only on the following context. If the answer i
 ==============================
 Context: {context}
 ==============================
-system prompt: {system}
 
-user: {question}
+user: {input}
 assistant:`;
+
 
 
 export async function sendChatRAG(chatMessage: ChatMessage, ctxFile: string = '', callback?: (data: string) => void) {
@@ -46,47 +61,58 @@ export async function sendChatRAG(chatMessage: ChatMessage, ctxFile: string = ''
         // Extract the `messages` from the body of the request
         const message = chatMessage.content;
 
-        let loader: any;
-        let docs: any;
-        switch (getFileExtFromPath(ctxFile)) {
-            case 'json':
-                Logger.DEBUG(`Loading JSON file: ${ctxFile}`);
-                loader = new JSONLoader(ctxFile);
-                docs = await loader.load();
-                break;
-            case "txt":
-                break;
-            case "html":
-                Logger.DEBUG(`Loading HTML file: ${ctxFile}`);
-                loader = new CheerioWebBaseLoader(ctxFile);
-                docs = await loader.load();
-                const splitter = RecursiveCharacterTextSplitter.fromLanguage("html");
-                const transformer = new HtmlToTextTransformer();
+        if (ctxFile.length !== 0) {
+            let loader: any;
+            let docs: any;
+            switch (getFileExtFromPath(ctxFile)) {
+                case 'json':
+                    Logger.DEBUG(`Loading JSON file: ${ctxFile}`);
+                    loader = new JSONLoader(ctxFile);
+                    docs = await loader.load();
+                    break;
+                case "txt":
+                    break;
+                case "html":
+                    Logger.DEBUG(`Loading HTML file: ${ctxFile}`);
+                    loader = new CheerioWebBaseLoader(ctxFile);
+                    docs = await loader.load();
+                    const splitter = RecursiveCharacterTextSplitter.fromLanguage("html");
+                    const transformer = new HtmlToTextTransformer();
 
-                const sequence = splitter.pipe(transformer);
+                    const sequence = splitter.pipe(transformer);
 
-                docs = await sequence.invoke(docs);
-                break;
-            case "docx":
-            case "doc":
-            case "odf":
-                Logger.DEBUG(`Loading DOCX file: ${ctxFile}`);
-                loader = new DocxLoader(ctxFile);
-                docs = await loader.load();
-                break;
-            default:
-                Logger.ERROR(`Invalid context file format: ${ctxFile}`);
+                    docs = await sequence.invoke(docs);
+                    break;
+                case "docx":
+                case "doc":
+                case "odf":
+                    Logger.DEBUG(`Loading DOCX file: ${ctxFile}`);
+                    loader = new DocxLoader(ctxFile);
+                    docs = await loader.load();
+                    break;
+                default:
+                    Logger.ERROR(`Invalid context file format: ${ctxFile}`);
+                    return null;
+            };
+
+            if (!loader) {
+                Logger.ERROR(`Invalid loader for: ${ctxFile}`);
                 return null;
-        };
+            }
 
-        if (!loader) {
-            Logger.ERROR(`Invalid loader for: ${ctxFile}`);
-            return null;
+            if (formatDocumentsAsString(docs).length === 0) {
+                Logger.ERROR(`Loaded context is empty or invalid`);
+                return null;
+            }
+
+            // set current context to current rag until it gets replaced by a new one
+            currentContext = formatDocumentsAsString(docs);
         }
 
-        if(formatDocumentsAsString(docs).length === 0) {
-            Logger.ERROR(`Context is empty`);
-            return null;
+        let prompt = PromptTemplate.fromTemplate(TEMPLATE_ctx);
+        if (currentContext.length === 0) {
+            Logger.WARN(`Current context is empty, setting no context template`);
+            prompt = PromptTemplate.fromTemplate(TEMPLATE_noctx);
         }
 
         // load a JSON object
@@ -107,35 +133,43 @@ export async function sendChatRAG(chatMessage: ChatMessage, ctxFile: string = ''
         //     "twitter_url": "http://www.twitter.com/ksgovernment",
         // })]);
 
-        const prompt = PromptTemplate.fromTemplate(TEMPLATE);
 
-        Logger.DEBUG(`Template: ${TEMPLATE}`);
-/* 
-        if (Core.chat_session.memory === undefined) return;
 
-        const memory = (await currentMemory.getMessages()).map((msg: any) => {
-            return `${msg.type}: ${msg.content}`;
-        }).join('\n');
-
-        Logger.DEBUG(`Memory: ${JSON.stringify((await currentMemory.getMessages())[1])}`);
- */
+        Logger.DEBUG(`Template: ${JSON.stringify(prompt)}`);
+        /* 
+                if (Core.chat_session.memory === undefined) return;
+        
+                const memory = (await currentMemory.getMessages()).map((msg: any) => {
+                    return `${msg.type}: ${msg.content}`;
+                }).join('\n');
+        
+                Logger.DEBUG(`Memory: ${JSON.stringify((await currentMemory.getMessages())[1])}`);
+         */
 
 
         /**
        * Chat models stream message chunks rather than bytes, so this
        * output parser handles serialization and encoding.
        */
-        const parser = new HttpResponseOutputParser();
+        //const parser = new HttpResponseOutputParser();
+
+
 
         Logger.DEBUG(`Creating chain...`);
 
-        
+        const memory = getSessionMemory(SESSION_SETTINGS.sessionId);
+
+
         const chain = RunnableSequence.from([
             {
-                question: (input) => input.question,
-                context: () => formatDocumentsAsString(docs),
+                input: (input) => input.input,
+                context: () => currentContext,
                 system: () => Core.model_settings.system,
-                history: async () => await session.loadMemoryVariables({ type: RedisChatMessageHistory, key: SESSION_SETTINGS })
+                history: () => memory.loadMemoryVariables({ type: RedisChatMessageHistory, key: SESSION_SETTINGS.sessionId }),
+            },
+            {
+              input: (previousOutput) => previousOutput.input,
+              history: (previousOutput) => previousOutput.history.history,
             },
             prompt,
             model,
@@ -144,7 +178,7 @@ export async function sendChatRAG(chatMessage: ChatMessage, ctxFile: string = ''
 
         Logger.DEBUG(`Sending chat: ${chatMessage.id}`);
 
-        Logger.DEBUG(`Context: ${formatDocumentsAsString(docs).length}`);
+        Logger.DEBUG(`Context: ${currentContext.length}`);
 
         const reply: ChatMessage = {
             id: incrementMessagesCount(),
@@ -152,15 +186,17 @@ export async function sendChatRAG(chatMessage: ChatMessage, ctxFile: string = ''
             content: '',
             done: false
         };
+        io.emit('chat', chatMessage); // send back user input (for GUI to display)
+        io.emit('chat', reply); // send back AI response (for GUI to display and await)
 
 
 
         // Convert the response into a friendly text-stream
-/*         Core.chat_session.prompt = prompt;
-        Core.chat_session.pipe(parser); */
+        /*         Core.chat_session.prompt = prompt;
+                Core.chat_session.pipe(parser); */
 
-        const stream = await chain.stream({
-            question: message,
+        const stream = await chain.invoke({
+            input: message
         }, {
             callbacks: [
                 {
@@ -178,12 +214,14 @@ export async function sendChatRAG(chatMessage: ChatMessage, ctxFile: string = ''
             answer += chunk;
         }
 
-        session.saveContext({
-            input: chatMessage.content,
-        },{
+        await session.saveContext({
+            input: message,
+        }, {
             answer
         });
 
+        reply.done = true;
+        io.emit('chat', reply);
         return answer;
     } catch (e: any) {
         return Response.json({ error: e.message }, { status: e.status ?? 500 });

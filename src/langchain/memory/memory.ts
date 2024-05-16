@@ -51,22 +51,23 @@ const newSessionDate = () => {
   return date;
 };
 
-export const startSession = async (sessionId: any) : Promise<ConversationChain> => {
-  sessionId = sessionId !== null ? sessionId : newSessionDate();
-  Logger.DEBUG(`Starting session with sessionId: ${sessionId}`);
-
-  currentMemory = new RedisChatMessageHistory({
-    sessionId, // Or some other unique identifier for the conversation
-    url: `redis://localhost:${process.env.REDIS_PORT}`, // Default value, override with your own instance's URL
-  });
-
-  session = new BufferMemory({
-    chatHistory: currentMemory,
+export const getSessionMemory = (sessionId: string) => {
+  return new BufferMemory({
+    chatHistory: new RedisChatMessageHistory({
+      sessionId,
+      url: `redis://localhost:${process.env.REDIS_PORT}`
+    }),
     returnMessages: true,
     memoryKey: "history",
     inputKey: "input"
   });
+};
 
+export const startSession = async (sessionId: any) : Promise<ConversationChain> => {
+  sessionId = sessionId !== null ? sessionId : newSessionDate();
+  Logger.DEBUG(`Starting session with sessionId: ${sessionId}`);
+
+  session = getSessionMemory(sessionId);
 
   return new ConversationChain({ llm: model, memory: session, prompt });
 };

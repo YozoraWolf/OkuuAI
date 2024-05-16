@@ -56,53 +56,28 @@ export const handleUserInput = async (line: string, msg?: ChatMessage, ctxFile?:
     let reply = '';
 
     let resp: any;
-    if (ctxFile === undefined || ctxFile === '') {
-        resp = await sendChat(msg, (data: string) => {
-            //Logger.DEBUG(`Received data: ${data}`);
-            // process data chunk
-            reply += data;
+    resp = await sendChatRAG(msg, ctxFile, (data: string) => {
+        //Logger.DEBUG(`Received data: ${data}`);
+        // process data chunk
+        reply += data;
 
-            const terminalWidth = process.stdout.columns;
-            const prefixLength = Core.chat_settings.prefix.length;
+        const terminalWidth = process.stdout.columns;
+        const prefixLength = Core.chat_settings.prefix.length;
 
-            // calculate the effective width by subtracting the length of the prefix
-            const effectiveWidth = terminalWidth - prefixLength;
+        // calculate the effective width by subtracting the length of the prefix
+        const effectiveWidth = terminalWidth - prefixLength;
 
-            // write buffer, if it exceeds a line (multiline), do not include prefix.
-            clearLine();
-            stdout.write(`${!multiline ? Core.chat_settings.prefix + " " : ""}${reply.trim()}`);
+        // write buffer, if it exceeds a line (multiline), do not include prefix.
+        clearLine();
+        stdout.write(`${!multiline ? Core.chat_settings.prefix + " " : ""}${reply.trim()}`);
 
-            // break if the message is too long or contains a newline
-            if (reply.includes('\n') || reply.length >= effectiveWidth) {
-                stdout.write('\n');
-                reply = ''; // clear the message after starting new line
-                multiline = true;
-            }
-        });
-    } else {
-        resp = await sendChatRAG(msg, ctxFile, (data: string) => {
-            //Logger.DEBUG(`Received data: ${data}`);
-            // process data chunk
-            reply += data;
-
-            const terminalWidth = process.stdout.columns;
-            const prefixLength = Core.chat_settings.prefix.length;
-
-            // calculate the effective width by subtracting the length of the prefix
-            const effectiveWidth = terminalWidth - prefixLength;
-
-            // write buffer, if it exceeds a line (multiline), do not include prefix.
-            clearLine();
-            stdout.write(`${!multiline ? Core.chat_settings.prefix + " " : ""}${reply.trim()}`);
-
-            // break if the message is too long or contains a newline
-            if (reply.includes('\n') || reply.length >= effectiveWidth) {
-                stdout.write('\n');
-                reply = ''; // clear the message after starting new line
-                multiline = true;
-            }
-        });
-    }
+        // break if the message is too long or contains a newline
+        if (reply.includes('\n') || reply.length >= effectiveWidth) {
+            stdout.write('\n');
+            reply = ''; // clear the message after starting new line
+            multiline = true;
+        }
+    });
     //Logger.DEBUG(`Response: ${JSON.stringify(resp)}`);
 
     if (!Core.ollama_settings.stream)

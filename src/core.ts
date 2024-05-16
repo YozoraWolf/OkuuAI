@@ -28,7 +28,8 @@ export class Core {
         topP: 1,
         repeatPenalty: 1.15,
         numPredict: 250,
-        system: system.system
+        system: system.system,
+        prompt: ''
     };
 
 

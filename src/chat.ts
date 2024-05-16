@@ -2,6 +2,12 @@ import { io } from "./index";
 import { Core } from "./core";
 import { Logger } from "./logger";
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
+import { BufferMemory } from "langchain/memory";
+
+import { SESSION_SETTINGS, currentMemory, session } from '@src/langchain/memory/memory';
+
+import { RedisChatMessageHistory } from "@langchain/community/stores/message/ioredis";
+import { RunnableSequence } from '@langchain/core/runnables'
 
 export interface ChatMessage {
     id: number;
@@ -71,4 +77,9 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         Logger.ERROR(`Error sending chat: ${error.response ? error.response.data : error.message}`);
         return null;
     }
+};
+
+export const initChain = async  () => {
+    Logger.DEBUG(`Initializing chain...`);
+
 };
