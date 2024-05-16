@@ -34,7 +34,7 @@ interface SessionSettings {
 
 export const SESSION_SETTINGS: SessionSettings = loadSettings();
 
-let session: BufferMemory;
+export let session: BufferMemory;
 
 const prompt = ChatPromptTemplate.fromMessages([
   ["system", Core.model_settings.system],
