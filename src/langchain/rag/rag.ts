@@ -135,6 +135,8 @@ export async function sendChatRAG(chatMessage: ChatMessage, ctxFile: string = ''
         //Logger.DEBUG(`MEMORY: ${JSON.stringify(formatRedisMessages(msgs))}`);
         const parser = new StringOutputParser();
 
+
+        // TODO: Implement a way to handle the memory when content is not present.
         const chain = RunnableSequence.from([
             {
                 system: () => Core.model_settings.system,
