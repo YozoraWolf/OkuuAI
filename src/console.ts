@@ -56,6 +56,9 @@ export const handleUserInput = async (line: string, msg?: ChatMessage, ctxFile?:
     let reply = '';
 
     let resp: any;
+
+    Logger.DEBUG(`Sending ctxFile: ${ctxFile}`);
+
     resp = await sendChatRAG(msg, ctxFile, (data: string) => {
         //Logger.DEBUG(`Received data: ${data}`);
         // process data chunk

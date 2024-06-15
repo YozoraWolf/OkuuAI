@@ -3,7 +3,8 @@ import { Core } from "./core";
 import { SessionData, getAllSessionsTable, switchToSession, getAllSessions } from "./langchain/memory/memory";
 import { Logger } from "./logger";
 import { exitOkuuAI, handleUserInput, reprompt } from "./console";
-import readline from 'readline';
+import { resetContext } from "./langchain/rag/rag";
+
 
 const helpStr = `
 /help - Displays this help output with all available commands
@@ -32,6 +33,10 @@ export const handleCommand = async (command: string) => {
             break;
         case 'rag':
             await rag();
+            break;
+        case 'chat':
+            await resetContext();
+            Logger.DEBUG(`Resetting context... Back to chat...`)
             break;
         case 'ws':
             await ws();

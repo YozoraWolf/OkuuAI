@@ -51,15 +51,19 @@ const newSessionDate = () => {
   return date;
 };
 
+export const getRedisChatMsgHist = (sessionId: string) => {
+  return new RedisChatMessageHistory({
+    sessionId,
+    url: `redis://localhost:${process.env.REDIS_PORT}`
+  });
+};
+
 export const getSessionMemory = (sessionId: string) => {
   return new BufferMemory({
-    chatHistory: new RedisChatMessageHistory({
-      sessionId,
-      url: `redis://localhost:${process.env.REDIS_PORT}`
-    }),
-    returnMessages: true,
+    chatHistory: getRedisChatMsgHist(sessionId),
     memoryKey: "history",
-    inputKey: "input"
+    inputKey: "input",
+    returnMessages: true
   });
 };
 
@@ -67,7 +71,7 @@ export const startSession = async (sessionId: any) : Promise<ConversationChain> 
   sessionId = sessionId !== null ? sessionId : newSessionDate();
   Logger.DEBUG(`Starting session with sessionId: ${sessionId}`);
 
-  session = getSessionMemory(sessionId);
+  session = await getSessionMemory(sessionId);
 
   return new ConversationChain({ llm: model, memory: session, prompt });
 };

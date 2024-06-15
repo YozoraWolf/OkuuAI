@@ -13,6 +13,7 @@ import { getLatestMsgs } from './langchain/memory/memory';
 export let io: Server;
 
 (async () => {
+    console.log("TEST")
     await init();
 
     const app: Application = express();

@@ -5,13 +5,13 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "npx tsx ./src/index.ts",
+    "start": "tsx ./src/index.ts",
     "nodemon": "nodemon --no-stdin",
     "build": "sucrase ./src -d ./dist --transforms typescript,imports",
     "vite:run": "vite",
     "vite:build": "vite build",
     "eslint": "eslint ./src",
-    "config": "npx tsx ./src/config.ts OVERRIDE"
+    "config": "tsx ./src/config.ts OVERRIDE"
   },
   "keywords": [
     "okuu",

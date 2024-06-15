@@ -1,4 +1,4 @@
-import { PromptTemplate } from '@langchain/core/prompts';
+import { PromptTemplate, ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 
 import { HttpResponseOutputParser } from 'langchain/output_parsers';
 import { CheerioWebBaseLoader } from "langchain/document_loaders/web/cheerio";
@@ -7,9 +7,11 @@ import { HtmlToTextTransformer } from "@langchain/community/document_transformer
 import { StringOutputParser } from "@langchain/core/output_parsers";
 
 import { JSONLoader } from "langchain/document_loaders/fs/json";
+import { TextLoader } from "langchain/document_loaders/fs/text";
 import { RunnableSequence } from '@langchain/core/runnables'
 import {
     RunnableConfig,
+    RunnablePassthrough,
     RunnableWithMessageHistory,
 } from "@langchain/core/runnables";
 import { formatDocumentsAsString } from 'langchain/util/document';
@@ -21,41 +23,43 @@ import { io } from '@src/index';
 import { Logger } from '@src/logger';
 import { getFileExtFromPath } from '@src/o_utils';
 import { Core } from '@src/core';
-import { SESSION_SETTINGS, currentMemory, getSessionMemory, session } from '../memory/memory';
-
-import { RedisChatMessageHistory } from "@langchain/community/stores/message/ioredis";
-import { get } from 'http';
+import { SESSION_SETTINGS, currentMemory, getRedisChatMsgHist, getSessionMemory, session } from '../memory/memory';
 
 export const dynamic = 'force-dynamic'
 
 let currentContext: string = '';
 
-const TEMPLATE_noctx = `
-system prompt: {system}
+export const resetContext = () => {
+    currentContext = '';
+};
 
-Chat History:
-{history}
-
+let TEMPLATE_noctx = `system prompt: {system}
+Chat History: {history}
 
 user: {input}
-assistant:`;
+assitant:`;
 
-const TEMPLATE_ctx = `
-system prompt: {system}
-
-Chat History:
-{history}
-
+let TEMPLATE_ctx = `system prompt: {system}
 Answer the user's questions based only on the following context. If the answer is not in the context, reply with what you know, if now, reply politely that you don't know. (DO NOT make up information, only answer based on the context provided, if you know factual information, provide it):
-==============================
+---
 Context: {context}
-==============================
-
+---
 user: {input}
 assistant:`;
 
+const cprompt = ChatPromptTemplate.fromMessages([
+    ["system", Core.model_settings.system],
+    new MessagesPlaceholder("history"),
+    ["user", "{input}"]
+]);
+
+const formatRedisMessages = (msgs: any[]) => {
+    return msgs.map(msg => 
+        { return `${msg.type}: ${msg.content}` })
+}
 
 
+// TODO: Work on memory with RunnableSequence.
 export async function sendChatRAG(chatMessage: ChatMessage, ctxFile: string = '', callback?: (data: string) => void) {
     try {
         // Extract the `messages` from the body of the request
@@ -71,6 +75,9 @@ export async function sendChatRAG(chatMessage: ChatMessage, ctxFile: string = ''
                     docs = await loader.load();
                     break;
                 case "txt":
+                    Logger.DEBUG(`Loading TXT file: ${ctxFile}`);
+                    loader = new TextLoader(ctxFile);
+                    docs = await loader.load();
                     break;
                 case "html":
                     Logger.DEBUG(`Loading HTML file: ${ctxFile}`);
@@ -115,70 +122,42 @@ export async function sendChatRAG(chatMessage: ChatMessage, ctxFile: string = ''
             prompt = PromptTemplate.fromTemplate(TEMPLATE_noctx);
         }
 
-        // load a JSON object
-        // const textSplitter = new CharacterTextSplitter();
-        // const docs = await textSplitter.createDocuments([JSON.stringify({
-        //     "state": "Kansas",
-        //     "slug": "kansas",
-        //     "code": "KS",
-        //     "nickname": "Sunflower State",
-        //     "website": "https://www.kansas.gov",
-        //     "admission_date": "1861-01-29",
-        //     "admission_number": 34,
-        //     "capital_city": "Topeka",
-        //     "capital_url": "http://www.topeka.org",
-        //     "population": 2893957,
-        //     "population_rank": 34,
-        //     "constitution_url": "https://kslib.info/405/Kansas-Constitution",
-        //     "twitter_url": "http://www.twitter.com/ksgovernment",
-        // })]);
 
 
-
-        Logger.DEBUG(`Template: ${JSON.stringify(prompt)}`);
-        /* 
-                if (Core.chat_session.memory === undefined) return;
-        
-                const memory = (await currentMemory.getMessages()).map((msg: any) => {
-                    return `${msg.type}: ${msg.content}`;
-                }).join('\n');
-        
-                Logger.DEBUG(`Memory: ${JSON.stringify((await currentMemory.getMessages())[1])}`);
-         */
-
-
-        /**
-       * Chat models stream message chunks rather than bytes, so this
-       * output parser handles serialization and encoding.
-       */
-        //const parser = new HttpResponseOutputParser();
-
-
+        //Logger.DEBUG(`Template: ${JSON.stringify(prompt)}`);
+        //Logger.DEBUG(`CTemplate: ${JSON.stringify(cprompt)}`);
 
         Logger.DEBUG(`Creating chain...`);
 
-        const memory = getSessionMemory(SESSION_SETTINGS.sessionId);
-
+        const msgs = await getRedisChatMsgHist(SESSION_SETTINGS.sessionId).getMessages();
+        //const memory = getSessionMemory(SESSION_SETTINGS.sessionId);
+        //Logger.DEBUG(`MEMORY: ${JSON.stringify(await memory.loadMemoryVariables({}))}`);
+        //Logger.DEBUG(`MEMORY: ${JSON.stringify(formatRedisMessages(msgs))}`);
+        const parser = new StringOutputParser();
 
         const chain = RunnableSequence.from([
             {
-                input: (input) => input.input,
-                context: () => currentContext,
                 system: () => Core.model_settings.system,
-                history: () => memory.loadMemoryVariables({ type: RedisChatMessageHistory, key: SESSION_SETTINGS.sessionId }),
+                context: () => currentContext,
+                input: (initialInput) => initialInput.input,
+                memory: () => formatRedisMessages(msgs)
             },
             {
-              input: (previousOutput) => previousOutput.input,
-              history: (previousOutput) => previousOutput.history.history,
+                system: () => Core.model_settings.system,
+                context: () => currentContext,
+                input: (previousOutput) => previousOutput.input,
+                history: (previousOutput) => previousOutput.memory.history,
             },
             prompt,
             model,
-            new StringOutputParser(),
+            parser
         ]);
 
         Logger.DEBUG(`Sending chat: ${chatMessage.id}`);
 
-        Logger.DEBUG(`Context: ${currentContext.length}`);
+        Logger.DEBUG(`Context: ${currentContext}`);
+
+        //Logger.DEBUG(`Chat Hist: ${JSON.stringify(await memory.loadMemoryVariables({}))}`);
 
         const reply: ChatMessage = {
             id: incrementMessagesCount(),
@@ -196,7 +175,7 @@ export async function sendChatRAG(chatMessage: ChatMessage, ctxFile: string = ''
                 Core.chat_session.pipe(parser); */
 
         const stream = await chain.invoke({
-            input: message
+            input: message,
         }, {
             callbacks: [
                 {
@@ -215,7 +194,7 @@ export async function sendChatRAG(chatMessage: ChatMessage, ctxFile: string = ''
         }
 
         await session.saveContext({
-            input: message,
+            input: message
         }, {
             answer
         });
