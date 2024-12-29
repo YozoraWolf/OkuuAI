@@ -5,6 +5,7 @@ import { stdout } from 'process';
 import { ChatMessage, getMessagesCount, incrementMessagesCount, sendChat } from './chat';
 import { handleCommand } from './commands';
 import { killTauri } from './gui';
+import { get } from 'http';
 
 let rl: readline.Interface;
 
@@ -26,7 +27,7 @@ export const handleUserInput = async (line: string, msg?: ChatMessage) => {
     // possibly handle chats
     let multiline = false;
 
-    let id = getMessagesCount();
+/*     let id = getMessagesCount();
 
     if(msg === undefined) {
         id = incrementMessagesCount(); // increment the message count and assign it to the id
@@ -38,7 +39,14 @@ export const handleUserInput = async (line: string, msg?: ChatMessage) => {
         };
     } else {
         incrementMessagesCount(); // else just increment the message count
-    }
+    } */
+
+    msg = {
+        id: getMessagesCount(),
+        type: 'user',
+        content: line,
+        done: false
+    };
 
     let reply = '';
 

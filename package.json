@@ -4,7 +4,8 @@
   "description": "Okuu AI",
   "main": "index.js",
   "scripts": {
-    "start": "ts-node ./src/index.ts",
+    "start": "./setup_ngrok.sh && ts-node ./src/index.ts",
+    "sync-ngrok": "ts-node ./sync-ngrok.ts",
     "nodemon": "nodemon --no-stdin",
     "build": "sucrase ./src -d ./dist --transforms typescript,imports",
     "vite:run": "vite",

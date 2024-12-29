@@ -1,47 +1,58 @@
-import express, { Application } from 'express';
+import express, { Application, NextFunction, Request, Response } from 'express';
 import http from 'http';
 import cors from 'cors';
 import { init } from './init';
 import { Logger } from './logger';
-import { handleUserInput, initConsole } from './console';
-import { Server } from 'socket.io';
+import { initConsole } from './console';
 import { initTauri } from './gui';
 import memoryRoutes from './routes/memoryRoutes';
 import guiRoutes from './routes/guiRoutes';
+import { setupSockets } from './sockets';
+import mainRoutes from './routes/mainRoutes';
+import { Server } from 'socket.io';
+
 
 export let io: Server;
 
 (async () => {
+
+
+
     await init();
 
     const app: Application = express();
     const port = process.env.PORT || 3000;
     const server = http.createServer(app); // Create HTTP server
-    io = new Server(server); // Create Socket.io server
+    
+    // Websockets
+    io = setupSockets(server);
+
+    // Middleware to check the API key
+    const checkApiKey = (req: Request, res: Response, next: NextFunction) => {
+        const apiKey = req.headers['x-api-key'] as string | undefined;
+
+        if (apiKey && apiKey === process.env.API_KEY) {
+            next(); // API key is valid, proceed
+        } else {
+            res.status(401).json({ message: 'Unauthorized' });
+        }
+    };
 
     app.use(cors());
-    app.use('/gui', guiRoutes);
-    app.use('/memory', memoryRoutes);
 
-    io.on('connection', (socket) => {
-        console.log('A client connected');
+    // REST API routes
+    app.use('/', mainRoutes);
+    app.use('/gui', checkApiKey, guiRoutes);
+    app.use('/memory', checkApiKey, memoryRoutes);
 
-        socket.on('chat', async (data: any) => {
-            console.log('Received chat message:', data);
-            await handleUserInput(data.content, data);
-        });
 
-        socket.on('disconnect', () => {
-            console.log('Client disconnected');
-        });
-    });
 
     server.listen(port, async () => {
         Logger.INFO(`Server is running on port ${port} ${/09$/.test(port.toString()) ? '(☢️)' : ''}`);
 
 
         // init gui
-        initTauri();
+        // initTauri();
         // Start console
         await initConsole();
     });

@@ -1,12 +1,14 @@
 import { io } from "./index";
 import { Core } from "./core";
 import { Logger } from "./logger";
+import { SESSION_ID } from "./langchain/memory/memory";
 
 export interface ChatMessage {
     id: number;
     type: string;
     content?: string;
     done: boolean;
+    sessionId?: string;
 }
 
 let messagesCount = 0;
@@ -25,15 +27,20 @@ export const incrementMessagesCount = () => {
 
 export const sendChat = async (msg: ChatMessage, callback?: (data: string) => void) => {
     try {
+        msg = {
+            ...msg,            
+            id: msg.id || incrementMessagesCount()
+        }
         Logger.DEBUG(`Sending chat: ${msg.id}`);
+        io.emit('chat', msg); // send back user input (for GUI to display)
+        incrementMessagesCount();
         const reply: ChatMessage = {
             id: incrementMessagesCount(),
             type: 'ai',
             content: '',
-            done: false
-        
+            done: false,
+            sessionId: msg.sessionId || SESSION_ID
         };
-        io.emit('chat', msg); // send back user input (for GUI to display)
         io.emit('chat', reply); // send back AI response (for GUI to display and await)
         if(Core.ollama_settings.stream) {
             await Core.chat_session.stream({

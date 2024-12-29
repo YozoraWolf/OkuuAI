@@ -10,6 +10,7 @@ import fs from "fs";
 import { setMessagesCount } from "@src/chat";
 
 const SESSION_JSON = "session.json";
+export let SESSION_ID: string;
 
 export const loadSettings = (): any => {
   if (fs.existsSync(SESSION_JSON)) {
@@ -49,14 +50,17 @@ const model = new ChatOllama({
   ...settings
 });
 
-const newSessionDate = () => {
-  const date = new Date().toISOString();
-  saveSessionIdToSettings(date);
-  return date;
+const newSession = async () => {
+  const latestSessionIndex = await getSessionsCount();
+  const newIndex = String(latestSessionIndex + 1);
+  saveSessionIdToSettings(newIndex);
+  Logger.INFO(`!New session started: ${newIndex}`);
+  return newIndex;
 };
 
 export const startSession = async (sessionId: any) : Promise<ConversationChain> => {
-  sessionId = sessionId !== null ? sessionId : newSessionDate();
+  sessionId = sessionId ? sessionId : await newSession();
+  SESSION_ID = sessionId; // save to global variable
   Logger.DEBUG(`Starting session with sessionId: ${sessionId}`);
   session = new BufferMemory({
     chatHistory: new RedisChatMessageHistory({
@@ -67,6 +71,8 @@ export const startSession = async (sessionId: any) : Promise<ConversationChain> 
     memoryKey: "history",
     inputKey: "input"
   });
+
+  setMessagesCount((await session.chatHistory.getMessages()).length + 1); // update msg count to save indexes?
 
 
   return new ConversationChain({ llm: model, memory: session, prompt });
@@ -108,25 +114,26 @@ export const getAllSessionsTable = async (): Promise<string> => {
 export interface SessionData {
   index: number;
   lastMessage: string;
-  date: string;
+  sessionId: string;
 }
 
 export const getAllSessions = async (): Promise<Array<SessionData>> => {
+  Logger.DEBUG("Getting all sessions...");
   const sessions = await redisClientMemory.keys('*');
   const sessionsData = await Promise.all(sessions.map(async (sessionId) => {
     const lastMessage = JSON.parse((await redisClientMemory.lindex(sessionId, 0)) || "{}");
     const type = lastMessage.type;
-    const msg = lastMessage.data.content.substring(0, 20); // truncate message to 20 characters
-    const date = new Date(sessionId).toISOString();
-    return { index: sessions.indexOf(sessionId), lastMessage: `${type}: ${msg}`, date }; // format
+    const msg = `${lastMessage.data.content.substring(0, 20)}...`; // truncate message to 20 characters
+    return { index: sessions.indexOf(sessionId), lastMessage: `${type}: ${msg}`, sessionId }; // format
   }));
+  Logger.DEBUG(`Sessions data: ${JSON.stringify(sessionsData)}`);
   return sessionsData || [{}];
 };
 
 
 export const switchToSession = async (sessionId: string | null) => {
   Core.chat_session = await startSession(sessionId);
-  Logger.INFO(`Switched to session: ${sessionId}`);
+  //Logger.INFO(`Switched to session: ${Core.chat_session.}`);
   if(sessionId !== null) saveSessionIdToSettings(sessionId); // save to settings if not null
 };
 
@@ -148,7 +155,7 @@ export const saveSessionIdToSettings = (sessionId: string) => {
   Logger.INFO("Session ID saved to settings successfully.");
 };
 
-export const getLatestMsgs = async (msg_limit: number): Promise<ChatMessageGUI[]> => {
+export const getLatestMsgs = async (msg_limit: number = 20): Promise<ChatMessageGUI[]> => {
   const latestSession = SESSION_SETTINGS.sessionId || await getLatestHistory();
   if (latestSession === null) {
     return [];
@@ -170,4 +177,28 @@ export const getLatestMsgs = async (msg_limit: number): Promise<ChatMessageGUI[]
   //Logger.DEBUG(`Latest messages: ${messages.map(msg => JSON.stringify(msg)).join('\n')}`);
 
   return messages;
+};
+
+export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: number = 20): Promise<ChatMessageGUI[]> => {
+  Logger.DEBUG(`Getting latest messages from session: ${sessionId}`);
+  const result = await redisClientMemory.lrange(sessionId, 0, msg_limit);
+  result.reverse();
+
+  //Logger.DEBUG(`Latest messages: ${result.join('\n')}`);
+
+  setMessagesCount(result.length);
+
+  const messages = result.map((msg: string, index: number) => {
+    const { type, data } = JSON.parse(msg);
+    const obj: ChatMessageGUI = { id: index, type, content: data["content"], done: true };
+    return obj;
+  });
+
+  //Logger.DEBUG(`Latest messages: ${messages.map(msg => JSON.stringify(msg)).join('\n')}`);
+
+  return messages;
+};
+
+const getSessionsCount = async (): Promise<number> => {
+  return (await redisClientMemory.keys('*')).length;
 };

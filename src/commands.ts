@@ -60,7 +60,7 @@ const switchSession = async (index: string) => {
     const id: number = parseInt(index);
 
     const sessions: Array<SessionData> = await getAllSessions();
-    const sessionId = sessions[id].date;
+    const sessionId = sessions[id].sessionId;
     await switchToSession(sessionId);
 };
 
