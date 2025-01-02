@@ -6,10 +6,11 @@ import { initTray } from './tray';
 import { ConsoleColor, Logger } from './logger';
 //import { initDockerChromaDB } from './langchain/chromadb'; // Perhaps to be deleted.
 import dotenv from 'dotenv';
-import { initRedis } from './langchain/redis';
+import { initRedis } from './containers/redis.container';
 import { SESSION_SETTINGS, startSession } from './langchain/memory/memory';
 import { initConfig, loadEnv } from './config';
 import { initUsersDB } from './services/user.service';
+import { OllamaContainer } from './containers/ollama.container';
 
 dotenv.config();
 
@@ -50,7 +51,9 @@ export const init = async () =>
     await downloadModelFile(model_url, model_path);
   
     // check if the ollama service is on, if not, start it
-    await checkOllamaService();
+    //await checkOllamaService();
+    const ollamaContainer = new OllamaContainer('ollama/ollama', 'okuuai_ollama', 7009);
+    await ollamaContainer.init();
 
     // check if model is available in ollama
     //await checkModelAvailability();

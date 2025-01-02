@@ -4,7 +4,7 @@ import { RedisChatMessageHistory } from "@langchain/community/stores/message/ior
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { Core } from "@src/core";
 import { ConversationChain } from "langchain/chains";
-import { redisClientMemory } from "../redis";
+import { redisClientMemory } from "../../containers/redis.container";
 import { Logger } from "@src/logger";
 import fs from "fs";
 import { setMessagesCount } from "@src/chat";

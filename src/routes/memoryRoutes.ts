@@ -1,4 +1,4 @@
-import { getLatestMsgsCont, getAllSessionsJSON, getSessionMsgs } from '@src/controllers/memoryController';
+import { getLatestMsgsCont, getAllSessionsJSON, getSessionMsgs } from '@src/controllers/memory.controller';
 import express from 'express';
 const router = express.Router();
 
