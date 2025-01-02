@@ -11,6 +11,7 @@ dotenv.config();
 import axios from 'axios';
 import { Logger } from '@src/logger';
 import { exit } from 'process';
+import { M } from 'vite/dist/node/types.d-aGj9QkWt';
 
 const proxy_url = process.env.WEB_URL || '';
 const proxy_email = process.env.PROXY_EMAIL || '';
@@ -48,7 +49,6 @@ async function isNgrokLoaded() {
   }
 
 const getToken = async () => {
-    console.log(proxy_email, proxy_password);
     const res = await axios.post(`${proxy_url}:81/api/tokens`, {
         identity: proxy_email,
         secret: proxy_password
@@ -67,13 +67,7 @@ const getRedirHosts = async () => {
     return res.data;
 }
 
-const updateOkuuAIRedirHost = async (id: number) => {
-    await isNgrokLoaded();
-    const ngrok_url = await getNgrokURl();
-    if(!ngrok_url) {
-        Logger.ERROR('Error getting ngrok url');
-        return false;
-    }
+const updateOkuuAIRedirHost = async (id: number, ngrok_url: string) => {
     const res = await axios.put(`${proxy_url}:81/api/nginx/redirection-hosts/${id}`, {
         forward_domain_name: `${ngrok_url}`
     }, {
@@ -99,7 +93,21 @@ const init = async () => {
         Logger.ERROR('Host not found');
         exit(0);
     }
-    const result = await updateOkuuAIRedirHost(okuuai_host.id);
+
+
+    await isNgrokLoaded();
+    const ngrok_url = await getNgrokURl();
+    if(!ngrok_url) {
+        Logger.ERROR('Error getting ngrok url');
+        return false;
+    }
+
+    if(okuuai_host.forward_domain_name === ngrok_url) {
+        Logger.INFO('Ngrok url already synced with proxy');
+        exit(0);
+    }
+
+    const result = await updateOkuuAIRedirHost(okuuai_host.id, ngrok_url);
     if(!result) {
         Logger.ERROR('Error updating host');
         exit(0);

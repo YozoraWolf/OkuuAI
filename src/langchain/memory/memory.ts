@@ -27,6 +27,7 @@ interface ChatMessageGUI {
   type: string;
   content: string;
   done: boolean;
+  sessionId?: string;
 };
 
 interface SessionSettings {
@@ -170,7 +171,7 @@ export const getLatestMsgs = async (msg_limit: number = 20): Promise<ChatMessage
 
   const messages = result.map((msg: string, index: number) => {
     const { type, data } = JSON.parse(msg);
-    const obj: ChatMessageGUI = { id: index, type, content: data["content"], done: true };
+    const obj: ChatMessageGUI = { id: index, type, content: data["content"], done: true, sessionId: latestSession };
     return obj;
   });
 
@@ -190,7 +191,7 @@ export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: num
 
   const messages = result.map((msg: string, index: number) => {
     const { type, data } = JSON.parse(msg);
-    const obj: ChatMessageGUI = { id: index, type, content: data["content"], done: true };
+    const obj: ChatMessageGUI = { id: index, type, content: data["content"], done: true, sessionId: sessionId };
     return obj;
   });
 

@@ -3,7 +3,7 @@
 PORT=$(grep -w "PORT" .env | cut -d '=' -f2)
 
 # Open ngrok in a new terminal
-gnome-terminal -- bash -c "ngrok http $PORT; exec bash"
+gnome-terminal -- bash -c "ngrok http --host-header=rewrite $PORT; exec bash"
 
 sleep 3
 

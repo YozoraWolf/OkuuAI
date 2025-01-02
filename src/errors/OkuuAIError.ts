@@ -1,0 +1,24 @@
+export enum OkuuAIErrorCodes {
+    SQLITE_NOT_RUNNING = 'SQLITE_NOT_RUNNING',
+    SQLITE_CONTAINER_NOT_FOUND = 'SQLITE_CONTAINER_NOT_FOUND',
+    SQLITE_RUN_ERROR = 'SQLITE_RUN_ERROR',
+    SQLITE_IMG_PULL_ERROR = 'SQLITE_IMG_PULL_ERROR',
+    SQLITE_CONNECTION_ERROR = 'SQLITE_CONNECTION_ERROR',
+
+    REDIS_NOT_RUNNING = 'REDIS_NOT_RUNNING',
+    REDIS_CONTAINER_NOT_FOUND = 'REDIS_CONTAINER_NOT_FOUND',
+    REDIS_RUN_ERROR = 'REDIS_RUN_ERROR',
+    REDIS_IMG_PULL_ERROR = 'REDIS_IMG_PULL_ERROR',
+    REDIS_AUTH_ERROR = 'REDIS_AUTH_ERROR',
+    REDIS_CONNECTION_ERROR = 'REDIS_CONNECTION_ERROR'
+}
+
+export class OkuuAIError extends Error {
+    code: string;
+
+    constructor(message: string, code: string) {
+        super(message);
+        this.code = code;
+        this.name = 'OkuuAIError';
+    }
+}

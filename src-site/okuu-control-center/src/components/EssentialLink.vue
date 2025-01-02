@@ -2,7 +2,8 @@
   <q-item
     clickable
     tag="a"
-    @click="() => $router.push(props.path)"
+    @click="doPageRedirect(props.path)"
+    v-if="(!props.auth || authStore.isAuthenticated) && (props.path !== '/login' || !authStore.isAuthenticated)"
   >
     <q-item-section
       v-if="icon"
@@ -19,16 +20,36 @@
 </template>
 
 <script setup lang="ts">
+import { useRouter } from 'vue-router';
+import { useAuthStore } from 'src/stores/auth.store';
+
+const router = useRouter();
+const authStore = useAuthStore();
+
+
 export interface EssentialLinkProps {
   title: string;
   caption?: string;
   path?: string;
   icon?: string;
+  auth?: boolean;
+};
+
+const doPageRedirect = (path: string) => {
+  if(path === '/logout') {
+    // Handle logout
+    authStore.logout();
+    return;
+  }
+  if (path) {
+    router.push(path);
+  }
 };
 
 const props = withDefaults(defineProps<EssentialLinkProps>(), {
   caption: '',
   path: '',
   icon: '',
+  auth: false,
 });
 </script>

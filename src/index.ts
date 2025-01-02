@@ -10,6 +10,7 @@ import guiRoutes from './routes/guiRoutes';
 import { setupSockets } from './sockets';
 import mainRoutes from './routes/mainRoutes';
 import { Server } from 'socket.io';
+import userRoutes from './routes/userRoutes';
 
 
 export let io: Server;
@@ -38,12 +39,18 @@ export let io: Server;
         }
     };
 
-    app.use(cors());
+    app.use(cors(
+        {
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key'], // Allow 'x-api-key' header
+        }
+    ));
 
     // REST API routes
+    app.use(express.json());
     app.use('/', mainRoutes);
     app.use('/gui', checkApiKey, guiRoutes);
     app.use('/memory', checkApiKey, memoryRoutes);
+    app.use('/users', checkApiKey, userRoutes);
 
 
 

@@ -12,7 +12,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { io } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
+import axios from 'axios';
+import { resolveHostRedirect } from 'src/utils/okuuai_utils';
 
 const lastCheck = ref(Date.now());
 const firstBeat = ref(false);
@@ -20,11 +22,18 @@ const isOnline = ref(false);
 
 
 
-onMounted(() => {
-
-    const connection = io(`wss://d7dc-2400-4050-85a2-b000-8d46-6907-f83-f98.ngrok-free.app`, {
-        transports: ['websocket'],
-    });
+onMounted(async () => {
+    const resolvedUrl = await resolveHostRedirect();
+    console.log('Resolved WebSocket URL:', resolvedUrl);
+    let connection: Socket;
+    try {
+        connection = io(`wss://${resolvedUrl}`, {
+            transports: ['websocket'],
+        });
+    } catch (error) {
+        //console.error('Failed to connect to server:', error);
+        return;
+    }
 
     connection.on('connect', () => {
         console.log('Connected to server');

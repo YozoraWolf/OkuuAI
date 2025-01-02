@@ -9,6 +9,7 @@ import dotenv from 'dotenv';
 import { initRedis } from './langchain/redis';
 import { SESSION_SETTINGS, startSession } from './langchain/memory/memory';
 import { initConfig, loadEnv } from './config';
+import { initUsersDB } from './services/user.service';
 
 dotenv.config();
 
@@ -59,6 +60,9 @@ export const init = async () =>
 
     // initialize chromadb
     //await initDockerChromaDB();
+
+    // initialize sqlite3
+    await initUsersDB();
 
     // initialize redis
     await initRedis();

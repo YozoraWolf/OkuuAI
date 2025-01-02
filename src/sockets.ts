@@ -7,37 +7,52 @@ import { handleUserInput } from "./console";
 
 let io: Server;
 
-
 export const setupSockets = (server: HTTPServer) => {
-    io = new Server(server);
+    io = new Server(server, {
+        pingInterval: 10000,
+        pingTimeout: 5000,
+    }
+    );
 
     io.on('connection', (socket) => {
-        console.log('A client connected');
-    
+        Logger.INFO('A client connected: '+socket.id);
+
+        // Handle chat messages
         socket.on('chat', async (data: any) => {
-            console.log('Received chat message:', data);
-            Core.chat_session = await startSession(data.sessionId);
-            //Logger.DEBUG(`Session ID: ${SESSION_ID}`);
-            Logger.DEBUG(`Data: ${JSON.stringify(data)}`);
-            Logger.DEBUG(`New session started: ${SESSION_ID}`);
-            await handleUserInput(data.content, data);
+            try {
+                if (!data || !data.sessionId || !data.content) {
+                    Logger.ERROR('Invalid chat data received: '+data);
+                    socket.emit('error', { message: 'Invalid data format' });
+                    return;
+                }
+
+                Logger.DEBUG(`Received chat message: ${JSON.stringify(data)}`);
+                Core.chat_session = await startSession(data.sessionId);
+                Logger.DEBUG(`Session started: ${SESSION_ID}`);
+                await handleUserInput(data.content, data);
+
+                socket.emit('chat-response', { success: true });
+            } catch (err) {
+                Logger.ERROR('Error processing chat message: '+err);
+                socket.emit('error', { message: 'Internal server error' });
+            }
         });
-    
+
+        // Handle disconnection
         socket.on('disconnect', () => {
-            console.log('Client disconnected');
+            Logger.INFO('Client disconnected: '+socket.id);
         });
 
-        socket.on('pong', () => {
-            //console.log('Pong received');
-            socket.emit('ping', {});
-        });
-
-        console.log('A client connected');
+        // Custom ping-pong mechanism
         setInterval(() => {
             socket.emit('ping', {});
         }, 5000);
 
+        socket.on('pong', () => {
+            Logger.DEBUG('Pong received from client: '+socket.id);
+        });
     });
+
     Logger.INFO('Socket server initialized');
 
     return io;

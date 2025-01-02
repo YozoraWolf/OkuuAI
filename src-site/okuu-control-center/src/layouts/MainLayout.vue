@@ -1,22 +1,11 @@
 <template>
   <q-layout view="lHh Lpr lFf">
-    <q-drawer
-      v-model="drawer"
-      show-if-above
-      bordered
-      :mini="toggleMini"
-      @mouseenter="toggleMini = false"
-      @mouseleave="toggleMini = true"
-      :width="300"
-      :breakpoint="500"
-      class="drawer-transition"
-    >
-      <q-list>
-        <EssentialLink
-          v-for="link in pageList"
-          :key="link.title"
-          v-bind="link"
-        />
+    <q-drawer v-model="drawer" show-if-above bordered :mini="toggleMini" @mouseenter="toggleMini = false"
+      @mouseleave="toggleMini = true" :width="300" :breakpoint="500" class="drawer-transition full-width">
+      <q-list class="full-width">
+        <template v-for="(link, index) in pageList" :key="index">
+            <EssentialLink v-bind="link" class="full-width" />
+        </template>
       </q-list>
     </q-drawer>
 
@@ -29,6 +18,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import EssentialLink, { type EssentialLinkProps } from 'components/EssentialLink.vue';
+
+import { useAuthStore } from 'src/stores/auth.store';
+
+const authStore = useAuthStore();
 
 const pageList: EssentialLinkProps[] = [
   {
@@ -43,6 +36,26 @@ const pageList: EssentialLinkProps[] = [
     icon: 'login',
     path: '/login'
   },
+  {
+    title: 'Settings',
+    caption: 'Configure OkuuAI',
+    icon: 'settings',
+    path: '/settings',
+    auth: true,
+  },
+  {
+    title: 'Chat',
+    caption: 'Chat with OkuuAI',
+    icon: 'chat',
+    path: '/chat',
+    auth: true,
+  },
+  {
+    title: 'Logout',
+    caption: 'Bye!',
+    icon: 'logout',
+    auth: true,
+  }
 ];
 
 const drawer = ref(true);

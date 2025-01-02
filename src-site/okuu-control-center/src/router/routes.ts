@@ -5,6 +5,18 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     component: () => import('pages/OkuuAIHealthPing.vue')
   },
+  {
+    path: '/login',
+    component: () => import('pages/Login.vue')
+  },
+  {
+    path: '/settings',
+    component: () => import('pages/Settings.vue')
+  },
+  {
+    path: '/chat',
+    component: () => import('pages/Chat.vue')
+  },
 
   // Always leave this as last one,
   // but you can also remove it
