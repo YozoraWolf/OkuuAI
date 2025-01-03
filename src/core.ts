@@ -15,7 +15,7 @@ export class Core {
 
     static model_org_name: string = `${process.env.MODEL_URL?.match(/\/([^/]+)\.gguf/)?.[1]}.gguf`;
     static model_path: string = process.env.MODEL_PATH || '';
-    static model_name: string = 'okuu';
+    static model_name: string = 'llama3';
 
     static chat_settings: any = {
         prefix: '\x1b[32mOkuu:\x1b[0m'
