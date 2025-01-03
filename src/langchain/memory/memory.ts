@@ -4,10 +4,10 @@ import { RedisChatMessageHistory } from "@langchain/community/stores/message/ior
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
 import { Core } from "@src/core";
 import { ConversationChain } from "langchain/chains";
-import { redisClientMemory } from "../../containers/redis.container";
 import { Logger } from "@src/logger";
 import fs from "fs";
 import { setMessagesCount } from "@src/chat";
+import { redisClientMemory } from "../redis";
 
 const SESSION_JSON = "session.json";
 export let SESSION_ID: string;
@@ -66,7 +66,7 @@ export const startSession = async (sessionId: any) : Promise<ConversationChain> 
   session = new BufferMemory({
     chatHistory: new RedisChatMessageHistory({
       sessionId, // Or some other unique identifier for the conversation
-      url: `redis://localhost:${process.env.REDIS_PORT}`, // Default value, override with your own instance's URL
+      url:  `redis://default:${process.env.REDIS_PWD}@localhost:${process.env.REDIS_PORT}/0`, // Default value, override with your own instance's URL
     }),
     returnMessages: true,
     memoryKey: "history",
@@ -90,7 +90,7 @@ export const getLatestHistory = async (): Promise<string | null> => {
   }
 
   // Sort keys by descending order (latest first)
-  keys.sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+  keys.sort((a: any, b: any) => new Date(b).getTime() - new Date(a).getTime());
 
   // Return the latest key
   return keys[0];
@@ -121,7 +121,7 @@ export interface SessionData {
 export const getAllSessions = async (): Promise<Array<SessionData>> => {
   Logger.DEBUG("Getting all sessions...");
   const sessions = await redisClientMemory.keys('*');
-  const sessionsData = await Promise.all(sessions.map(async (sessionId) => {
+  const sessionsData = await Promise.all(sessions.map(async (sessionId: string) => {
     const lastMessage = JSON.parse((await redisClientMemory.lindex(sessionId, 0)) || "{}");
     const type = lastMessage.type;
     const msg = `${lastMessage.data.content.substring(0, 20)}...`; // truncate message to 20 characters

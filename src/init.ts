@@ -6,11 +6,11 @@ import { initTray } from './tray';
 import { ConsoleColor, Logger } from './logger';
 //import { initDockerChromaDB } from './langchain/chromadb'; // Perhaps to be deleted.
 import dotenv from 'dotenv';
-import { initRedis } from './containers/redis.container';
 import { SESSION_SETTINGS, startSession } from './langchain/memory/memory';
 import { initConfig, loadEnv } from './config';
 import { initUsersDB } from './services/user.service';
-import { OllamaContainer } from './containers/ollama.container';
+import { runModel, startAndMonitorContainers } from './compose/containers';
+import { initRedis } from './langchain/redis';
 
 dotenv.config();
 
@@ -40,20 +40,15 @@ export const init = async () =>
         loadEnv();
         return;
     }
-
-    Logger.DEBUG(`model_org_name: ${Core.model_org_name}`);
-    Logger.DEBUG(`MODEL_NAME: ${process.env.MODEL_URL}`);
-
-    // Download model if doesn't exist
-    const model_url = process.env.MODEL_URL || '';
-    const model_path = `${Core.model_path}${Core.model_org_name}`;
-
-    await downloadModelFile(model_url, model_path);
   
     // check if the ollama service is on, if not, start it
     //await checkOllamaService();
-    const ollamaContainer = new OllamaContainer('ollama/ollama', 'okuuai_ollama', 7009);
-    await ollamaContainer.init();
+    await startAndMonitorContainers();
+    
+    // run model
+    await runModel(Core.model_name);
+
+    await initRedis();
 
     // check if model is available in ollama
     //await checkModelAvailability();
@@ -66,9 +61,6 @@ export const init = async () =>
 
     // initialize sqlite3
     await initUsersDB();
-
-    // initialize redis
-    await initRedis();
 
     // get latest history
     const sessionId = SESSION_SETTINGS.sessionId;
