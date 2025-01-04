@@ -51,6 +51,10 @@ const model = new ChatOllama({
   ...settings
 });
 
+const getSessionsCount = async (): Promise<number> => {
+  return (await redisClientMemory.keys('*')).length;
+};
+
 const newSession = async () => {
   const latestSessionIndex = await getSessionsCount();
   const newIndex = String(latestSessionIndex + 1);
@@ -122,7 +126,7 @@ export const getAllSessions = async (): Promise<Array<SessionData>> => {
   Logger.DEBUG("Getting all sessions...");
   const sessions = await redisClientMemory.keys('*');
   const sessionsData = await Promise.all(sessions.map(async (sessionId: string) => {
-    const lastMessage = JSON.parse((await redisClientMemory.lindex(sessionId, 0)) || "{}");
+    const lastMessage = JSON.parse((await redisClientMemory.lIndex(sessionId, 0)) || "{}");
     const type = lastMessage.type;
     const msg = `${lastMessage.data.content.substring(0, 20)}...`; // truncate message to 20 characters
     return { index: sessions.indexOf(sessionId), lastMessage: `${type}: ${msg}`, sessionId }; // format
@@ -162,7 +166,7 @@ export const getLatestMsgs = async (msg_limit: number = 20): Promise<ChatMessage
     return [];
   }
   Logger.DEBUG(`Getting latest messages from session: ${latestSession}`);
-  const result = await redisClientMemory.lrange(latestSession, 0, msg_limit);
+  const result = await redisClientMemory.lRange(latestSession, 0, msg_limit);
   result.reverse();
 
   //Logger.DEBUG(`Latest messages: ${result.join('\n')}`);
@@ -180,9 +184,27 @@ export const getLatestMsgs = async (msg_limit: number = 20): Promise<ChatMessage
   return messages;
 };
 
+export const doesSessionExist = async (sessionId: string): Promise<boolean> => {
+  return (await redisClientMemory.exists(sessionId)) === 1;
+}
+
+export const createSession = async (): Promise<SessionData | null> => {
+  const sessionId = String((await getSessionsCount()) + 1);
+  if (await doesSessionExist(sessionId)) {
+    return null;
+  }
+  await redisClientMemory.lPush(sessionId, JSON.stringify({ type: "system", data: { content: "Session started" } }));
+  const sessionData: SessionData = {
+    index: (await redisClientMemory.keys('*')).indexOf(sessionId),
+    lastMessage: "system: Session started",
+    sessionId
+  };
+  return sessionData;
+};
+
 export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: number = 20): Promise<ChatMessageGUI[]> => {
   Logger.DEBUG(`Getting latest messages from session: ${sessionId}`);
-  const result = await redisClientMemory.lrange(sessionId, 0, msg_limit);
+  const result = await redisClientMemory.lRange(sessionId, 0, msg_limit);
   result.reverse();
 
   //Logger.DEBUG(`Latest messages: ${result.join('\n')}`);
@@ -200,6 +222,3 @@ export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: num
   return messages;
 };
 
-const getSessionsCount = async (): Promise<number> => {
-  return (await redisClientMemory.keys('*')).length;
-};
