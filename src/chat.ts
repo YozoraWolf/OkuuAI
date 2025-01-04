@@ -2,6 +2,8 @@ import { io } from "./index";
 import { Core } from "./core";
 import { Logger } from "./logger";
 import { SESSION_ID } from "./langchain/memory/memory";
+import { REPL_MODE_SLOPPY } from "repl";
+import { franc } from "franc";
 
 export interface ChatMessage {
     id: number;
@@ -9,7 +11,16 @@ export interface ChatMessage {
     content?: string;
     done: boolean;
     sessionId?: string;
+    lang?: string;
+    stream?: boolean;
 }
+
+export const langMappings: { [key: string]: string } = {
+    spa: 'es-ES',
+    eng: 'en-US',
+    jpn: 'ja-JP',
+    fra: 'fr-FR',
+};
 
 let messagesCount = 0;
 
@@ -32,17 +43,19 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             id: msg.id || incrementMessagesCount()
         }
         Logger.DEBUG(`Sending chat: ${msg.id}`);
-        io.emit('chat', msg); // send back user input (for GUI to display)
         incrementMessagesCount();
         const reply: ChatMessage = {
             id: incrementMessagesCount(),
             type: 'ai',
             content: '',
             done: false,
-            sessionId: msg.sessionId || SESSION_ID
+            lang: 'en-US',
+            sessionId: msg.sessionId || SESSION_ID,
+            stream: msg.stream || false
         };
-        io.emit('chat', reply); // send back AI response (for GUI to display and await)
-        if(Core.ollama_settings.stream) {
+        
+        if(msg.stream) {
+            io.emit('chat', reply); // send back AI response (for GUI to display and await)
             await Core.chat_session.stream({
                 input: msg.content
             }, {
@@ -56,16 +69,21 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                     }
                 ]
             });
+            Logger.DEBUG(`Response: ${reply.content}`);
 
             //Logger.DEBUG(`Response: ${stream}`);
         } else {
+            Logger.DEBUG(`Loading Response...`);
             const resp = await Core.chat_session.invoke({
                 input: msg.content,
             });
-            return resp.content;
+            reply.done = true;
+            reply.content = resp.response;
+            reply.lang = langMappings[franc(reply.content)] || 'en-US';
+            io.emit('chat', reply);
+            return reply.content;
         }
-        reply.done = true;
-        io.emit('chat', reply);
+
     } catch (error: any) {
         Logger.ERROR(`Error sending chat: ${error.response ? error.response.data : error.message}`);
         return null;
