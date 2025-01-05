@@ -2,7 +2,7 @@ import { checkOllamaService, downloadFile } from './o_utils';
 import fs from 'fs';
 import { Core, Status } from './core';
 import { centeredLogoTxt } from './intro';
-import { initTray } from './tray';
+//import { initTray } from './tray';
 import { ConsoleColor, Logger } from './logger';
 //import { initDockerChromaDB } from './langchain/chromadb'; // Perhaps to be deleted.
 import dotenv from 'dotenv';
@@ -54,7 +54,7 @@ export const init = async () =>
     //await checkModelAvailability();
 
     // initialize tray icon
-    await initTray();
+    //await initTray();
 
     // initialize chromadb
     //await initDockerChromaDB();

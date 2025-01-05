@@ -13,6 +13,8 @@ export enum Status {
 export class Core {
     static status: Status = Status.INACTIVE;
 
+    static ai_name: string = 'Okuu';
+
     static model_org_name: string = `${process.env.MODEL_URL?.match(/\/([^/]+)\.gguf/)?.[1]}.gguf`;
     static model_path: string = process.env.MODEL_PATH || '';
     static model_name: string = 'llama3';
