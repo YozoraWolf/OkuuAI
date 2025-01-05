@@ -47,6 +47,7 @@ export const init = async () =>
     
     // run model
     await runModel(Core.model_name);
+    await runModel("nomic-embed-text");
 
     await initRedis();
 
