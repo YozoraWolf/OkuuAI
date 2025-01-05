@@ -1,8 +1,11 @@
-import { io } from "./index";
-import { Core } from "./core";
-import { Logger } from "./logger";
-import { SESSION_ID } from "./langchain/memory/memory";
-import { franc } from 'franc-ce'
+import { createClient } from 'redis';
+import { io } from './index';
+import { Core } from './core';
+import { Logger } from './logger';
+import { SESSION_ID } from './langchain/memory/memory';
+import { franc } from 'franc-ce';
+import { Ollama } from 'ollama';
+import { saveMemoryWithEmbedding, searchMemoryWithEmbedding } from './langchain/redis';
 
 export interface ChatMessage {
     id: number;
@@ -38,51 +41,73 @@ export const incrementMessagesCount = () => {
 export const sendChat = async (msg: ChatMessage, callback?: (data: string) => void) => {
     try {
         msg = {
-            ...msg,            
-            id: msg.id || incrementMessagesCount()
-        }
+            ...msg,
+            id: msg.id || incrementMessagesCount(),
+        };
         Logger.DEBUG(`Sending chat: ${msg.id}`);
         incrementMessagesCount();
+
         const reply: ChatMessage = {
             id: incrementMessagesCount(),
             type: Core.ai_name || 'ai',
             content: '',
             done: false,
             lang: 'en-US',
-            sessionId: msg.sessionId || SESSION_ID,
-            stream: msg.stream || false
+            sessionId: msg.sessionId || SESSION_ID || '',
+            stream: msg.stream || false,
         };
-        
-        if(msg.stream) {
-            io.emit('chat', reply); // send back AI response (for GUI to display and await)
-            await Core.chat_session.stream({
-                input: msg.content
-            }, {
-                callbacks: [
-                    {
-                        async handleLLMNewToken(token: string) {
-                            if (callback) callback(token);
-                            reply.content += token;
-                            io.emit('chat', reply);
-                        }
-                    }
-                ]
-            });
-            Logger.DEBUG(`Response: ${reply.content}`);
 
-            //Logger.DEBUG(`Response: ${stream}`);
+        const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
+
+        // Step 1: Query Redis for related memories
+        const memoryQuery = msg.content as string;
+        const memories = await searchMemoryWithEmbedding(memoryQuery);
+
+        const memoryContext = memories?.documents.map((doc: any) => doc.value.content).join('\n');
+        Logger.DEBUG(`Retrieved Memories: ${JSON.stringify(memoryContext)}`);
+
+        // Step 2: Prepare prompt with memory context
+        const prompt = `
+            ${Core.model_settings.system}
+            Relevant memories:
+            ${memoryContext}
+            ---
+            User: ${msg.content}
+        `;
+
+        if (msg.stream) {
+            io.emit('chat', reply); // send back AI response (for GUI to display and await)
+            const stream = await ollama.generate({
+                prompt,
+                model: Core.model_name,
+                stream: true,
+            });
+
+            for await (const part of stream) {
+                if (callback) callback(part.response);
+                reply.content += part.response;
+                io.emit('chat', reply);
+            }
+            Logger.DEBUG(`Response: ${reply.content}`);
         } else {
             Logger.DEBUG(`Loading Response...`);
-            const resp = await Core.chat_session.invoke({
-                input: msg.content,
+            const resp = await ollama.generate({
+                prompt,
+                model: Core.model_name,
             });
+
+            Logger.DEBUG(`Response: ${resp.response}`);
             reply.done = true;
             reply.content = resp.response;
             reply.lang = langMappings[franc(reply.content)] || 'en-US';
             io.emit('chat', reply);
+
+            // Step 3: Save new memory
+            const saved = await saveMemoryWithEmbedding(Number(reply.sessionId), msg.content as string);
+            Logger.DEBUG(`Saved memory: ${saved}`);
+
             return reply.content;
         }
-
     } catch (error: any) {
         Logger.ERROR(`Error sending chat: ${error.response ? error.response.data : error.message}`);
         return null;
