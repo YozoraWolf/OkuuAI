@@ -4,7 +4,7 @@ import fs from 'fs';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 let systray;
 
-export const initTray = async () => {
+/* export const initTray = async () => {
     // Read the SVG file as a buffer
     const svgBuffer = fs.readFileSync('./src/assets/radioa_d.svg');
 
@@ -28,4 +28,4 @@ export const initTray = async () => {
         debug: false,
         copyDir: true,
     });
-};
+}; */

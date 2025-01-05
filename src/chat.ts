@@ -2,8 +2,7 @@ import { io } from "./index";
 import { Core } from "./core";
 import { Logger } from "./logger";
 import { SESSION_ID } from "./langchain/memory/memory";
-import { REPL_MODE_SLOPPY } from "repl";
-import { franc } from "franc";
+import { franc } from 'franc-ce'
 
 export interface ChatMessage {
     id: number;
@@ -46,7 +45,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         incrementMessagesCount();
         const reply: ChatMessage = {
             id: incrementMessagesCount(),
-            type: 'ai',
+            type: Core.ai_name || 'ai',
             content: '',
             done: false,
             lang: 'en-US',
