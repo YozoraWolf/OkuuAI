@@ -25,12 +25,12 @@ async function createMemoryIndex() {
     // Check for dimension mismatch or other issues
     const embeddingAttr = indexInfo['attributes']?.find(attr => attr.name === 'embedding');
     if (embeddingAttr && Number(embeddingAttr.dim) !== 768) {
-      console.log('Dimension mismatch detected. Dropping and recreating index...');
+      Logger.WARN('Dimension mismatch detected. Dropping and recreating index...');
       await redisClientMemory.ft.dropIndex('idx:memories');
       throw new Error('Index dropped for re-creation.');
     }
 
-    console.log('Memory index already exists.');
+    Logger.INFO('Memory index already exists.');
     return;
   } catch (error: any) {
     if (error.message.includes("Unknown index name") || error.message.includes("Index dropped for re-creation.")) {
@@ -41,7 +41,9 @@ async function createMemoryIndex() {
           {
             message: { type: SchemaFieldTypes.TEXT, SORTABLE: true },
             timestamp: { type: SchemaFieldTypes.NUMERIC },
+            user: { type: SchemaFieldTypes.TEXT },
             sessionId: { type: SchemaFieldTypes.TEXT },
+            type: { type: SchemaFieldTypes.TAG },
             __vector_score: { type: SchemaFieldTypes.NUMERIC, SORTABLE: true },
             embedding: {
               type: SchemaFieldTypes.VECTOR,
@@ -64,7 +66,7 @@ async function createMemoryIndex() {
   }
 }
 
-export async function saveMemoryWithEmbedding(memoryKey: string, message: string) {
+export async function saveMemoryWithEmbedding(memoryKey: string, message: string, user: string, type: string = 'statement') {
 
   try {
     // Generate embedding for the statement (e.g., "I live in Tokyo")
@@ -85,10 +87,12 @@ export async function saveMemoryWithEmbedding(memoryKey: string, message: string
       message,
       timestamp: Date.now(),
       memoryKey,
+      type,
+      user,
       embedding: Buffer.from(new Float32Array(embedding).buffer),  // Save as embedding, not base64
     });
 
-    Logger.DEBUG('Memory with embedding saved. Key: ' + memoryKey);
+    //Logger.DEBUG('Memory with embedding saved. Key: ' + memoryKey);
     return memoryKey;
   } catch (error: any) {
     Logger.ERROR('Error saving memory: ' + error.message);
@@ -125,9 +129,10 @@ export async function searchMemoryWithEmbedding(query: string) {
       PARAMS: { BLOB: Buffer.from(new Float32Array(queryEmbedding).buffer) }, // Use the query embedding to search
       SORTBY: '__vector_score', // Sort by similarity score
       DIALECT: 2,
-    });
+      FILTER: '@type:!question', // Exclude documents where @type is 'question'
+    } as any); // Cast to any to bypass type checking
 
-    Logger.DEBUG('Search result: ' + JSON.stringify(result));
+    //Logger.DEBUG('Search result: ' + JSON.stringify(result));
     return result;
   } catch (error: any) {
     Logger.ERROR('Error searching memories with embedding: ' + error.message);

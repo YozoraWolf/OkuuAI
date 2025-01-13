@@ -5,12 +5,12 @@ import { init } from './init';
 import { Logger } from './logger';
 import { initConsole } from './console';
 import { initTauri } from './gui';
-import memoryRoutes from './routes/memoryRoutes';
-import guiRoutes from './routes/guiRoutes';
+import memoryRoutes from './routes/memory.route';
+import guiRoutes from './routes/gui.route';
 import { setupSockets } from './sockets';
-import mainRoutes from './routes/mainRoutes';
+import mainRoutes from './routes/main.route';
 import { Server } from 'socket.io';
-import userRoutes from './routes/userRoutes';
+import userRoutes from './routes/user.route';
 
 
 export let io: Server;
