@@ -9,11 +9,13 @@ import { isQuestion, saveMemoryWithEmbedding, searchMemoryWithEmbedding } from '
 
 export interface ChatMessage {
     id: number;
-    type: string;
-    content?: string;
+    type?: string;
+    user?: string;
+    message?: string;
     done: boolean;
     sessionId?: string;
     lang?: string;
+    timestamp?: number;
     stream?: boolean;
 }
 
@@ -49,8 +51,8 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
         const reply: ChatMessage = {
             id: incrementMessagesCount(),
-            type: Core.ai_name || 'ai',
-            content: '',
+            user: Core.ai_name || 'ai',
+            message: '',
             done: false,
             lang: 'en-US',
             sessionId: msg.sessionId || SESSION_ID || '',
@@ -60,7 +62,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
 
         // Step 1: Query Redis for related memories
-        const memoryQuery = msg.content as string;
+        const memoryQuery = msg.message as string;
         const memories = await searchMemoryWithEmbedding(memoryQuery);
 
         const memoryContext = memories?.documents.map((doc: any) => doc.value.message).join('\n');
@@ -69,8 +71,8 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         // Save user input in memory
         const timestamp = Date.now();
         const memoryKey = `okuuMemory:${reply.sessionId}:${timestamp}`;
-        const messageType = isQuestion(msg.content as string) ? 'question' : 'statement';
-        const saved = await saveMemoryWithEmbedding(memoryKey, msg.content as string, "user", messageType);
+        const messageType = isQuestion(msg.message as string) ? 'question' : 'statement';
+        const saved = await saveMemoryWithEmbedding(memoryKey, msg.message as string, "user", messageType);
         Logger.DEBUG(`Saved memory: ${saved}`);
 
         // Step 2: Prepare prompt with memory context
@@ -80,7 +82,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             Notes: Any memories talking in first person are from the user.
             ${memoryContext}
             ---
-            User: ${msg.content}
+            User: ${msg.message}
             Okuu: 
         `;
 
@@ -92,11 +94,19 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 stream: true,
             });
 
+            reply.done = false;
+            reply.lang = langMappings[franc(reply.message)] || 'en-US';
+            reply.timestamp = timestamp;
+            
             for await (const part of stream) {
                 if (callback) callback(part.response);
-                reply.content += part.response;
+                reply.message += part.response;
+                reply.done = false;
                 io.emit('chat', reply);
             }
+
+            reply.done = true;
+            io.emit('chat', reply);
             //Logger.DEBUG(`Response: ${reply.content}`);
         } else {
             //Logger.DEBUG(`Loading Response...`);
@@ -107,19 +117,23 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
             //Logger.DEBUG(`Response: ${resp.response}`);
             reply.done = true;
-            reply.content = resp.response;
-            reply.lang = langMappings[franc(reply.content)] || 'en-US';
-            io.emit('chat', reply);
-
+            reply.message = resp.response;
+            reply.lang = langMappings[franc(reply.message)] || 'en-US';
+            
             // Save AI response in memory
             const timestamp = Date.now();
             const aiMemoryKey = `okuuMemory:${reply.sessionId}:${timestamp}`;
-            const messageTypeAI = isQuestion(reply.content) ? 'question' : 'statement';
-            const aiSaved = await saveMemoryWithEmbedding(aiMemoryKey, reply.content, "okuu", messageTypeAI);
+            const messageTypeAI = isQuestion(reply.message) ? 'question' : 'statement';
+            const aiSaved = await saveMemoryWithEmbedding(aiMemoryKey, reply.message, "okuu", messageTypeAI);
             //Logger.DEBUG(`Saved AI memory: ${aiSaved}`);
 
-            callback && callback(reply.content);
-            return reply.content;
+            reply.timestamp = timestamp;
+            
+            io.emit('chat', reply);
+
+            callback && callback(reply.message);
+            Logger.DEBUG("Returning...")
+            return reply.message;
         }
     } catch (error: any) {
         Logger.ERROR(`Error sending chat: ${error.response ? error.response.data : error.message}`);

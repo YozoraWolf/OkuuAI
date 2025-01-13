@@ -7,7 +7,8 @@ import { ConversationChain } from "langchain/chains";
 import { Logger } from "@src/logger";
 import fs from "fs";
 import { setMessagesCount } from "@src/chat";
-import { redisClientMemory } from "../redis";
+import { redisClientMemory, saveMemoryWithEmbedding } from "../redis";
+import { getSessionMsgs } from "@src/controllers/memory.controller";
 
 const SESSION_JSON = "session.json";
 export let SESSION_ID: string;
@@ -52,7 +53,9 @@ const model = new ChatOllama({
 });
 
 const getSessionsCount = async (): Promise<number> => {
-  return (await redisClientMemory.keys('okuuMemory:*')).length;
+  const sessionKeys = await redisClientMemory.keys('okuuMemory:*');
+  const uniqueSessionIds = new Set(sessionKeys.map(key => key.split(':')[1]));
+  return uniqueSessionIds.size;
 };
 
 const newSession = async () => {
@@ -218,18 +221,16 @@ export const doesSessionExist = async (sessionId: string): Promise<boolean> => {
 };
 
 
-export const createSession = async (): Promise<SessionData | null> => {
+export const createSession = async (): Promise<any> => {
   const sessionId = String((await getSessionsCount()) + 1);
   if (await doesSessionExist(sessionId)) {
     return null;
   }
-  await redisClientMemory.lPush(sessionId, JSON.stringify({ type: "system", data: { content: "Session started" } }));
-  const sessionData: SessionData = {
-    index: (await redisClientMemory.keys('*')).indexOf(sessionId),
-    lastMessage: "system: Session started",
-    sessionId
-  };
-  return sessionData;
+  const timestamp = Date.now();
+  const key = `okuuMemory:${sessionId}:${timestamp}`;
+  const memoryKey = await saveMemoryWithEmbedding(key, "Session started", "system", "statement");
+  const session: any = await getLatestMsgsFromSession(sessionId);
+  return session;
 };
 
 export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: number = 20): Promise<ChatMessageGUI[]> => {

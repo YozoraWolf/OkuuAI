@@ -1,4 +1,4 @@
-import { checkMemoryStatus, getAllSessionsJSON, getSessionMsgs } from '@src/controllers/memory.controller';
+import { checkMemoryStatus, createSess, getAllSessionsJSON, getSessionMsgs } from '@src/controllers/memory.controller';
 import express from 'express';
 const router = express.Router();
 
@@ -6,5 +6,6 @@ const router = express.Router();
 router.get('/', checkMemoryStatus);
 router.get('/sessions', getAllSessionsJSON);
 router.get('/sessions/:sessionId', getSessionMsgs);
+router.post('/sessions', createSess);
 
 export default router;
