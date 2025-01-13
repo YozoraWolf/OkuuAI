@@ -43,8 +43,8 @@ export const handleUserInput = async (line: string, msg?: ChatMessage) => {
 
     msg = {
         id: getMessagesCount(),
-        type: 'user',
-        content: line,
+        user: 'user',
+        message: line,
         done: false
     };
 

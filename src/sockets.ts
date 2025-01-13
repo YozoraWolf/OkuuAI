@@ -20,7 +20,7 @@ export const setupSockets = (server: HTTPServer) => {
         // Handle chat messages
         socket.on('chat', async (data: any) => {
             try {
-                if (!data || !data.sessionId || !data.content) {
+                if (!data || !data.sessionId || !data.message) {
                     Logger.ERROR('Invalid chat data received: '+data);
                     socket.emit('error', { message: 'Invalid data format' });
                     return;
@@ -29,7 +29,7 @@ export const setupSockets = (server: HTTPServer) => {
                 Logger.DEBUG(`Received chat message: ${JSON.stringify(data)}`);
                 Core.chat_session = await startSession(data.sessionId);
                 Logger.DEBUG(`Session started: ${SESSION_ID}`);
-                await handleUserInput(data.content, data);
+                await handleUserInput(data.message, data);
 
                 socket.emit('chat-response', { success: true });
             } catch (err) {
