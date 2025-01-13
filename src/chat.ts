@@ -5,7 +5,7 @@ import { Logger } from './logger';
 import { SESSION_ID } from './langchain/memory/memory';
 import { franc } from 'franc-ce';
 import { Ollama } from 'ollama';
-import { saveMemoryWithEmbedding, searchMemoryWithEmbedding } from './langchain/redis';
+import { isQuestion, saveMemoryWithEmbedding, searchMemoryWithEmbedding } from './langchain/redis';
 
 export interface ChatMessage {
     id: number;
@@ -63,16 +63,18 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         const memoryQuery = msg.content as string;
         const memories = await searchMemoryWithEmbedding(memoryQuery);
 
-        const memoryContext = memories?.documents.map((doc: any) => doc.value.content).join('\n');
+        const memoryContext = memories?.documents.map((doc: any) => doc.value.message).join('\n');
         Logger.DEBUG(`Retrieved Memories: ${JSON.stringify(memoryContext)}`);
 
         // Step 2: Prepare prompt with memory context
         const prompt = `
             ${Core.model_settings.system}
             Relevant memories:
+            Notes: Any memories talking in first person are from the user.
             ${memoryContext}
             ---
             User: ${msg.content}
+            Okuu: 
         `;
 
         if (msg.stream) {
@@ -102,9 +104,13 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             reply.lang = langMappings[franc(reply.content)] || 'en-US';
             io.emit('chat', reply);
 
-            // Step 3: Save new memory
-            const saved = await saveMemoryWithEmbedding(Number(reply.sessionId), msg.content as string);
-            Logger.DEBUG(`Saved memory: ${saved}`);
+            // Step 3: Save new memory if its not a question
+            if(!isQuestion(msg.content as string)) {
+                const timestamp = new Date().toISOString();
+                const memoryKey = `okuuMemory:${reply.sessionId}:${timestamp}`;
+                const saved = await saveMemoryWithEmbedding(memoryKey, msg.content as string);
+                Logger.DEBUG(`Saved memory: ${saved}`);
+            }
 
             return reply.content;
         }

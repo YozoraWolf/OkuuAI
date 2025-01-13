@@ -21,24 +21,24 @@ async function createMemoryIndex() {
   try {
     const indexInfo = await redisClientMemory.ft.info('idx:memories');
     Logger.DEBUG('Memory index info: ' + JSON.stringify(indexInfo));
-    if (indexInfo) {
-      console.log('Memory index already exists.');
-      //await redisClientMemory.ft.dropIndex('idx:memories');
-      //Logger.DEBUG('Memory index deleted.');
-      return;
+
+    // Check for dimension mismatch or other issues
+    const embeddingAttr = indexInfo['attributes']?.find(attr => attr.name === 'embedding');
+    if (embeddingAttr && Number(embeddingAttr.dim) !== 768) {
+      console.log('Dimension mismatch detected. Dropping and recreating index...');
+      await redisClientMemory.ft.dropIndex('idx:memories');
+      throw new Error('Index dropped for re-creation.');
     }
+
+    console.log('Memory index already exists.');
+    return;
   } catch (error: any) {
-    Logger.ERROR('Error checking memory index: ' + error);
-    if (error.message.includes("Unknown index name")) {
+    if (error.message.includes("Unknown index name") || error.message.includes("Index dropped for re-creation.")) {
+      Logger.DEBUG('Creating memory index...');
       try {
-        Logger.DEBUG('Creating memory index...');
-
-        const options = { PREFIX: 'okuuMemory:' }; // Correctly structured options
-
-        // Now using the correct order and structure for arguments
         await redisClientMemory.ft.create(
-          'idx:memories',  // Index name (string)
-          {                 // Schema definition (object)
+          'idx:memories',
+          {
             message: { type: SchemaFieldTypes.TEXT, SORTABLE: true },
             timestamp: { type: SchemaFieldTypes.NUMERIC },
             sessionId: { type: SchemaFieldTypes.TEXT },
@@ -47,44 +47,45 @@ async function createMemoryIndex() {
               type: SchemaFieldTypes.VECTOR,
               ALGORITHM: VectorAlgorithms.HNSW,
               TYPE: 'FLOAT32',
-              DIM: 4096,  // Update the dimension here to match the output of the model
+              DIM: 768,
               DISTANCE_METRIC: 'COSINE',
               AS: 'embedding',
             },
           },
-          options           // Indexing options (object)
+          { PREFIX: 'okuuMemory:' }
         );
-
         Logger.DEBUG('Memory index created.');
       } catch (createError) {
         Logger.ERROR('Error creating memory index: ' + createError);
       }
     } else {
-      Logger.ERROR('Error creating memory index: ' + error);
+      Logger.ERROR('Error checking memory index: ' + error);
     }
   }
 }
 
-export async function saveMemoryWithEmbedding(sessionId: number, message: string) {
-  const memoryKey = `okuuMemory:${sessionId}:${Date.now()}`;
+export async function saveMemoryWithEmbedding(memoryKey: string, message: string) {
 
   try {
-    // Generate embeddings using Ollama
+    // Generate embedding for the statement (e.g., "I live in Tokyo")
     const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
     const embeddingResponse = await ollama.embed({ input: message, model: "nomic-embed-text" });
-    
-    // Use the first embedding or average all embeddings
+
     const embedding = embeddingResponse.embeddings.length === 1
       ? embeddingResponse.embeddings[0]
       : averageEmbeddings(embeddingResponse.embeddings);
 
-    // Store memory in Redis as base64 encoded embedding
-    // Ensure you're saving embeddings of the correct dimension
+    // Ensure embedding dimension matches Redis index configuration
+    if (embedding.length !== 768) {
+      throw new Error(`Embedding dimensionality mismatch: Expected 768, got ${embedding.length}`);
+    }
+
+    // Save the answer or relevant statement (not the question)
     await redisClientMemory.hSet(memoryKey, {
       message,
       timestamp: Date.now(),
-      sessionId,
-      embedding: Buffer.from(new Float32Array(embedding).buffer).toString('base64'), // Correctly encode as base64
+      memoryKey,
+      embedding: Buffer.from(new Float32Array(embedding).buffer),  // Save as embedding, not base64
     });
 
     Logger.DEBUG('Memory with embedding saved. Key: ' + memoryKey);
@@ -114,18 +115,17 @@ export async function searchMemoryWithEmbedding(query: string) {
     // Generate query embedding using Ollama
     const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
     const queryEmbeddingResponse = await ollama.embed({ input: query, model: "nomic-embed-text" });
-    
+
     const queryEmbedding = queryEmbeddingResponse.embeddings.length === 1
-    ? queryEmbeddingResponse.embeddings[0]
-    : averageEmbeddings(queryEmbeddingResponse.embeddings);
-  
-    // Correctly encode query embedding as base64
+      ? queryEmbeddingResponse.embeddings[0]
+      : averageEmbeddings(queryEmbeddingResponse.embeddings);
+
+    // Search for the most semantically relevant memory
     const result = await redisClientMemory.ft.search('idx:memories', '*=>[KNN 3 @embedding $BLOB]', {
-      PARAMS: { BLOB: Buffer.from(new Float32Array(queryEmbedding).buffer).toString('base64') },
-      SORTBY: '__vector_score',
+      PARAMS: { BLOB: Buffer.from(new Float32Array(queryEmbedding).buffer) }, // Use the query embedding to search
+      SORTBY: '__vector_score', // Sort by similarity score
       DIALECT: 2,
     });
-    
 
     Logger.DEBUG('Search result: ' + JSON.stringify(result));
     return result;
@@ -133,4 +133,12 @@ export async function searchMemoryWithEmbedding(query: string) {
     Logger.ERROR('Error searching memories with embedding: ' + error.message);
     throw error;
   }
+}
+
+export function isQuestion(input: string): boolean {
+  const questionWords = ["who", "what", "where", "when", "why", "how", "is", "are", "do", "does", "can"];
+  return (
+    input.endsWith("?") ||
+    questionWords.some(word => input.toLowerCase().startsWith(word))
+  );
 }
