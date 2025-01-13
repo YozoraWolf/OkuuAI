@@ -66,6 +66,13 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         const memoryContext = memories?.documents.map((doc: any) => doc.value.message).join('\n');
         Logger.DEBUG(`Retrieved Memories: ${JSON.stringify(memoryContext)}`);
 
+        // Save user input in memory
+        const timestamp = Date.now();
+        const memoryKey = `okuuMemory:${reply.sessionId}:${timestamp}`;
+        const messageType = isQuestion(msg.content as string) ? 'question' : 'statement';
+        const saved = await saveMemoryWithEmbedding(memoryKey, msg.content as string, "user", messageType);
+        Logger.DEBUG(`Saved memory: ${saved}`);
+
         // Step 2: Prepare prompt with memory context
         const prompt = `
             ${Core.model_settings.system}
@@ -90,28 +97,28 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 reply.content += part.response;
                 io.emit('chat', reply);
             }
-            Logger.DEBUG(`Response: ${reply.content}`);
+            //Logger.DEBUG(`Response: ${reply.content}`);
         } else {
-            Logger.DEBUG(`Loading Response...`);
+            //Logger.DEBUG(`Loading Response...`);
             const resp = await ollama.generate({
                 prompt,
                 model: Core.model_name,
             });
 
-            Logger.DEBUG(`Response: ${resp.response}`);
+            //Logger.DEBUG(`Response: ${resp.response}`);
             reply.done = true;
             reply.content = resp.response;
             reply.lang = langMappings[franc(reply.content)] || 'en-US';
             io.emit('chat', reply);
 
-            // Step 3: Save new memory if its not a question
-            if(!isQuestion(msg.content as string)) {
-                const timestamp = new Date().toISOString();
-                const memoryKey = `okuuMemory:${reply.sessionId}:${timestamp}`;
-                const saved = await saveMemoryWithEmbedding(memoryKey, msg.content as string);
-                Logger.DEBUG(`Saved memory: ${saved}`);
-            }
+            // Save AI response in memory
+            const timestamp = Date.now();
+            const aiMemoryKey = `okuuMemory:${reply.sessionId}:${timestamp}`;
+            const messageTypeAI = isQuestion(reply.content) ? 'question' : 'statement';
+            const aiSaved = await saveMemoryWithEmbedding(aiMemoryKey, reply.content, "okuu", messageTypeAI);
+            //Logger.DEBUG(`Saved AI memory: ${aiSaved}`);
 
+            callback && callback(reply.content);
             return reply.content;
         }
     } catch (error: any) {

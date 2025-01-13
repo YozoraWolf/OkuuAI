@@ -63,14 +63,14 @@ const newSession = async () => {
   return newIndex;
 };
 
-export const startSession = async (sessionId: any) : Promise<ConversationChain> => {
+export const startSession = async (sessionId: any): Promise<ConversationChain> => {
   sessionId = sessionId ? sessionId : await newSession();
   SESSION_ID = sessionId; // save to global variable
   Logger.DEBUG(`Starting session with sessionId: ${sessionId}`);
   session = new BufferMemory({
     chatHistory: new RedisChatMessageHistory({
       sessionId, // Or some other unique identifier for the conversation
-      url:  `redis://default:${process.env.REDIS_PWD}@localhost:${process.env.REDIS_PORT}/0`, // Default value, override with your own instance's URL
+      url: `redis://default:${process.env.REDIS_PWD}@localhost:${process.env.REDIS_PORT}/0`, // Default value, override with your own instance's URL
     }),
     returnMessages: true,
     memoryKey: "history",
@@ -90,7 +90,7 @@ export const getLatestHistory = async (): Promise<string | null> => {
   const keys = await redisClientMemory.keys('okuuMemory:*');
 
   if (keys.length === 0) {
-      return null;
+    return null;
   }
 
   // Sort keys by descending order (latest first)
@@ -124,22 +124,47 @@ export interface SessionData {
 
 export const getAllSessions = async (): Promise<Array<SessionData>> => {
   Logger.DEBUG("Getting all sessions...");
-  const sessions = await redisClientMemory.keys('okuuMemory:*');
-  const sessionsData = await Promise.all(sessions.map(async (sessionId: string) => {
-    const lastMessage = JSON.parse((await redisClientMemory.hGet(sessionId, 'message')) || "{}");
-    const type = lastMessage.type;
-    const msg = `${lastMessage.data.content.substring(0, 20)}...`; // truncate message to 20 characters
-    return { index: sessions.indexOf(sessionId), lastMessage: `${type}: ${msg}`, sessionId }; // format
-  }));
-  Logger.DEBUG(`Sessions data: ${JSON.stringify(sessionsData)}`);
-  return sessionsData || [{}];
-};
 
+  // Get all session keys in the pattern "okuuMemory:*"
+  const sessionKeys = await redisClientMemory.keys('okuuMemory:*');
+
+  Logger.DEBUG(`Session keys: ${JSON.stringify(sessionKeys)}`);
+
+  if (sessionKeys.length === 0) {
+    Logger.DEBUG("No session keys found.");
+    return [];
+  }
+
+  // Extract sessionId from each key and group by sessionId
+  const sessionGroups: Record<string, string[]> = {};
+  sessionKeys.forEach(key => {
+    const sessionId = key.split(':')[1];  // Extract sessionId from the second part of the key
+    if (!sessionGroups[sessionId]) {
+      sessionGroups[sessionId] = [];
+    }
+    sessionGroups[sessionId].push(key);
+  });
+
+  const sessionsData = await Promise.all(Object.entries(sessionGroups).map(async ([sessionId, keys], index) => {
+    try {
+      let { message, user } = await getLastMsgFromSession(sessionId);
+      const msg = message ? `${message.substring(0, 20)}...` : "No message available"; // Truncate message to 20 characters for display
+
+      return { index, lastMessage: `${user}: ${msg}`, sessionId }; // Display who said the message
+    } catch (error) {
+      Logger.ERROR(`Error processing session ${sessionId}: ${error}`);
+      return { index, lastMessage: "Error retrieving message", sessionId };
+    }
+  }));
+
+  Logger.DEBUG(`Sessions data: ${JSON.stringify(sessionsData)}`);
+  return sessionsData;
+};
 
 export const switchToSession = async (sessionId: string | null) => {
   Core.chat_session = await startSession(sessionId);
   //Logger.INFO(`Switched to session: ${Core.chat_session.}`);
-  if(sessionId !== null) saveSessionIdToSettings(sessionId); // save to settings if not null
+  if (sessionId !== null) saveSessionIdToSettings(sessionId); // save to settings if not null
 };
 
 const generateSessionSettings = () => {
@@ -149,7 +174,7 @@ const generateSessionSettings = () => {
 
 export const saveSessionIdToSettings = (sessionId: string) => {
   let settings: any = {}; // initialize empty
-  if(!fs.existsSync(SESSION_JSON)) {
+  if (!fs.existsSync(SESSION_JSON)) {
     Logger.INFO("Session settings file not found, generating new settings...");
     generateSessionSettings(); // if not found, generate new settings
   } else {
@@ -178,8 +203,20 @@ export const getLatestMsgs = async (msg_limit: number = 20): Promise<ChatMessage
 };
 
 export const doesSessionExist = async (sessionId: string): Promise<boolean> => {
-  return (await redisClientMemory.exists(sessionId)) === 1;
-}
+  try {
+    // Get all the keys that match the pattern "okuuMemory:*"
+    const sessionKeys = await redisClientMemory.keys('okuuMemory:*');
+
+    // Check if any key contains the sessionId in its format "okuuMemory:sessionId:date"
+    const exists = sessionKeys.some(key => key.includes(`okuuMemory:${sessionId}:`));
+
+    return exists;
+  } catch (error) {
+    Logger.ERROR(`Error checking existence of session ${sessionId}: ${error}`);
+    return false; // In case of error, return false
+  }
+};
+
 
 export const createSession = async (): Promise<SessionData | null> => {
   const sessionId = String((await getSessionsCount()) + 1);
@@ -197,14 +234,62 @@ export const createSession = async (): Promise<SessionData | null> => {
 
 export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: number = 20): Promise<ChatMessageGUI[]> => {
   Logger.DEBUG(`Getting latest messages from session: ${sessionId}`);
-  const result = await redisClientMemory.hGetAll(sessionId);
-  const messages = Object.values(result).reverse().slice(0, msg_limit).map((msg: string, index: number) => {
-    const { type, data } = JSON.parse(msg);
-    return { id: index, type, content: data["content"], done: true, sessionId: sessionId };
-  });
 
-  setMessagesCount(messages.length);
+  try {
+    // Fetch all keys for the session, matching pattern 'okuuMemory:sessionId:*'
+    const sessionKeys = await redisClientMemory.keys(`okuuMemory:${sessionId}:*`);
 
-  return messages;
+    const response: any = {
+      sessionId,
+      messages: []
+    };
+
+    // Fetch hash data for each session key
+    const allMessagesWithTimestamps: any[] = [];
+
+    for (const key of sessionKeys) {
+      const sessionData = await redisClientMemory.hGetAll(key);
+      delete sessionData['embedding'];  // Remove the 'embedding' field from the data
+      delete sessionData['memoryKey']
+      delete sessionData['type']
+      // Directly add sessionData to the array
+      allMessagesWithTimestamps.push(sessionData);
+    }
+
+    // Sort messages by timestamp in ascending order
+    const sortedMessages = allMessagesWithTimestamps.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Limit to the most recent 'msg_limit' messages
+    const latestMessages = sortedMessages.slice(-msg_limit);
+
+    setMessagesCount(latestMessages.length);
+
+    // Return the latest messages
+    response.messages = latestMessages;
+
+    return response;
+  } catch (error) {
+    Logger.ERROR(`Error getting latest messages for session ${sessionId}: ${error}`);
+    return [];  // Return an empty array in case of error
+  }
 };
 
+const getLastMsgFromSession = async (sessionId: string): Promise<any> => {
+  const sessionKeys = await redisClientMemory.keys(`okuuMemory:${sessionId}:*`);
+
+  if (sessionKeys.length === 0) {
+    return null;
+  }
+
+  // Sort keys by timestamp in descending order
+  sessionKeys.sort((a: any, b: any) => {
+    const aTimestamp = parseInt(a.split(':')[2]);
+    const bTimestamp = parseInt(b.split(':')[2]);
+    return bTimestamp - aTimestamp;
+  });
+
+  const latestKey = sessionKeys[0];
+  Logger.DEBUG(`Latest key for session ${sessionId}: ${latestKey}`);
+  const latestMsg = await redisClientMemory.hGetAll(latestKey);
+  return latestMsg;
+};
