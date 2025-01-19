@@ -32,6 +32,7 @@
     "d3-dsv": "^2.0.0",
     "docker-cli-js": "^2.10.0",
     "dotenv": "^16.4.5",
+    "duck-duck-scrape": "^2.2.7",
     "eld": "^1.0.1",
     "express": "^4.19.2",
     "franc-ce": "^0.1.3",

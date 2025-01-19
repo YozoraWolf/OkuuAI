@@ -6,6 +6,7 @@ import { SESSION_ID } from './langchain/memory/memory';
 import { franc } from 'franc-ce';
 import { Ollama } from 'ollama';
 import { isQuestion, saveMemoryWithEmbedding, searchMemoryWithEmbedding } from './langchain/redis';
+import { handleWebQuery } from './actions/web-search';
 
 export interface ChatMessage {
     id: number;
@@ -75,16 +76,31 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         const saved = await saveMemoryWithEmbedding(memoryKey, msg.message as string, "user", messageType);
         Logger.DEBUG(`Saved memory: ${saved}`);
 
-        // Step 2: Prepare prompt with memory context
+        // Step 2: Check if there are any web search triggers
+        let webSearchResult = await handleWebQuery(msg.message as string);
+        if (Array.isArray(webSearchResult)) {
+            webSearchResult = webSearchResult.join('\n');
+        }
+
+        // Step 3: Prepare prompt with memory context
         const prompt = `
-            ${Core.model_settings.system}
+            System: ${Core.model_settings.system}
+            ---
             Relevant memories:
-            Notes: Any memories talking in first person are from the user.
             ${memoryContext}
+            ** Notes: ** 
+            - Any memories talking in first person are from the user.
+            - Only take in consideration memories relevant to the current conversation.
+            - Append any relevant urls based on context.
+            ---
+            Web Search: 
+            ${webSearchResult}
             ---
             User: ${msg.message}
             Okuu: 
         `;
+
+        console.log(`Prompt: ${prompt}`);
 
         if (msg.stream) {
             io.emit('chat', reply); // send back AI response (for GUI to display and await)

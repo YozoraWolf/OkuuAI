@@ -129,7 +129,7 @@ export async function searchMemoryWithEmbedding(query: string) {
       PARAMS: { BLOB: Buffer.from(new Float32Array(queryEmbedding).buffer) }, // Use the query embedding to search
       SORTBY: '__vector_score', // Sort by similarity score
       DIALECT: 2,
-      FILTER: '@type: !question', // Exclude documents where @type is 'question'
+      FILTER: '-@type:question', // Exclude documents where @type is 'question'
     } as any); // Cast to any to bypass type checking
 
     //Logger.DEBUG('Search result: ' + JSON.stringify(result));
@@ -140,6 +140,8 @@ export async function searchMemoryWithEmbedding(query: string) {
   }
 }
 
+
+// TODO: Find a way to detect questions efficiently
 export function isQuestion(input: string): boolean {
   const questionWords = ["who", "what", "where", "when", "why", "how", "is", "are", "do", "does", "can"];
   return (
