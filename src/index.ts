@@ -41,7 +41,7 @@ export let io: Server;
 
     app.use(cors(
         {
-            allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key'], // Allow 'x-api-key' header
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key', 'ngrok-skip-browser-warning'], // Allow 'x-api-key' header
         }
     ));
 

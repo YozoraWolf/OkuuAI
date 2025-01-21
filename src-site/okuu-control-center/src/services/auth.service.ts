@@ -1,8 +1,6 @@
 import axios from 'axios';
 import { resolveHostRedirect } from 'src/utils/okuuai_utils';
 
-const apiUrl = 'https://okuuai.yozorawolf.com';
-
 export const checkApiKey = async (apiKey: string): Promise<boolean> => {
     try {
         const resolvedUrl = await resolveHostRedirect();

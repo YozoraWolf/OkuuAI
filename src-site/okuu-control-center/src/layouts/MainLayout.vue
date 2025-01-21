@@ -1,7 +1,7 @@
 <template>
   <q-layout view="lHh Lpr lFf">
     <q-drawer v-model="drawer" show-if-above bordered :mini="toggleMini" @mouseenter="toggleMini = false"
-      @mouseleave="toggleMini = true" :width="300" :breakpoint="500" class="drawer-transition full-width">
+      @mouseleave="toggleMini = true" class="drawer-transition full-width">
       <q-list class="full-width">
         <template v-for="(link, index) in pageList" :key="index">
             <EssentialLink v-bind="link" class="full-width" />
@@ -9,7 +9,7 @@
       </q-list>
     </q-drawer>
 
-    <q-page-container>
+    <q-page-container class="q-pa-none">
       <router-view />
     </q-page-container>
   </q-layout>
@@ -18,10 +18,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import EssentialLink, { type EssentialLinkProps } from 'components/EssentialLink.vue';
-
-import { useAuthStore } from 'src/stores/auth.store';
-
-const authStore = useAuthStore();
 
 const pageList: EssentialLinkProps[] = [
   {

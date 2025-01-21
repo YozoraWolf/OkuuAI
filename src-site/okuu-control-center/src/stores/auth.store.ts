@@ -9,7 +9,13 @@ export const useAuthStore = defineStore('auth', {
         async checkApiKey(key: string) {
             const result = await checkApiKey(key);
             this.apiKey = result ? key : '';
+            if(result) {
+                localStorage.setItem('apiKey', this.apiKey);
+            }
             return result;
+        },
+        loadApiKey() {
+            this.apiKey = localStorage.getItem('apiKey') || '';
         },
         logout() {
             this.apiKey = '';
