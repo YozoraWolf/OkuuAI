@@ -24,7 +24,7 @@ dayjs.extend(utc);
 dayjs.extend(tz);
 
 const props = defineProps({
-    timestamp: String,
+    timestamp: Number,
     username: String,
     avatar: {
         type: String,

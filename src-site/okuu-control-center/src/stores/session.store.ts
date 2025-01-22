@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { getAllSessions, getSessionMessages, createSession } from 'src/services/session.service';
 
 export interface Message {
-    timestamp: string;
+    timestamp: number;
     user: string;
     message: string;
 }
@@ -27,7 +27,7 @@ export const useSessionStore = defineStore('session', {
     actions: {
         async fetchAllSessions() {
             const { data, status } = await getAllSessions();
-            console.log('Fetched sessions:', data);
+            //console.log('Fetched sessions:', data);
             if (status === 200) {
                 this.sessions = data;
             } else {
@@ -57,6 +57,13 @@ export const useSessionStore = defineStore('session', {
             }
             const newSession = data;
             this.sessions.push(newSession);
+        },
+        addMessageToSession(message: Message) {
+            const session = this.sessions.find((session: Session) => session.sessionId === this.currentSessionId);
+            if (session) {
+                session.messages.push(message);
+                session.lastMessage = message.message;
+            }
         },
         setCurrentSessionId(sessionId: string) {
             this.currentSessionId = sessionId;

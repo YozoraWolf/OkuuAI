@@ -8,14 +8,14 @@ import { Ollama } from 'ollama';
 import { isQuestion, saveMemoryWithEmbedding, searchMemoryWithEmbedding } from './langchain/redis';
 
 export interface ChatMessage {
-    id: number;
+    id?: number;
     type?: string;
     user?: string;
     message?: string;
-    done: boolean;
-    sessionId?: string;
+    done?: boolean;
+    sessionId: string;
     lang?: string;
-    timestamp?: number;
+    timestamp: number;
     stream?: boolean;
 }
 
@@ -55,6 +55,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             message: '',
             done: false,
             lang: 'en-US',
+            timestamp: Date.now(),
             sessionId: msg.sessionId || SESSION_ID || '',
             stream: msg.stream || false,
         };
@@ -102,7 +103,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 if (callback) callback(part.response);
                 reply.message += part.response;
                 reply.done = false;
-                io.emit('chat', reply);
+                io.to(msg.sessionId).emit('chat', reply);
             }
 
             reply.done = true;
@@ -129,7 +130,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
             reply.timestamp = timestamp;
             
-            io.emit('chat', reply);
+            io.to(msg.sessionId).emit('chat', reply);
 
             callback && callback(reply.message);
             Logger.DEBUG("Returning...")

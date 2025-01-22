@@ -6,6 +6,7 @@ import { ChatMessage, getMessagesCount, incrementMessagesCount, sendChat } from 
 import { handleCommand } from './commands';
 import { killTauri } from './gui';
 import { get } from 'http';
+import { SESSION_ID } from './langchain/memory/memory';
 
 let rl: readline.Interface;
 
@@ -23,7 +24,7 @@ const clearLine = () => {
 
 
 
-export const handleUserInput = async (line: string, msg?: ChatMessage) => {
+export const handleUserInput = async (line: string, msg: ChatMessage) => {
     // possibly handle chats
     let multiline = false;
 
@@ -40,13 +41,6 @@ export const handleUserInput = async (line: string, msg?: ChatMessage) => {
     } else {
         incrementMessagesCount(); // else just increment the message count
     } */
-
-    msg = {
-        id: getMessagesCount(),
-        user: 'user',
-        message: line,
-        done: false
-    };
 
     let reply = '';
 
@@ -90,7 +84,16 @@ export const initConsole = async () =>
     if (line.trim().startsWith('/')) {
         await handleCommand(line.trim());
     } else {
-        await handleUserInput(line);
+        const msg: ChatMessage = {
+            id: getMessagesCount(),
+            user: Core.ai_name || 'ai',
+            message: line,
+            done: false,
+            sessionId: SESSION_ID,
+            timestamp: Date.now(),
+            stream: Core.ollama_settings.stream || false,
+        };
+        await handleUserInput(line, msg);
         reprompt();
     }
 
