@@ -17,6 +17,11 @@ export const setupSockets = (server: HTTPServer) => {
     io.on('connection', (socket) => {
         Logger.INFO('A client connected: '+socket.id);
 
+        socket.on('joinChat', (sessionId: string) => {
+            Logger.DEBUG('Joining chat: '+sessionId);
+            socket.join(sessionId);
+        });
+
         // Handle chat messages
         socket.on('chat', async (data: any) => {
             try {
@@ -31,7 +36,7 @@ export const setupSockets = (server: HTTPServer) => {
                 Logger.DEBUG(`Session started: ${SESSION_ID}`);
                 await handleUserInput(data.message, data);
 
-                socket.emit('chat-response', { success: true });
+                //socket.emit('chat', { success: true });
             } catch (err) {
                 Logger.ERROR('Error processing chat message: '+err);
                 socket.emit('error', { message: 'Internal server error' });

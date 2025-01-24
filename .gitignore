@@ -10,3 +10,4 @@ session.json
 *.bak
 *.db
 *.env*
+/src/assets/okuu_pfp.*

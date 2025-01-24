@@ -13,7 +13,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { io, Socket } from 'socket.io-client';
-import axios from 'axios';
 import { resolveHostRedirect } from 'src/utils/okuuai_utils';
 
 const lastCheck = ref(Date.now());
@@ -29,7 +28,9 @@ onMounted(async () => {
     try {
         connection = io(`wss://${resolvedUrl}`, {
             transports: ['websocket'],
+            timeout: 5000,
         });
+        connection.connect();
     } catch (error) {
         //console.error('Failed to connect to server:', error);
         return;
@@ -37,7 +38,7 @@ onMounted(async () => {
 
     connection.on('connect', () => {
         console.log('Connected to server');
-        connection.emit('pong');
+        isOnline.value = true;
     });
 
 
@@ -46,17 +47,6 @@ onMounted(async () => {
         firstBeat.value = true;
         isOnline.value = true;
     });
-
-    // Check server status. If server has not sent a ping in the last 15 seconds, consider it offline
-    setInterval(() => {
-        if (!firstBeat.value) return;
-        if (Date.now() - lastCheck.value > 15000) {
-            isOnline.value = false;
-        } else {
-            isOnline.value = true;
-        }
-    }, 5000);
-
 
 
 });

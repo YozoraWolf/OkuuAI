@@ -147,3 +147,20 @@ export function isQuestion(input: string): boolean {
     questionWords.some(word => input.toLowerCase().startsWith(word))
   );
 }
+
+export async function deleteMemorySession(sessionId: string) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const keys = await redisClientMemory.keys(`okuuMemory:${sessionId}:*`);
+      if (keys.length === 0) {
+        resolve(false);
+      } else {
+        const count = await redisClientMemory.del(keys);
+        resolve(true);
+      }
+    } catch (err) {
+      Logger.ERROR('Error deleting memory keys: ' + err);
+      reject(err);
+    }
+  });
+}

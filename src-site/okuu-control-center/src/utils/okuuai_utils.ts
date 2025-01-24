@@ -5,3 +5,7 @@ export const resolveHostRedirect = async () => {
     const resolvedUrl = response.request.responseURL.replace(/^http(s)?:\/\//, '').replace(/\/$/, '');
     return resolvedUrl;
 };
+
+export const truncate = (str: string, len: number) => {
+    return str.length > len ? str.substring(0, len) + "..." : str;
+}

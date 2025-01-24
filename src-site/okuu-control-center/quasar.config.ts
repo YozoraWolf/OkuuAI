@@ -15,7 +15,8 @@ export default defineConfig((ctx) => {
     // https://v2.quasar.dev/quasar-cli-vite/boot-files
     boot: [
       'i18n',
-      'axios'
+      'axios',
+      'directives'
     ],
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#css
@@ -122,7 +123,7 @@ export default defineConfig((ctx) => {
       // directives: [],
 
       // Quasar plugins
-      plugins: [ 'Notify' ]
+      plugins: [ 'Notify', 'Loading', 'Dialog' ]
     },
 
     // animations: 'all', // --- includes all animations

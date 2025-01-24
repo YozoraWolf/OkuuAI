@@ -6,7 +6,7 @@ import { Core } from "@src/core";
 import { ConversationChain } from "langchain/chains";
 import { Logger } from "@src/logger";
 import fs from "fs";
-import { setMessagesCount } from "@src/chat";
+import { ChatMessage, setMessagesCount } from "@src/chat";
 import { redisClientMemory, saveMemoryWithEmbedding } from "../redis";
 import { getSessionMsgs } from "@src/controllers/memory.controller";
 
@@ -129,9 +129,9 @@ export const getAllSessions = async (): Promise<Array<SessionData>> => {
   Logger.DEBUG("Getting all sessions...");
 
   // Get all session keys in the pattern "okuuMemory:*"
-  const sessionKeys = await redisClientMemory.keys('okuuMemory:*');
-
-  Logger.DEBUG(`Session keys: ${JSON.stringify(sessionKeys)}`);
+  let sessionKeys = await redisClientMemory.keys('okuuMemory:*');
+  // filter out kets that contain "file"
+  sessionKeys = sessionKeys.filter(key => !key.includes("file"));
 
   if (sessionKeys.length === 0) {
     Logger.DEBUG("No session keys found.");
@@ -233,7 +233,7 @@ export const createSession = async (): Promise<any> => {
   return session;
 };
 
-export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: number = 20): Promise<ChatMessageGUI[]> => {
+export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: number = 20): Promise<ChatMessage | []> => {
   Logger.DEBUG(`Getting latest messages from session: ${sessionId}`);
 
   try {
@@ -246,15 +246,18 @@ export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: num
     };
 
     // Fetch hash data for each session key
-    const allMessagesWithTimestamps: any[] = [];
+    const allMessagesWithTimestamps: ChatMessage[] = [];
 
     for (const key of sessionKeys) {
       const sessionData = await redisClientMemory.hGetAll(key);
-      delete sessionData['embedding'];  // Remove the 'embedding' field from the data
-      delete sessionData['memoryKey']
-      delete sessionData['type']
+      const sessData: ChatMessage = { 
+        sessionId: sessionData['sessionId'],
+        user: sessionData['user'],
+        message: sessionData['message'],
+        timestamp: parseInt(sessionData['timestamp'])
+       };
       // Directly add sessionData to the array
-      allMessagesWithTimestamps.push(sessionData);
+      allMessagesWithTimestamps.push(sessData);
     }
 
     // Sort messages by timestamp in ascending order
