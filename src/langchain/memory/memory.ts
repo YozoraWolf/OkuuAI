@@ -129,9 +129,9 @@ export const getAllSessions = async (): Promise<Array<SessionData>> => {
   Logger.DEBUG("Getting all sessions...");
 
   // Get all session keys in the pattern "okuuMemory:*"
-  const sessionKeys = await redisClientMemory.keys('okuuMemory:*');
-
-  Logger.DEBUG(`Session keys: ${JSON.stringify(sessionKeys)}`);
+  let sessionKeys = await redisClientMemory.keys('okuuMemory:*');
+  // filter out kets that contain "file"
+  sessionKeys = sessionKeys.filter(key => !key.includes("file"));
 
   if (sessionKeys.length === 0) {
     Logger.DEBUG("No session keys found.");

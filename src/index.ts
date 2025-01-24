@@ -44,13 +44,13 @@ export let io: Server;
     // File upload middleware
     app.use(fileUpload({
         limits: { fileSize: 5 * 1024 * 1024 }, // 5MB file size limit
-        useTempFiles: true,
-        tempFileDir: '/tmp/',
+        useTempFiles: false,
         debug: true,
     }));
 
     // REST API routes
     app.use(express.json());
+    app.use(express.urlencoded({ extended: true }));  // Parse form-urlencoded data
     app.use('/', mainRoutes);
     app.use('/gui', checkApiKey, guiRoutes);
     app.use('/memory', checkApiKey, memoryRoutes);
