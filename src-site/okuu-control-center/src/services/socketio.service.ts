@@ -1,7 +1,7 @@
 import { Store } from 'pinia';
 import { io, Socket } from 'socket.io-client';
 import { useConfigStore } from 'src/stores/config.store';
-import { Message } from 'src/stores/session.store';
+import { Message, useSessionStore } from 'src/stores/session.store';
 import { resolveHostRedirect } from 'src/utils/okuuai_utils';
 
 export enum Status {

@@ -51,6 +51,13 @@ export const deleteSession = async (sessionId: string) => {
     return response;
 }
 
+export const deleteChatMessage = async (memoryKey: string) => {
+    const apiUrl = await getApiUrl();
+    const response = await axios.post(`${apiUrl}/memory/sessions/delete`, { memoryKey } ,{
+        headers: getAuthHeaders(),
+    });
+    return response;
+}
 export const sendAttachment = async (formData: FormData) => {
     const apiUrl = await getApiUrl();
     const response = await axios.post(`${apiUrl}/memory/record`, formData, {

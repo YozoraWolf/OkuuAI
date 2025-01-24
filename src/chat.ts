@@ -2,7 +2,7 @@ import { createClient } from 'redis';
 import { io } from './index';
 import { Core } from './core';
 import { Logger } from './logger';
-import { SESSION_ID } from './langchain/memory/memory';
+import { getLatestMsgsFromSession, SESSION_ID } from './langchain/memory/memory';
 import { franc } from 'franc-ce';
 import { Ollama } from 'ollama';
 import { isQuestion, saveMemoryWithEmbedding, searchMemoryWithEmbedding } from './langchain/redis';
@@ -17,6 +17,7 @@ export interface ChatMessage {
     lang?: string;
     timestamp: number;
     stream?: boolean;
+    memoryKey?: string;
 }
 
 export const langMappings: { [key: string]: string } = {
@@ -76,16 +77,27 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         const saved = await saveMemoryWithEmbedding(memoryKey, msg.message as string, "user", messageType);
         Logger.DEBUG(`Saved memory: ${saved}`);
 
+        // Get last 6 messages from current session
+        const lastMsgs = await getLatestMsgsFromSession(msg.sessionId, 6);
+
+        // Join them in a string to use as context for the AI, adding User: message
+        const chatHistory = lastMsgs.messages.map((msg: any) => `${msg.user}: ${msg.message}`).join('\n');
+
+
+        // Send message back to client
+        io.to(msg.sessionId).emit('chat', { ...msg, memoryKey, timestamp });
+
         // Step 2: Prepare prompt with memory context
         const prompt = `
-            System: ${Core.model_settings.system}
             Relevant memories:
-            Notes: Any memories talking in first person are from the user.
+            NOTE: Any memories talking in first person are from the user. Only use the following memories only if they are relevant to the conversation.
             ${memoryContext}
             ---
-            User: ${msg.message}
+            ${chatHistory}
             Okuu: 
         `;
+
+        Logger.DEBUG(`Prompt: ${prompt}`);
 
         if (msg.stream) {
             io.emit('chat', reply); // send back AI response (for GUI to display and await)
@@ -114,6 +126,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             const resp = await ollama.generate({
                 prompt,
                 model: Core.model_name,
+                system: Core.model_settings.system,
             });
 
             //Logger.DEBUG(`Response: ${resp.response}`);
@@ -127,7 +140,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             const messageTypeAI = isQuestion(reply.message) ? 'question' : 'statement';
             const aiSaved = await saveMemoryWithEmbedding(aiMemoryKey, reply.message, "okuu", messageTypeAI);
             //Logger.DEBUG(`Saved AI memory: ${aiSaved}`);
-
+            reply.memoryKey = aiMemoryKey;
             reply.timestamp = timestamp;
             
             io.to(msg.sessionId).emit('chat', reply);

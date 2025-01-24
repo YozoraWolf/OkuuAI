@@ -164,3 +164,15 @@ export async function deleteMemorySession(sessionId: string) {
     }
   });
 }
+
+export async function deleteMemoryKey(key: string) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const count = await redisClientMemory.del(key);
+      resolve(count);
+    } catch (err) {
+      Logger.ERROR('Error deleting chat message: ' + err);
+      reject(err);
+    }
+  });
+}
