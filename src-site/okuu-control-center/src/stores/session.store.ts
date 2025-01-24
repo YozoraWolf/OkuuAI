@@ -1,17 +1,18 @@
 import { defineStore } from 'pinia';
-import { getAllSessions, getSessionMessages, createSession, sendAttachment, deleteSession } from 'src/services/session.service';
+import { getAllSessions, getSessionMessages, createSession, sendAttachment, deleteSession, deleteChatMessage } from 'src/services/session.service';
 
 export interface Message {
     timestamp: number;
     user: string;
     message: string;
     avatar?: string;
+    memoryKey: string;
 }
 
 export interface Session {
     sessionId: string;
     messages: Message[];
-    lastMessage?: string;
+    lastMessage?: Message | undefined;
     index?: number;
 }
 
@@ -69,7 +70,7 @@ export const useSessionStore = defineStore('session', {
                 return;
             }
             const newSession = data;
-            newSession.lastMessage = data.messages[data.messages.length - 1].message  || '';
+            newSession.lastMessage = data.messages[data.messages.length - 1]  || '';
             this.sessions.push(newSession);
             this.orderSessions();
         },
@@ -90,11 +91,25 @@ export const useSessionStore = defineStore('session', {
             }
             this.orderSessions();
         },
+        async deleteChatMessage(memoryKey: string) {
+            const { status, data } = await deleteChatMessage(memoryKey);
+            if (status !== 200 || !data.result) {
+                console.error('Failed to delete chat message:', memoryKey);
+                return;
+            }
+            const session = this.sessions.find((session: Session) => session.messages.some((msg: Message) => msg.memoryKey === memoryKey));
+            if (session) {
+                const messageIndex = session.messages.findIndex((msg: Message) => msg.memoryKey === memoryKey);
+                session.messages.splice(messageIndex, 1);
+                session.lastMessage = session.messages[session.messages.length - 1] || undefined;
+                this.orderSessions();
+            }
+        },
         addMessageToSession(message: Message) {
             const session = this.sessions.find((session: Session) => session.sessionId === this.currentSessionId);
             if (session) {
                 session.messages.push(message);
-                session.lastMessage = message.message;
+                session.lastMessage = message;
                 this.orderSessions();
             }
         },
@@ -102,7 +117,8 @@ export const useSessionStore = defineStore('session', {
             this.currentSessionId = sessionId;
         },
         orderSessions() {
-            // Order sessions by last message timestamp
+            console.log("ORDER SESSIONS", this.sessions);
+            // Order sessions by last message timestamp in descending order
             this.sessions.sort((a: Session, b: Session) => {
                 // get the last message timestamp
                 const aTimestamp = a.messages?.[a.messages.length - 1]?.timestamp ?? 0;

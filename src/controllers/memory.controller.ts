@@ -1,5 +1,5 @@
-import { getAllSessions, getLatestMsgsFromSession, doesSessionExist, createSession } from "@src/langchain/memory/memory";
-import { deleteMemorySession, saveMemoryWithEmbedding } from "@src/langchain/redis";
+import { getAllSessions, getLatestMsgsFromSession, doesSessionExist, createSession, doesKeyExist } from "@src/langchain/memory/memory";
+import { deleteMemoryKey, deleteMemorySession, saveMemoryWithEmbedding } from "@src/langchain/redis";
 import { Logger } from "@src/logger";
 import { spawn } from "child_process";
 import { Request, Response } from 'express';
@@ -144,6 +144,16 @@ export const deleteSession = async (req: any, res: any) => {
     if(await doesSessionExist(sessionId)) {
         // Delete the session
         const result = await deleteMemorySession(sessionId);
+        res.status(200).json({ result });
+    } else {
+        res.status(404).json({ result: false });
+    }
+}
+
+export const deleteChatMessage = async (req: any, res: any) => {
+    const { memoryKey } = req.body;
+    if(await doesKeyExist(memoryKey)) {
+        const result = await deleteMemoryKey(memoryKey);
         res.status(200).json({ result });
     } else {
         res.status(404).json({ result: false });

@@ -4,9 +4,9 @@
             @mouseleave="mini = true">
             <q-list>
                 <q-item v-for="session in sessions" :key="session.sessionId" class="flex flex-center" clickable
-                    @click="selectSession(session)" :active="session.sessionId === selectedSession.sessionId">
+                    @click="selectSession(session)" :active="session.sessionId === selectedSession?.sessionId">
                     <q-icon name="chat" color="white" class="q-mx-md" />
-                    <q-item-section color="white">{{ session.sessionId }}: {{ truncate(session.lastMessage || '', 30)
+                    <q-item-section color="white">{{ session.sessionId }}: {{ session.lastMessage?.user as string }}: {{ truncate(session.lastMessage?.message as string, 30)
                         }}</q-item-section>
                     <q-btn v-if="!mini" flat round color="white" icon="close"
                         @click="removeSession(session.sessionId)" />
@@ -25,11 +25,15 @@
                     <ChatMessage v-for="(message, index) in selectedSession.messages" :key="index"
                         :timestamp="message.timestamp" :user="message.user"
                         :avatar="message.user.toLocaleLowerCase() === 'okuu' ? okuu_pfp : ''"
-                        :message="message.message" />
+                        :message="message.message" 
+                        :memoryKey="message.memoryKey" 
+                        :deleteBtn="index !== 0"
+                        />
                 </div>
-                <div v-else class="chat-messages">
+                <div v-else class="chat-messages q-pa-md flex flex-center column">
+                    <q-icon name="chat" size="100px" color="white" />
                     <h1>Chat</h1>
-                    <p>Select a session to start chatting</p>
+                    <h2>Select a session to start chatting</h2>
                 </div>
                 <div v-if="isLoadingResponse">
                     <q-spinner-dots color="primary" size="md" class="q-mx-md" />
@@ -72,14 +76,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, onBeforeUnmount, watch } from 'vue';
+import { ref, nextTick, onMounted, computed, onBeforeUnmount, watch } from 'vue';
 import { Session, useSessionStore } from 'src/stores/session.store';
 import { useQuasar } from 'quasar';
 import ChatMessage from 'src/components/chat/ChatMessage.vue';
 import { SocketioService, Status } from 'src/services/socketio.service';
 import { Socket } from 'socket.io-client';
 import { truncate } from 'src/utils/okuuai_utils';
-import { nextTick } from 'process';
 import { useConfigStore } from 'src/stores/config.store';
 import ChatConfigModal from 'src/components/chat/ChatConfigModal.vue';
 
@@ -89,7 +92,7 @@ const newMessage = ref('');
 const sessionStore = useSessionStore();
 const configStore = useConfigStore();
 const sessions = computed(() => sessionStore.sessions);
-const selectedSession = ref<Session>({ sessionId: '', messages: [] });
+const selectedSession = ref<Session | null>(null);
 const chatMessagesRef = ref();
 
 const isLoadingResponse = ref(false);
@@ -97,7 +100,7 @@ const inputTimeout = ref();
 
 const $q = useQuasar();
 
-const socketIO = ref<SocketioService>();
+const socketIO = ref<SocketioService | null>();
 const socket = ref<Socket>();
 
 const statusIcon = ref('cloud_off');
@@ -126,6 +129,8 @@ const showConfigModal = () => {
 onMounted(async () => {
     $q.loading.show();
     await sessionStore.fetchAllSessions();
+    await nextTick();
+    sessionStore.orderSessions();
     await configStore.fetchOkuuPfp();
     if (sessionStore.currentSession !== undefined) {
         selectSession(sessionStore.currentSession);
@@ -139,6 +144,10 @@ onBeforeUnmount(() => {
 });
 
 const selectSession = async (session: Session) => {
+    if(socketIO.value) {
+        socketIO.value.disconnectSocket();
+        socketIO.value = null;
+    }
     selectedSession.value = session;
     await sessionStore.fetchSessionMessages(session.sessionId);
     scrollToBottom();
@@ -161,8 +170,8 @@ const sendMessage = async () => {
             user: 'wolf',
             message: newMessage.value,
             sessionId: selectedSession.value.sessionId,
+            memoryKey: '',
         };
-        sessionStore.addMessageToSession(message);
         socket.value?.emit('chat', message);
         newMessage.value = '';
         isLoadingResponse.value = true;
@@ -211,8 +220,8 @@ const removeSession = async (sessionId: string) => {
         persistent: true
     }).onOk(async () => {
         await sessionStore.deleteSession(sessionId);
-        if (selectedSession.value.sessionId === sessionId) {
-            selectedSession.value = { sessionId: '', messages: [] };
+        if (selectedSession.value?.sessionId === sessionId) {
+            selectedSession.value = null;
         }
     }).onCancel(() => {
         console.log('Cancelled');
