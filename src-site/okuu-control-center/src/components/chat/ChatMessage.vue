@@ -1,16 +1,19 @@
 <template>
-    <div class="chat-message row items-start q-mb-sm">
-        <q-avatar :src="avatar" size="32px" rounded>
+    <div class="chat-message row no-wrap q-mb-sm">
+        <q-avatar :src="avatar" size="32px" round class="avatar flex flex-center">
             <template v-if="!avatar">
-                <q-icon name="person" />
+                <div class="no-avatar flex flex-center" style="width: 32px; height: 32px;">
+                    <q-icon name="person" />
+                </div>              
             </template>
+            <q-img :src="avatar" />
         </q-avatar>
         <div class="message-content q-ml-sm">
             <div class="message-header">
-                <span class="user">{{ username }}</span>
+                <span class="user">{{ user }}</span>
                 <span class="timestamp">{{ formattedTimestamp }}</span>
             </div>
-            <div class="message-body q-mt-xs">{{ message }}</div>
+            <span class="message-body q-mt-xs">{{ message }}</span>
         </div>
     </div>
 </template>
@@ -25,11 +28,8 @@ dayjs.extend(tz);
 
 const props = defineProps({
     timestamp: Number,
-    username: String,
-    avatar: {
-        type: String,
-        default: ''
-    },
+    user: String,
+    avatar: String,
     message: String,
 });
 
@@ -49,15 +49,24 @@ const formattedTimestamp = computed(() => {
 <style lang="scss" scoped>
 .chat-message {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     flex-direction: row;
-    margin-bottom: 10px;
+    margin-top: 2%;
+    margin-bottom: 2%;
+
 }
+
+.avatar {
+    align-self: center;
+    margin-right: 1%;
+}
+
 
 .message-content {
     margin-left: 10px;
     margin-right: 10px;
     width: 95%;
+    flex: 1 1 auto; /* Add this line to allow the content to shrink */
 }
 
 .message-header {

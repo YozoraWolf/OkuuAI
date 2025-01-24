@@ -5,6 +5,7 @@ export interface Message {
     timestamp: number;
     user: string;
     message: string;
+    avatar?: string;
 }
 
 export interface Session {
@@ -67,6 +68,11 @@ export const useSessionStore = defineStore('session', {
         },
         setCurrentSessionId(sessionId: string) {
             this.currentSessionId = sessionId;
+        }
+    },
+    getters: {
+        currentSession: (state): Session | undefined => {
+            return state.sessions.find((session: Session) => session.sessionId === state.currentSessionId);
         }
     }
 });

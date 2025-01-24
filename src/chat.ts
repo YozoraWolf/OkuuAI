@@ -78,7 +78,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
         // Step 2: Prepare prompt with memory context
         const prompt = `
-            ${Core.model_settings.system}
+            System: ${Core.model_settings.system}
             Relevant memories:
             Notes: Any memories talking in first person are from the user.
             ${memoryContext}

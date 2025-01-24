@@ -9,15 +9,18 @@
       </q-list>
     </q-drawer>
 
-    <q-page-container class="q-pa-none">
+    <q-page-container  ref="routerCont" class="q-pa-none">
       <router-view />
     </q-page-container>
   </q-layout>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import EssentialLink, { type EssentialLinkProps } from 'components/EssentialLink.vue';
+import { useConfigStore } from 'src/stores/config.store';
+
+const configStore = useConfigStore();
 
 const pageList: EssentialLinkProps[] = [
   {
@@ -57,10 +60,26 @@ const pageList: EssentialLinkProps[] = [
 const drawer = ref(true);
 const toggleMini = ref(true);
 
+const routerCont = ref<HTMLElement>();
+
+// computed
+
+const zoomLevel = computed(() => configStore.getZoomLevel() * 0.01);
+
+onMounted(async () => {
+  console.log('MainLayout mounted');
+});
+
 </script>
 
 <style lang="scss" scoped>
 .drawer-transition {
   transition: width 0.3s;
+}
+
+.router-cont {
+  transform-origin: top left;
+  width: 100%;
+  height: 100%;
 }
 </style>

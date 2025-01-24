@@ -17,6 +17,7 @@
   "dependencies": {
     "@quasar/extras": "^1.16.4",
     "axios": "^1.2.1",
+    "cropperjs": "^1.6.2",
     "dayjs": "^1.11.13",
     "dayjs-plugin-utc": "^0.1.2",
     "pinia": "^2.0.11",

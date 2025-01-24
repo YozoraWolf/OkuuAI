@@ -1,5 +1,6 @@
 import { Store } from 'pinia';
 import { io, Socket } from 'socket.io-client';
+import { useConfigStore } from 'src/stores/config.store';
 import { Message } from 'src/stores/session.store';
 import { resolveHostRedirect } from 'src/utils/okuuai_utils';
 
@@ -61,7 +62,11 @@ export class SocketioService {
             this.updateStatus(Status.CONNECTED);
         });
 
-        this.socket.on('chat', (message: Message) => {
+        this.socket.on('chat', async (message: Message) => {
+            const configStore = useConfigStore();
+            await configStore.fetchOkuuPfp();
+            message.avatar = configStore.okuuPfp;
+            console.log('Received chat message:', message);
             this.sessionStore.addMessageToSession(message);
         });
 
