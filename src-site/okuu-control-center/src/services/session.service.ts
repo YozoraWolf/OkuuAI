@@ -37,8 +37,28 @@ export const getSessionMessages = async (sessionId: string) => {
 
 export const createSession = async () => {
     const apiUrl = await getApiUrl();
-    const response = await axios.post(`${apiUrl}/sessions`, null, {
+    const response = await axios.post(`${apiUrl}/memory/sessions`, {}, {
         headers: getAuthHeaders(),
     });
     return response;
 };
+
+export const deleteSession = async (sessionId: string) => {
+    const apiUrl = await getApiUrl();
+    const response = await axios.delete(`${apiUrl}/memory/sessions/${sessionId}`, {
+        headers: getAuthHeaders(),
+    });
+    return response;
+}
+
+export const sendAttachment = async (formData: FormData) => {
+    const apiUrl = await getApiUrl();
+    const response = await axios.post(`${apiUrl}/memory/record`, formData, {
+        headers: 
+        {
+            ...getAuthHeaders(),
+            'Content-Type': 'multipart/form-data',
+        },
+    });
+    return response;
+}

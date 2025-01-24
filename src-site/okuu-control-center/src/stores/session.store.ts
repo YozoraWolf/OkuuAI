@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { getAllSessions, getSessionMessages, createSession } from 'src/services/session.service';
+import { getAllSessions, getSessionMessages, createSession, sendAttachment, deleteSession } from 'src/services/session.service';
 
 export interface Message {
     timestamp: number;
@@ -31,8 +31,19 @@ export const useSessionStore = defineStore('session', {
             //console.log('Fetched sessions:', data);
             if (status === 200) {
                 this.sessions = data;
+                this.orderSessions();
             } else {
                 console.error('Failed to fetch sessions');
+            }
+        },
+        async sendAttachment(file: File, msg: Message) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('message', msg.message);
+            const { data, status } = await sendAttachment(formData);
+            if (status !== 200) {
+                console.error('Failed to send attachment');
+                return;
             }
         },
         async fetchSessionMessages(sessionId: string) {
@@ -49,6 +60,7 @@ export const useSessionStore = defineStore('session', {
                 this.sessions.push({ sessionId, messages });
             }
             this.setCurrentSessionId(sessionId);
+            this.orderSessions();
         },
         async addSession() {
             const { data, status } = await createSession();
@@ -57,17 +69,46 @@ export const useSessionStore = defineStore('session', {
                 return;
             }
             const newSession = data;
+            newSession.lastMessage = data.messages[data.messages.length - 1].message  || '';
             this.sessions.push(newSession);
+            this.orderSessions();
+        },
+        async deleteSession(sessionId: string) {
+            const { status, data } = await deleteSession(sessionId);
+            if (status !== 200 || !data.result) {
+                console.error('Failed to delete session:', sessionId);
+                return;
+            }
+            const sessionIndex = this.sessions.findIndex((session: Session) => session.sessionId === sessionId);
+            if (sessionIndex === -1) {
+                console.error('Session not found:', sessionId);
+                return;
+            }
+            this.sessions.splice(sessionIndex, 1);
+            if (this.currentSessionId === sessionId) {
+                this.currentSessionId = '';
+            }
+            this.orderSessions();
         },
         addMessageToSession(message: Message) {
             const session = this.sessions.find((session: Session) => session.sessionId === this.currentSessionId);
             if (session) {
                 session.messages.push(message);
                 session.lastMessage = message.message;
+                this.orderSessions();
             }
         },
         setCurrentSessionId(sessionId: string) {
             this.currentSessionId = sessionId;
+        },
+        orderSessions() {
+            // Order sessions by last message timestamp
+            this.sessions.sort((a: Session, b: Session) => {
+                // get the last message timestamp
+                const aTimestamp = a.messages?.[a.messages.length - 1]?.timestamp ?? 0;
+                const bTimestamp = b.messages?.[b.messages.length - 1]?.timestamp ?? 0;
+                return bTimestamp - aTimestamp;
+            });
         }
     },
     getters: {

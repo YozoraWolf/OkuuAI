@@ -4,10 +4,12 @@
             @mouseleave="mini = true">
             <q-list>
                 <q-item v-for="session in sessions" :key="session.sessionId" class="flex flex-center" clickable
-                    @click="selectSession(session)">
-                    <q-icon name="chat" class="q-mx-md" />
-                    <q-item-section>{{ session.sessionId }}: {{ truncate(session.lastMessage || '', 30)
+                    @click="selectSession(session)" :active="session.sessionId === selectedSession.sessionId">
+                    <q-icon name="chat" color="white" class="q-mx-md" />
+                    <q-item-section color="white">{{ session.sessionId }}: {{ truncate(session.lastMessage || '', 30)
                         }}</q-item-section>
+                    <q-btn v-if="!mini" flat round color="white" icon="close"
+                        @click="removeSession(session.sessionId)" />
                 </q-item>
                 <q-item class="flex flex-center" clickable @click="addNewSession">
                     <q-icon name="add" size="sm" class="q-mx-md" />
@@ -41,12 +43,21 @@
                         </template>
                     </q-input>
                     <div class="sub-menu row">
-                        <div class="status-bar col-11">
+                        <div class="status-bar col-9">
                             <q-icon :name="statusIcon" class="q-mr-sm" :color="statusColor" />
                             <span>{{ statusMessage }}</span>
                             <q-btn v-if="status === Status.DISCONNECTED" flat round icon="refresh" color="primary"
                                 @click="retryConnection">
                             </q-btn>
+                        </div>
+                        <div class="col-2">
+                            <q-file :disable="sendBtnActive" v-model="attachment"
+                                accept=".txt, .pdf, .doc, .docx, .csv, .json">
+                                <template v-slot:prepend>
+                                    <q-icon name="attach_file" />
+                                    <q-icon v-if="attachment" name="close" @click="removeAttachment" />
+                                </template>
+                            </q-file>
                         </div>
                         <div class="config col-1 flex justify-end">
                             <q-btn flat round icon="settings" @click="showConfigModal" />
@@ -63,7 +74,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, onBeforeUnmount, watch } from 'vue';
 import { Session, useSessionStore } from 'src/stores/session.store';
-import { Dialog, useQuasar } from 'quasar';
+import { useQuasar } from 'quasar';
 import ChatMessage from 'src/components/chat/ChatMessage.vue';
 import { SocketioService, Status } from 'src/services/socketio.service';
 import { Socket } from 'socket.io-client';
@@ -95,26 +106,28 @@ const statusMessage = ref('Disconnected');
 
 const okuu_pfp = ref<string>('');
 
+const attachment = ref<File | null>(null);
+
 const showConfigModal = () => {
     $q.dialog({
         component: ChatConfigModal
     })
-    .onDismiss(() => {
-        console.log('dismissed');
-    })
-    .onOk(() => {
-        console.log('ok');
-    })
-    .onCancel(() => {
-        console.log('cancel');
-    });
+        .onDismiss(() => {
+            console.log('dismissed');
+        })
+        .onOk(() => {
+            console.log('ok');
+        })
+        .onCancel(() => {
+            console.log('cancel');
+        });
 };
 
 onMounted(async () => {
     $q.loading.show();
     await sessionStore.fetchAllSessions();
     await configStore.fetchOkuuPfp();
-    if(sessionStore.currentSession !== undefined) {
+    if (sessionStore.currentSession !== undefined) {
         selectSession(sessionStore.currentSession);
     }
     okuu_pfp.value = configStore.okuuPfp;
@@ -141,7 +154,7 @@ const addNewSession = async () => {
     await sessionStore.addSession();
 };
 
-const sendMessage = () => {
+const sendMessage = async () => {
     if (selectedSession.value && newMessage.value.trim()) {
         const message = {
             timestamp: Date.now(),
@@ -159,7 +172,20 @@ const sendMessage = () => {
         inputTimeout.value = setTimeout(() => {
             isLoadingResponse.value = false;
         }, 30000);
+
+        if (attachment.value) {
+            console.log('sending attachment');
+            await sessionStore.sendAttachment(attachment.value, message);
+            removeAttachment();
+        }
+
+
     }
+};
+
+const removeAttachment = () => {
+    console.log('remove attachment');
+    attachment.value = null;
 };
 
 const retryConnection = () => {
@@ -175,6 +201,22 @@ const scrollToBottom = () => {
 
 const renableInput = () => {
     clearTimeout(inputTimeout.value);
+};
+
+const removeSession = async (sessionId: string) => {
+    $q.dialog({
+        title: 'Confirm',
+        message: `Are you sure you want to remove this session? (Id: ${sessionId})`,
+        cancel: true,
+        persistent: true
+    }).onOk(async () => {
+        await sessionStore.deleteSession(sessionId);
+        if (selectedSession.value.sessionId === sessionId) {
+            selectedSession.value = { sessionId: '', messages: [] };
+        }
+    }).onCancel(() => {
+        console.log('Cancelled');
+    });
 };
 
 // computed
@@ -261,5 +303,9 @@ watch(() => status.value, (status) => {
 
 .status-bar q-icon {
     margin-right: 5px;
+}
+
+.q-item--active {
+    background-color: var(--q-primary) !important;
 }
 </style>
