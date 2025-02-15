@@ -30,9 +30,10 @@ export class SocketioService {
         }
 
         try {
-            const url = await resolveHostRedirect();
+            let url = await resolveHostRedirect();
             if (!url) throw new Error('Invalid URL');
-
+            // Remove protocol from URL
+            url = url.replace(/^https?:\/\//, '');
             this.socket = io(`wss://${url}`, {
                 transports: ['websocket'],
                 timeout: 30000,

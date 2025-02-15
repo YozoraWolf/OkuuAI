@@ -26,7 +26,9 @@ onMounted(async () => {
     console.log('Resolved WebSocket URL:', resolvedUrl);
     let connection: Socket;
     try {
-        connection = io(`wss://${resolvedUrl}`, {
+        const url = new URL(resolvedUrl);
+        const hostname = url.hostname;
+        connection = io(`wss://${hostname}`, {
             transports: ['websocket'],
             timeout: 5000,
         });

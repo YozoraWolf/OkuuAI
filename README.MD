@@ -2,58 +2,24 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-## Description
-
 OkuuAI is a project built using LLM (Language Model) technology. It aims to provide advanced AI capabilities for assisting in multiple tasks, including programming, providing context using vision and more!
 
 OkuuAI runs locally using your CPU + GPU, providing full privacy.
 
 Currently runs on **Linux** only.
 
-## Dependencies
+## 📝 Dependencies
 
-### Ollama
+- [Node.js](https://nodejs.org/en/download/)
+- [Docker](https://docs.docker.com/get-docker/)
 
-This project relies on Ollama for backend LLM communication services. [Please install](https://ollama.com) it before continuing.
-
-Note: Please make sure you are running the Ollama service and that the service has permissions to access and write to the folder specified in `MODEL_PATH` (in the env file)
-
-## Installation
-
-You will have to create a `.env` file in the src directory to specify some required data.
-
-### .env file template
-```python
-# The url of your .gguf file, to be downloaded
-MODEL_URL=MODEL_URL=https://huggingface.co/MaziyarPanahi/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct.Q6_K.gguf?download=true
-
-# The path where you want the .gguf file to be saved in, make sure it exists!
-MODEL_PATH=/usr/share/ollama/.ollama/models/mymodelfolder
-
-# This can be any port you choose, I chose 3009 because... 
-# (お空　009, nine in Japanese can be read as 'Kuu')
-PORT=3009
-# ChromaDB related
-# Chroma credentials (set to any you want, but change this)
-CHROMA_USER=username # change this, please
-CHROMA_PWD=password # change this, please
-CHROMA_PORT=3010 # Okuu chromadb port, set it to what you want
-# Redis related
-REDIS_PORT=6009 # Okuu redis port, set it to what you want
-REDIS_PWD=passwd # change this, please.
-```
-
-You will need to provide adequate permissions to that folder so that ollama can access it.
-
----
-
-### Docker
+### 🚀 Installation using Docker
 
 Make sure you have `docker` installed and that you can [run it without sudo](https://docs.docker.com/engine/install/linux-postinstall/).
 
 ---
 
-To install the dependencies, run the following command:
+To install the project dependencies, run the following command:
 
 ```
 npm install
@@ -65,23 +31,74 @@ Before running it for the first time, please execute the config script to set al
 npm run config
 ```
 
-You will also need a `system.json` to provide a custom System prompt for ollama to use. So just edit the one provided by the config script.
-
-```
-{
-    "system": "You are an amazing AI assitant."
-}
-```
-
 Then just run it using:
 
 ```
 npm start
 ```
 
+or
+
+```
+./start [--tunnel]
+```
+
+The `--tunnel` flag is optional and is used to start the Ngrok tunnel for remote access.
+
 The program will automatically download and install necessary models.
 
-# Commands
+### .env file template
+```python
+
+# Main
+API_KEY=123456 # API Key for the assitant, make sure to use something other than this. It's just a placeholder.
+PORT=3009 # Port for the server to run on
+SRV_URL=http://localhost # Whitelist probably? WIP.
+
+# Redis
+REDIS_PORT=6009 # Port for the Redis server
+REDIS_PWD=admin1234 # Password for the Redis server. (Change this)
+
+# Ollama
+OLLAMA_PORT=7009 # Port for the Ollama server
+OLLAMA_DEFAULT_MODEL=llama3 # Default model for Ollama if none is specified during config
+
+# Network (Optional - For remote access)
+WEB_URL=http://nginxproxymanager.com # Web URL for the nginx proxy manager interface
+PROXY_EMAIL= # Email for the Nginx Proxy Manager
+PROXY_PWD= # Password for the Nginx Proxy Manager (to update the redirect URL to the Ngrok one)
+PROXY_FWD= # Web URL for the server / Ngrok URL / Nginx Proxy Manager Redirect Host URL
+```
+
+# 🔌 Ngrok + Nginx Proxy Manager Proxy Setup (Optional)
+
+If you want to access the server remotely, you can use Ngrok or Nginx Proxy Manager, in case you cannot open ports on your router.
+
+For this please install:
+- [Ngrok](https://ngrok.com/download)
+- [Nginx Proxy Manager](https://nginxproxymanager.com/)
+
+After installing Ngrok and Nginx Proxy Manager, you can run the following command to start the Ngrok tunnel:
+
+```npm run start-tunnel```
+
+This will start the Ngrok tunnel and update the Nginx Proxy Manager redirect URL to the Ngrok one (via the Nginx Proxy Manager's API). Then if successful you can access the server remotely.
+
+# ⚙️ Config
+
+If you feel you messed up your env file or assitant file, you can always rerun the config script to reset everything.
+
+```npm run config```
+
+# Frontend 🆕
+
+To manually run the frontend, you can use the following commands:
+
+```
+cd src-site/okuu-control-center && npm run dev
+```
+
+# ⌨️ Commands
 
 For now OkuuAI runs in pure nodejs, so I implemented some commands to work on her on runtime:
 

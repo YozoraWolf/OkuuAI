@@ -3,6 +3,35 @@ import axios, { AxiosResponse } from 'axios';
 import { exec } from 'child_process';
 import { Logger } from './logger';
 
+// Assistant Configuration
+const assistantConfigFile = 'assistant.json';
+
+const defaultAssistantConfig = {
+    name: "assistant",
+    system_prompt: "You are an intelligent AI assistant.",
+    model: "llama3",
+    template: ""
+};
+
+export const loadAssistantConfig = () => {
+    if (!fs.existsSync(assistantConfigFile)) {
+        Logger.WARN(`Failed to load ${assistantConfigFile} file. Creating new one...`);
+        fs.writeFileSync(assistantConfigFile, JSON.stringify(defaultAssistantConfig, null, 2));
+        return defaultAssistantConfig;
+    } else {
+        Logger.INFO(`Loading assistant configuration from ${assistantConfigFile} file...`);
+        return JSON.parse(fs.readFileSync(assistantConfigFile, 'utf8'));
+    }
+};
+
+export const updateAssistantConfigJSON = (config: any) => {
+    try {
+        fs.writeFileSync(assistantConfigFile, JSON.stringify(config, null, 2));
+    } catch (error) {
+        Logger.ERROR(`Failed to update assistant.json file\n${error}`);
+    }
+};
+
 export const downloadFile = async (url: string, filePath: string): Promise<any> => {
   const response: AxiosResponse<ReadableStream> = await axios({
     method: 'get',

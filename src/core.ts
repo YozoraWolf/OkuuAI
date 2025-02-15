@@ -1,6 +1,8 @@
 import { ConversationChain } from 'langchain/chains';
 import system from '../system.json';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import { Logger } from './logger';
 
 dotenv.config();
 
@@ -13,25 +15,26 @@ export enum Status {
 export class Core {
     static status: Status = Status.INACTIVE;
 
-    static ai_name: string = 'Okuu';
+    static ai_name: string = 'OkuuAI';
+    static model_name: string = 'llama3';
+    static defaultTemplate: string = `{{ if .System }}<|start_header_id|>system<|end_header_id|>
+    
+    {{ .System }}<|eot_id|>{{ end }}{{ if .Prompt }}<|start_header_id|>user<|end_header_id|>
+    
+    {{ .Prompt }}<|eot_id|>{{ end }}<|start_header_id|>assistant<|end_header_id|>
+    
+    {{ if not (or (contains .Response "#!IDK") (contains .Response "#!WEBSEARCH")) }}
+    {{ .Response }}
+    {{ end }}<|eot_id|>`;
+    
+    static template: string = Core.defaultTemplate;
 
     static model_org_name: string = `${process.env.MODEL_URL?.match(/\/([^/]+)\.gguf/)?.[1]}.gguf`;
     static model_path: string = process.env.MODEL_PATH || '';
-    static model_name: string = 'llama3';
 
     static chat_settings: any = {
         prefix: '\x1b[32mOkuu:\x1b[0m'
     };
-
-    static template: any = `{{ if .System }}<|start_header_id|>system<|end_header_id|>
-
-{{ .System }}<|eot_id|>{{ end }}{{ if .Prompt }}<|start_header_id|>user<|end_header_id|>
-
-{{ .Prompt }}<|eot_id|>{{ end }}<|start_header_id|>assistant<|end_header_id|>
-
-{{ if not (or (contains .Response "#!IDK") (contains .Response "#!WEBSEARCH")) }}
-{{ .Response }}
-{{ end }}<|eot_id|>`;
 
     static model_settings: any = { 
         temperature: .3,

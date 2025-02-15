@@ -10,7 +10,7 @@ import { useAuthStore } from './stores/auth.store';
 const authStore = useAuthStore();
 
 onMounted(() => {
-  console.log('Hello, OkuuAI Control Center!');
+  console.log('%c☢️ Hello, OkuuAI Control Center!', 'font-size: 20px;');
   authStore.loadApiKey();
 });
 //

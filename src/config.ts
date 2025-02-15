@@ -1,8 +1,10 @@
-import readline from 'readline';
 import fs from 'fs';
-import { Logger } from './logger';
-import chalk from 'chalk';
 import path from 'path';
+import { Logger } from './logger';
+import { searchModels } from './modelUtils';
+import { Core } from './core';
+import { loadAssistantConfig, updateAssistantConfigJSON } from './o_utils';
+import { input, select, search } from '@inquirer/prompts';
 
 // Interfaces & Defaults
 
@@ -16,6 +18,18 @@ interface Config {
     redis_pwd?: string;
     gui_port?: number;
     system?: string;
+    ai_name?: string;
+    template?: string;
+    model_name?: string;
+    api_key?: string;
+    ollama_port?: number;
+    ollama_default_model?: string;
+    web_url?: string;
+    proxy_url?: string;
+    proxy_email?: string;
+    proxy_pwd?: string;
+    proxy_fwd?: string;
+    modelfile?: string;
     [key: string]: any;
 }
 
@@ -25,30 +39,49 @@ interface ConfigGUI {
     [key: string]: any;
 }
 
-const defaultConfigAI: Config = {
-    model_url: "https://huggingface.co/MaziyarPanahi/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct.Q6_K.gguf?download=true",
-    model_path: "/usr/share/ollama/.ollama/models/okuu/",
+export const defaultConfigAI: Config = {
+    model_url: "https://example.com/model-url",
+    model_path: "/path/to/model",
     port: 3009,
     srv_url: "http://localhost",
-    redis_port: 6009,
-    redis_pwd: "1234",
-    gui_port: 8009,
-    system: "You're an AI assistant."
+    redis_port: 6379,
+    redis_pwd: "password",
+    gui_port: 8080,
+    system: "You're a helpful AI assistant.",
+    ai_name: "AI",
+    template: "",
+    model_name: "llama3",
+    api_key: "adminkey1234",
+    ollama_port: 7009,
+    ollama_default_model: "llama3",
+    web_url: "",
+    proxy_url: "",
+    proxy_email: "",
+    proxy_pwd: "",
+    proxy_fwd: ""
+};
+
+export const defaultAssistantConfig = {
+    name: defaultConfigAI.ai_name,
+    system_prompt: defaultConfigAI.system,
+    model: defaultConfigAI.model_name,
+    template: ""
 };
 
 const defaultConfigFrontend: ConfigGUI = {
-    vite_port: 8009,
-    okuuai_port: 3009,
+    vite_port: 8000,
+    okuuai_port: 3000,
     msg_limit: 20
 };
 
+const ask_input = ['ai_name', 'model_name', 'system', 'port'];
 
 // Util
 function envToJSON(env: string): Config {
     const envLines = env.split('\n');
     const config: Config = { ...defaultConfigAI };
     for (const line of envLines) {
-        if (line.trim() === '') {
+        if (line.trim() === '' || line.trim().startsWith('#')) {
             continue;
         }
         const [key, value] = line.split('=');
@@ -68,26 +101,8 @@ const arg = process.argv[2];
 const envJsonName = 'env.json';
 
 
-let currentConfig: Config = {
-    model_url: "",
-    model_path: "",
-    port: 0,
-    srv_url: "",
-    redis_port: 0,
-    redis_pwd: "",
-    gui_port: 0,
-    system: ""
-};
-const newConfig: Config = {
-    model_url: "",
-    model_path: "",
-    port: 0,
-    srv_url: "",
-    redis_port: 0,
-    redis_pwd: "",
-    gui_port: 0,
-    system: ""
-};
+let currentConfig: Config = { ...defaultConfigAI };
+const newConfig: Config = { ...defaultConfigAI };
 
 const configName: any = {
     model_url: "Model URL",
@@ -97,68 +112,63 @@ const configName: any = {
     redis_port: "Redis Port",
     redis_pwd: "Redis Password",
     gui_port: "GUI Port",
-    system: "System Prompt"
+    system: "System Prompt",
+    ai_name: "AI Name",
+    template: "Template",
+    model_name: "Model Name",
+    api_key: "API Key",
+    ollama_port: "Ollama Port",
+    ollama_default_model: "Ollama Default Model",
+    web_url: "Web URL",
+    proxy_url: "Proxy URL",
+    proxy_email: "Proxy Email",
+    proxy_pwd: "Proxy Password",
+    proxy_fwd: "Proxy Forward"
 };
 
-let rl: readline.Interface;
+const defaultValues = { ...defaultConfigAI };
 
-export const initConfig = () => new Promise<void>(() => {
-
-    rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-    });
-
-
+export const initConfig = async () => {
     if (arg === 'OVERRIDE') {
         loadEnv(); // this will first check if there's an existing .env file, if not, it will start the interactive configuration
     }
-});
-
-
-const question = (prompt: string) => {
-    return new Promise<string | null>((resolve, reject) => {
-        rl.question(prompt, (answer) => {
-            if (typeof answer === 'string') {
-                resolve(answer.trim());
-            } else {
-                reject(null);
-            }
-        });
-    });
 };
 
-
-const exitConfig = (code: number) => {
-    if (code === 0) {
-        Logger.INFO('Configuration completed successfully');
-        if (arg !== 'OVERRIDE') {
-            Logger.INFO('Please restart the application to apply the new configuration');
-        };
-    }
-    else if (code === 1) {
-        Logger.ERROR('Configuration failed due to an error');
-    }
-    process.exit(code);
-};
-
-const createEnvFile = (config: Config = defaultConfigAI) => {
+export const createEnvFile = (config: Config = defaultConfigAI) => {
     let envStr = '';
     Logger.INFO('Creating .env file...');
     Logger.DEBUG(`Config: ${JSON.stringify(config)}`);
     try {
-        fs.createWriteStream('.env', { flags: 'w' });
-        for (const key in config) {
-            envStr += `${key.toUpperCase()}=${config[key]}\n`;
-        }
-        //Logger.DEBUG(`Env String: ${envStr}`);
+        envStr += '# Legacy\n';
+        envStr += `#MODEL_URL=${config.model_url}\n`;
+        envStr += `#MODEL_PATH=${config.model_path}\n\n`;
+
+        envStr += '# Main Settings\n';
+        envStr += `PORT=${config.port}\n`;
+        envStr += `#SRV_URL=${config.srv_url}\n`;
+        envStr += `API_KEY=${config.api_key}\n\n`;
+
+        envStr += '# Redis Settings\n';
+        envStr += `REDIS_PORT=${config.redis_port}\n`;
+        envStr += `REDIS_PWD=${config.redis_pwd}\n\n`;
+
+        envStr += '# Ollama\n';
+        envStr += `OLLAMA_PORT=${config.ollama_port}\n`;
+        envStr += `OLLAMA_DEFAULT_MODEL=${config.ollama_default_model}\n\n`;
+
+        envStr += '# Proxy (Using Nginx Proxy Manager)\n';
+        envStr += `WEB_URL=${config.web_url}\n`;
+        envStr += `PROXY_EMAIL=${config.proxy_email}\n`;
+        envStr += `PROXY_PWD=${config.proxy_pwd}\n`;
+        envStr += `PROXY_FWD=${config.proxy_fwd}\n`;
+
         fs.writeFileSync('.env', envStr, { encoding: 'utf8', flag: 'w' });
     } catch (error) {
         Logger.ERROR(`Failed to create .env file\n${error}`);
     }
 };
 
-export const loadEnv = () => {
+export const loadEnv = async () => {
     if (!fs.existsSync('.env')) {
         Logger.WARN('Failed to load .env file');
         interactiveConfig();
@@ -170,17 +180,19 @@ export const loadEnv = () => {
             const lowercaseKey = key.toLowerCase();
             currentConfig[lowercaseKey] = env[key]; // Store the key-value pair in the object with lowercase key
         }
-        env.system = loadSystemPrompt(); // Load system prompt
+        env.system = loadAssistantConfig().system_prompt; // Load system prompt from assistant.json
         // Check if the user wants to override the existing configuration
         if (arg === 'OVERRIDE') {
-            rl.question(`${chalk.white('>> Do you want to override the existing configuration?')} (Y/N): `, async (answer) => {
-                if (answer.toLowerCase() === 'y') {
-                    interactiveConfig();
-                } else {
-                    rl.close();
-                    exitConfig(0);
-                }
+            const answer = await select({
+                message: 'Do you want to override the existing configuration?',
+                choices: ['Yes', 'No'],
+                default: 'No'
             });
+            if (answer === 'Yes') {
+                await interactiveConfig();
+            } else {
+                process.exit(0);
+            }
         }
     } catch (error) {
         console.log('Failed to load .env file');
@@ -189,45 +201,79 @@ export const loadEnv = () => {
 
 
 const MAX_CHARS = 65;
-const interactiveConfig = async () => {
+
+export const interactiveConfig = async () => {
     Logger.INFO('Starting interactive configuration...');
-    let errorIt = true;
     currentConfig = Object.keys(currentConfig).length === 0 ? defaultConfigAI : currentConfig;
-    for (const key in currentConfig) {
-        errorIt = true; // reset repeat flag before each iteration
-        while (errorIt) {
-            try {
-                const defaultVal = currentConfig[key];
-                const truncatedVal = defaultVal.toString().length > MAX_CHARS ? defaultVal.toString().substring(0, MAX_CHARS) + "..." : defaultVal;
-                const answer = await question(`${chalk.hex('#FFA500')('☢')} ${chalk.hex("#FFF")(`Enter ${configName[key]}`)} (${chalk.hex("#FFFF00")(truncatedVal)}): `);
-                if (answer === '') {
-                    newConfig[key] = currentConfig[key];
-                } else if (answer === null) {
-                    continue;
-                } else {
-                    newConfig[key] = answer;
-                }
-                errorIt = false; // Exit loop if no error occurred
-            } catch (error: any) {
-                Logger.INFO(`Error occurred during configuration: ${error}`);
-                errorIt = true;
+
+    let selectedModel: string | undefined;
+    for (const key of ask_input) {
+        const defaultVal = defaultValues[key];
+        const truncatedVal = defaultVal.toString().length > MAX_CHARS ? defaultVal.toString().substring(0, MAX_CHARS) + "..." : defaultVal;
+
+        if (key === 'model_name') {
+            selectedModel = await search({
+                message: `Select a model (${truncatedVal}):`,
+                source: async (input, { signal }) => {
+                    if (!input) {
+                        return [];
+                    }
+
+                    const response = await fetch(
+                        `https://ollamadb.dev/api/v1/models?search=${encodeURIComponent(input)}`,
+                        { signal },
+                    );
+                    const data = await response.json();
+
+                    return [
+                        ...data.models.map((model: any) => ({
+                            name: model.model_name,
+                            value: model.model_name,
+                        })),
+                        { name: 'Add Modelfile', value: 'add_modelfile' }
+                    ];
+                },
+            });
+
+            if (selectedModel === 'add_modelfile') {
+                const modelPath = await input({
+                    message: 'Please enter the path to the model file:',
+                    default: defaultConfigAI.model_path
+                });
+                newConfig.model_name = "";
+                newConfig.modelfile = modelPath;
+            } else {
+                newConfig[key] = selectedModel;
             }
+        } else {
+            const answer = await input({
+                message: `Enter ${configName[key]} (${truncatedVal}):`,
+                default: defaultVal
+            });
+            newConfig[key] = answer;
         }
     }
+
+    newConfig.model_name = selectedModel !== 'add_modelfile' ? selectedModel : "";
 
     const { system, ...settings } = newConfig;
 
     try {
         createEnvFile(settings);
         updateFrontEnv();
-        updateSystemPromptJSON();
+        updateAssistantConfigJSON({
+            name: newConfig.ai_name,
+            system_prompt: newConfig.system,
+            model: newConfig.model_name,
+            modelfile: newConfig.modelfile,
+            template: newConfig.template
+        });
     } catch (error) {
         Logger.ERROR(`Failed to create .env file\n${error}`);
-        exitConfig(1);
+        process.exit(1);
     }
 
-    rl.close();
-    exitConfig(0);
+    process.exit(0);
 };
 
 // gui frontend configuration related
@@ -260,44 +306,7 @@ const updateFrontEnv = () => {
     createFrontendEnv(env);
 };
 
-// System Prompt Configuration
-
-const systemPromptFile = 'system.json';
-
-const loadSystemPrompt = () => {
-    let sys;
-    if (!fs.existsSync('system.json')) {
-        Logger.WARN(`Failed to load ${systemPromptFile} file. Creating new one...`);
-        sys = createSystemPromptJSON();
-    } else {
-        Logger.INFO(`Loading system prompt from ${systemPromptFile} file...`);
-        sys = JSON.parse(fs.readFileSync('system.json', 'utf8'));
-    }
-    return sys.system;
-};
-
-const createSystemPromptJSON = () => {
-    Logger.INFO('Creating system.json file...');
-    const newSystem = { system: defaultConfigAI.system };
-    const sys = JSON.stringify(newSystem, null, 2);
-    try {
-        fs.writeFileSync('system.json', sys);
-    } catch (error) {
-        Logger.ERROR(`Failed to create system.json file\n${error}`);
-        return null;
-    }
-    return newSystem;
-};
-
-const updateSystemPromptJSON = () => {
-    const system = newConfig.system;
-    try {
-        fs.writeFileSync('system.json', JSON.stringify({ system }, null, 2));
-    }
-    catch (error) {
-        Logger.ERROR(`Failed to update system.json file\n${error}`);
-    }
-};
+// Assistant Configuration
 
 if (arg === 'OVERRIDE') {
     initConfig(); // this will first check if there's an existing .env file, if not, it will start the interactive configuration

@@ -1,4 +1,4 @@
-import { checkOllamaService, downloadFile } from './o_utils';
+import { checkOllamaService, downloadFile, loadAssistantConfig, updateAssistantConfigJSON } from './o_utils';
 import fs from 'fs';
 import { Core, Status } from './core';
 import { centeredLogoTxt } from './intro';
@@ -7,10 +7,11 @@ import { ConsoleColor, Logger } from './logger';
 //import { initDockerChromaDB } from './langchain/chromadb'; // Perhaps to be deleted.
 import dotenv from 'dotenv';
 import { SESSION_SETTINGS, startSession } from './langchain/memory/memory';
-import { initConfig, loadEnv } from './config';
+import { initConfig, loadEnv, interactiveConfig, createEnvFile, defaultConfigAI, defaultAssistantConfig } from './config';
 import { initUsersDB } from './services/user.service';
 import { runModel, startAndMonitorContainers } from './compose/containers';
 import { initRedis } from './langchain/redis';
+import { select } from '@inquirer/prompts';
 
 dotenv.config();
 
@@ -29,17 +30,41 @@ const downloadModelFile = async (url: string, path: string) => {
     }
 };
 
+const promptForConfig = async () => {
+    const answer = await select({
+        message: 'Configuration files not found. Do you want to start the interactive configuration or use default settings?',
+        choices: ['Interactive Configuration', 'Use Default Settings'],
+        default: 'Interactive Configuration'
+    });
+
+    if (answer === 'Interactive Configuration') {
+        await interactiveConfig();
+    } else {
+        createEnvFile();
+        updateAssistantConfigJSON(defaultAssistantConfig);
+    }
+};
+
 export const init = async () => 
     new Promise<void>(async (resolve) => {
 
     console.log(centeredLogoTxt);
 
     Logger.INFO("Checking envs...");
-    if (!fs.existsSync('.env')) {
-        await initConfig();
+    if (!fs.existsSync('.env') || !fs.existsSync('assistant.json')) {
+        await promptForConfig();
         loadEnv();
+        Logger.INFO("Env files created successfully!");
+        Logger.INFO("Restart the application to apply the changes.");
         return;
     }
+
+    // Load assistant configuration
+    const assistantConfig = loadAssistantConfig();
+    Core.ai_name = assistantConfig.name;
+    Core.model_name = assistantConfig.model;
+    Core.model_settings.system = assistantConfig.system_prompt;
+    Core.template = assistantConfig.template;
   
     // check if the ollama service is on, if not, start it
     //await checkOllamaService();

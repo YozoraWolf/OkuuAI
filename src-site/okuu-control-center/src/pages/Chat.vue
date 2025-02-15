@@ -39,8 +39,8 @@
                     <q-spinner-dots color="primary" size="md" class="q-mx-md" />
                 </div>
                 <div class="chat-input text-white q-pa-md" v-if="selectedSession">
-                    <q-input :disable="!selectedSession || isLoadingResponse" v-model="newMessage"
-                        placeholder="Type a message" @keyup.enter="sendMessage" class="q-pb-md">
+                    <q-input type="textarea" autogrow :disable="!selectedSession || isLoadingResponse" v-model="newMessage"
+                        placeholder="Type a message" @keyup.enter="sendMessage" @keyup.shift.enter.stop class="q-pb-md">
                         <template v-slot:append>
                             <q-btn :disable="sendBtnActive" flat round icon="send"
                                 :color="`${!sendBtnActive ? 'primary' : 'gray-9'}`" @click="sendMessage" />

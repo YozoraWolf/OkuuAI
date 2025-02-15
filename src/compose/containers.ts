@@ -72,7 +72,7 @@ export const runModel = async (model_name: string) => {
 
   Logger.INFO(`Pulling model: ${model_name} ...`);
   const ps = await ollama.list();
-  console.log(ps);
+  Logger.DEBUG("CURRENT MODELS: "+ JSON.stringify(ps.models, null, 2));
   const stream = await ollama.pull({ model: model_name, stream: true });
   const bar1 = new cliProgress.SingleBar({
     format: `Progress [${ConsoleColor.FgYellow} {bar} ] ${ConsoleColor.Reset}{percentage}% | ETA: {eta}s`,

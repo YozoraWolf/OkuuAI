@@ -125,11 +125,12 @@ export async function searchMemoryWithEmbedding(query: string) {
       : averageEmbeddings(queryEmbeddingResponse.embeddings);
 
     // Search for the most semantically relevant memory
-    const result = await redisClientMemory.ft.search('idx:memories', '*=>[KNN 3 @embedding $BLOB]', {
+    const result = await redisClientMemory.ft.search('idx:memories', '*=>[KNN 5 @embedding $BLOB]', {
       PARAMS: { BLOB: Buffer.from(new Float32Array(queryEmbedding).buffer) }, // Use the query embedding to search
       SORTBY: '__vector_score', // Sort by similarity score
       DIALECT: 2,
-      FILTER: '@type: !question', // Exclude documents where @type is 'question'
+      RETURN: ['message', 'timestamp', 'user', 'sessionId', 'type', '__vector_score'],
+      FILTER: '@type != "question"', // Exclude documents where @type is 'question'
     } as any); // Cast to any to bypass type checking
 
     //Logger.DEBUG('Search result: ' + JSON.stringify(result));

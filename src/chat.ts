@@ -67,7 +67,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         const memoryQuery = msg.message as string;
         const memories = await searchMemoryWithEmbedding(memoryQuery);
 
-        const memoryContext = memories?.documents.map((doc: any) => doc.value.message).join('\n');
+        const memoryContext = memories?.documents.map((doc: any, index: number) => `${index + 1}. ${doc.value.message}`).join('\n');
         Logger.DEBUG(`Retrieved Memories: ${JSON.stringify(memoryContext)}`);
 
         // Save user input in memory

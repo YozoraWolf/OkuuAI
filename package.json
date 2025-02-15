@@ -4,7 +4,8 @@
   "description": "Okuu AI",
   "exports": "./index.js",
   "scripts": {
-    "start": "./setup_ngrok.sh && ts-node ./src/index.ts",
+    "start-tunnel": "./setup_ngrok.sh && ts-node ./src/index.ts",
+    "start": "ts-node ./src/index.ts",
     "sync-ngrok": "ts-node ./sync-ngrok.ts",
     "nodemon": "nodemon --no-stdin",
     "build": "sucrase ./src -d ./dist --transforms typescript,imports",
@@ -21,6 +22,7 @@
   "author": "YozoraWolf",
   "license": "ISC",
   "dependencies": {
+    "@inquirer/prompts": "^7.3.1",
     "@redis/search": "^1.2.0",
     "@types/redis": "^4.0.11",
     "axios": "^1.6.8",
