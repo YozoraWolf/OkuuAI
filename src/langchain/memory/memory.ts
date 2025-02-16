@@ -13,7 +13,8 @@ const SESSION_JSON = "session.json";
 export let SESSION_ID: string;
 
 const generateSessionSettings = () => {
-  fs.writeFileSync(SESSION_JSON, JSON.stringify({}, null, 2));
+  const initialSettings = { sessionId: "0" };
+  fs.writeFileSync(SESSION_JSON, JSON.stringify(initialSettings, null, 2));
   Logger.INFO("Session settings generated successfully.");
 };
 
