@@ -1,5 +1,4 @@
 import { ConversationChain } from 'langchain/chains';
-import system from '../system.json';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import { Logger } from './logger';
@@ -43,7 +42,7 @@ export class Core {
         topP: 1,
         repeatPenalty: 1.15,
         numPredict: 250,
-        system: system.system,
+        system: "You are a friendly AI assistant.",
         stop: ["<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"], // Stop tokens
         template: Core.template // Pass the template here
     };
