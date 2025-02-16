@@ -11,12 +11,12 @@ dotenv.config();
 import axios from 'axios';
 import { Logger } from '@src/logger';
 import { exit } from 'process';
-import { M } from 'vite/dist/node/types.d-aGj9QkWt';
 
 const proxy_url = process.env.WEB_URL || '';
 const proxy_email = process.env.PROXY_EMAIL || '';
 const proxy_password = process.env.PROXY_PWD || '';
 const proxy_fwd_url = process.env.PROXY_FWD || '';
+const proxy_url_set = process.env.PROXY_URL || '';
 
 let token = "";
 
@@ -86,6 +86,13 @@ const updateOkuuAIRedirHost = async (id: number, ngrok_url: string) => {
 
 const init = async () => {
     Logger.INFO('Syncing ngrok with proxy...');
+
+    if (proxy_url_set) {
+        Logger.INFO('PROXY_URL is set. Skipping nginx sync.');
+        await isNgrokLoaded();
+        exit(0);
+    }
+
     token = await getToken();
     const hosts = await getRedirHosts();
     const okuuai_host = hosts.find((host: any) => host.domain_names[0].includes(proxy_fwd_url));
@@ -93,7 +100,6 @@ const init = async () => {
         Logger.ERROR('Host not found');
         exit(0);
     }
-
 
     await isNgrokLoaded();
     const ngrok_url = await getNgrokURl();

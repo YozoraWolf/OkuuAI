@@ -4,7 +4,7 @@ import { useAuthStore } from 'src/stores/auth.store';
 
 const getApiUrl = async () => {
     const apiUrl = await resolveHostRedirect();
-    return `https://${apiUrl}`;
+    return `${apiUrl}`;
 };
 
 const getAuthHeaders = () => {

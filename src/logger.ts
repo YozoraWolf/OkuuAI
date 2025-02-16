@@ -32,13 +32,24 @@ export const ConsoleColor: ConsoleColorMap = {
 };
 
 export class Logger {
-    private static logFilePath = path.join(__dirname, '..', 'logs', 'log.txt');
+    private static logFilePath = path.join(__dirname, '..', 'logs', `Log_${new Date().toISOString().replace(/T/, '_').replace(/:/g, '').replace(/\..+/, '')}.txt`);
     private static settings = {
         log: true,
         logToFile: false,
         debug: true,
-        initialized: false
+        initialized: false,
+        maxFileSize: 5 * 1024 * 1024 // 5MB default
     };
+
+    static loadSettings() {
+        const settingsPath = path.join(__dirname, '..', 'settings.json');
+        if (fs.existsSync(settingsPath)) {
+            const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+            if (settings.logs) {
+                Logger.settings = { ...Logger.settings, ...settings.logs };
+            }
+        }
+    }
 
     static removeColorCodes(message: string): string {
         for (const color in ConsoleColor) {
@@ -55,12 +66,12 @@ export class Logger {
             fs.mkdirSync(path.dirname(Logger.logFilePath), { recursive: true });
         }
 
-
         const currentDate = new Date();
         const formattedDate = currentDate.toISOString().replace(/T/, ' ').replace(/\..+/, '');
         const initialLog = `----------------- ${formattedDate} -----------------`;
         fs.appendFileSync(Logger.logFilePath, initialLog + '\n');
     }
+
     private static appendToLogFile(message: string) {
         if (!Logger.settings.logToFile) return;
 
@@ -75,7 +86,14 @@ export class Logger {
         message = this.removeColorCodes(message);
         message = `${logPrefix} ${message}`;
 
-
+        if (fs.existsSync(Logger.logFilePath) && fs.statSync(Logger.logFilePath).size >= Logger.settings.maxFileSize) {
+            const logDir = path.dirname(Logger.logFilePath);
+            const logBaseName = path.basename(Logger.logFilePath, '.txt');
+            const logFiles = fs.readdirSync(logDir).filter(file => file.startsWith(logBaseName));
+            const logIndex = logFiles.length;
+            Logger.logFilePath = path.join(logDir, `${logBaseName}_${logIndex}.txt`);
+            Logger.initializeLogFile();
+        }
 
         fs.appendFileSync(Logger.logFilePath, message + '\n');
     }
@@ -105,3 +123,5 @@ export class Logger {
         console.error('\x1b[31m[ERROR]\x1b[0m ' + message);
     }
 }
+
+Logger.loadSettings();

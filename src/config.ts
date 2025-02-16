@@ -1,8 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { Logger } from './logger';
-import { searchModels } from './modelUtils';
-import { Core } from './core';
 import { loadAssistantConfig, updateAssistantConfigJSON } from './o_utils';
 import { input, select, search } from '@inquirer/prompts';
 
@@ -68,13 +66,25 @@ export const defaultAssistantConfig = {
     template: ""
 };
 
-const defaultConfigFrontend: ConfigGUI = {
-    vite_port: 8000,
-    okuuai_port: 3000,
-    msg_limit: 20
+
+
+const defaultFront = {
+    VITE_API_URL: "",
+    VITE_LOCAL_API_URL: "http://localhost:3009",
+    VUE_ROUTER_MODE: "history",
+    LOCAL: "true"
 };
 
 const ask_input = ['ai_name', 'model_name', 'system', 'port'];
+
+const defaultSettings = {
+    logs: {
+        log: true,
+        logToFile: true,
+        debug: true,
+        maxFileSize: 5 * 1024 * 1024 // 5MB default
+    }
+};
 
 // Util
 function envToJSON(env: string): Config {
@@ -128,13 +138,24 @@ const configName: any = {
 
 const defaultValues = { ...defaultConfigAI };
 
+export const createSettingsFile = async (settings = defaultSettings) => {
+    const settingsPath = path.join(__dirname, '..', 'settings.json');
+    Logger.INFO('Creating settings.json file...');
+    try {
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), { encoding: 'utf8', flag: 'w' });
+    } catch (error) {
+        Logger.ERROR(`Failed to create settings.json file\n${error}`);
+    }
+};
+
 export const initConfig = async () => {
     if (arg === 'OVERRIDE') {
         loadEnv(); // this will first check if there's an existing .env file, if not, it will start the interactive configuration
     }
+    await createSettingsFile();
 };
 
-export const createEnvFile = (config: Config = defaultConfigAI) => {
+export const createEnvFile = async (config: Config = defaultConfigAI) => {
     let envStr = '';
     Logger.INFO('Creating .env file...');
     Logger.DEBUG(`Config: ${JSON.stringify(config)}`);
@@ -163,8 +184,44 @@ export const createEnvFile = (config: Config = defaultConfigAI) => {
         envStr += `PROXY_FWD=${config.proxy_fwd}\n`;
 
         fs.writeFileSync('.env', envStr, { encoding: 'utf8', flag: 'w' });
+
+        // Create frontend .env file
+        await createFrontendEnv({
+            VITE_API_URL: config.proxy_fwd,
+            VITE_LOCAL_API_URL: `http://localhost:${config.port}`,
+            VUE_ROUTER_MODE: "history",
+            LOCAL: "true"
+        });
     } catch (error) {
         Logger.ERROR(`Failed to create .env file\n${error}`);
+    }
+};
+
+const createFrontendEnv = async (config: any = defaultFront) => {
+    const frontendEnvPath = path.resolve(__dirname, "../src-site/okuu-control-center/.env");
+    if (fs.existsSync(frontendEnvPath)) {
+        const answer = await select({
+            message: 'A frontend .env file already exists. Do you want to overwrite it?',
+            choices: ['Yes', 'No'],
+            default: 'No'
+        });
+        if (answer === 'No') {
+            Logger.INFO('Operation cancelled by the user.');
+            return;
+        }
+    }
+    let envStr = '';
+    Logger.INFO('Creating frontend .env file...');
+    Logger.DEBUG(`Config: ${JSON.stringify(config)}`);
+    try {
+        envStr += `VITE_API_URL=${config.VITE_API_URL}\n`;
+        envStr += `VITE_LOCAL_API_URL=${config.VITE_LOCAL_API_URL}\n`;
+        envStr += `VUE_ROUTER_MODE=${config.VUE_ROUTER_MODE}\n`;
+        envStr += `LOCAL=${config.LOCAL}\n`;
+
+        fs.writeFileSync(frontendEnvPath, envStr, { encoding: 'utf8', flag: 'w' });
+    } catch (error) {
+        Logger.ERROR(`Failed to create frontend .env file\n${error}`);
     }
 };
 
@@ -254,12 +311,23 @@ export const interactiveConfig = async () => {
         }
     }
 
+    const enableLogs = await select({
+        message: 'Enable logging?',
+        choices: ['Yes', 'No'],
+        default: 'Yes'
+    });
+
+    const maxLogFileSize = await input({
+        message: 'Enter max log file size (in MB):',
+        default: '5'
+    });
+
     newConfig.model_name = selectedModel !== 'add_modelfile' ? selectedModel : "";
 
     const { system, ...settings } = newConfig;
 
     try {
-        createEnvFile(settings);
+        await createEnvFile(settings);
         updateFrontEnv();
         updateAssistantConfigJSON({
             name: newConfig.ai_name,
@@ -267,6 +335,14 @@ export const interactiveConfig = async () => {
             model: newConfig.model_name,
             modelfile: newConfig.modelfile,
             template: newConfig.template
+        });
+        await createSettingsFile({
+            logs: {
+                log: enableLogs === 'Yes',
+                logToFile: enableLogs === 'Yes',
+                debug: true,
+                maxFileSize: parseInt(maxLogFileSize) * 1024 * 1024
+            }
         });
     } catch (error) {
         Logger.ERROR(`Failed to create .env file\n${error}`);
@@ -278,17 +354,6 @@ export const interactiveConfig = async () => {
 
 // gui frontend configuration related
 const guiRootPath = path.resolve(__dirname, "../src-gui");
-
-const createFrontendEnv = (config: Config = defaultConfigFrontend) => {
-    Logger.INFO('Creating env.json file for GUI...');
-    Logger.DEBUG(`Config: ${JSON.stringify(config)}`);
-    try {
-        fs.writeFileSync(`${guiRootPath}/${envJsonName}`, JSON.stringify(config, null, 2), { encoding: 'utf-8', flag: 'w' });
-    } catch (error) {
-        Logger.ERROR(`Failed to create env.json file for GUI\n${error}`);
-    }
-    return config;
-};
 
 
 const updateFrontEnv = () => {

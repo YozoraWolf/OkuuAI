@@ -1,12 +1,14 @@
 # ☢️ OkuuAI ☢️
 
+[🇺🇸 English](README.md) | [🇯🇵 日本語](readmes/README-JP.md) | [🇫🇷 Français](readmes/README-FR.md) | [🇲🇽 Español](readmes/README-ES.md)
+
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-OkuuAI is a project built using LLM (Language Model) technology. It aims to provide advanced AI capabilities for assisting in multiple tasks, including programming, providing context using vision and more!
+OkuuAI is a project built using LLM (Large Language Model) technology. It aims to provide advanced AI capabilities for assisting in multiple tasks, including plain chatting, programming, providing context using vision (coming soon) and more!
 
 OkuuAI runs locally using your CPU + GPU, providing full privacy.
 
-Currently runs on **Linux** only.
+### Now works on Windows as well! 🆕 🎉
 
 ## 📝 Dependencies
 
@@ -65,6 +67,7 @@ OLLAMA_DEFAULT_MODEL=llama3 # Default model for Ollama if none is specified duri
 
 # Network (Optional - For remote access)
 WEB_URL=http://nginxproxymanager.com # Web URL for the nginx proxy manager interface
+PROXY_URL= # If specified, it won't update anything in the nginx proxy manager and just start nginx with the existing proxy URL (WILL BE USED FOR FRONTEND)
 PROXY_EMAIL= # Email for the Nginx Proxy Manager
 PROXY_PWD= # Password for the Nginx Proxy Manager (to update the redirect URL to the Ngrok one)
 PROXY_FWD= # Web URL for the server / Ngrok URL / Nginx Proxy Manager Redirect Host URL
@@ -89,6 +92,10 @@ This will start the Ngrok tunnel and update the Nginx Proxy Manager redirect URL
 If you feel you messed up your env file or assitant file, you can always rerun the config script to reset everything.
 
 ```npm run config```
+
+### settings.json
+
+The `settings.json` file is used to save current application settings, such as the current memory session, logging, and more. Edit if you want to turn off logging or change the current memory session for terminal.
 
 # Frontend 🆕
 

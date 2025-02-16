@@ -4,7 +4,7 @@ import { resolveHostRedirect } from 'src/utils/okuuai_utils';
 
 const getApiUrl = async () => {
     const apiUrl = await resolveHostRedirect();
-    return `https://${apiUrl}`;
+    return `${apiUrl}`;
 };
 
 const getAuthHeaders = () => {

@@ -1,4 +1,4 @@
-import { checkOllamaService, downloadFile, loadAssistantConfig, updateAssistantConfigJSON } from './o_utils';
+import { downloadFile, loadAssistantConfig, updateAssistantConfigJSON } from './o_utils';
 import fs from 'fs';
 import { Core, Status } from './core';
 import { centeredLogoTxt } from './intro';
@@ -7,7 +7,7 @@ import { ConsoleColor, Logger } from './logger';
 //import { initDockerChromaDB } from './langchain/chromadb'; // Perhaps to be deleted.
 import dotenv from 'dotenv';
 import { SESSION_SETTINGS, startSession } from './langchain/memory/memory';
-import { initConfig, loadEnv, interactiveConfig, createEnvFile, defaultConfigAI, defaultAssistantConfig } from './config';
+import { initConfig, loadEnv, interactiveConfig, createEnvFile, defaultAssistantConfig } from './config';
 import { initUsersDB } from './services/user.service';
 import { runModel, startAndMonitorContainers } from './compose/containers';
 import { initRedis } from './langchain/redis';
@@ -15,7 +15,7 @@ import { select } from '@inquirer/prompts';
 
 dotenv.config();
 
-const downloadModelFile = async (url: string, path: string) => {
+/* const downloadModelFile = async (url: string, path: string) => {
     if (!fs.existsSync(path)) {
         if(!fs.existsSync(Core.model_path)) {
             Logger.INFO('Creating model directory...');
@@ -29,7 +29,7 @@ const downloadModelFile = async (url: string, path: string) => {
         Logger.INFO('Model file exists. Skipping...');
     }
 };
-
+ */
 const promptForConfig = async () => {
     const answer = await select({
         message: 'Configuration files not found. Do you want to start the interactive configuration or use default settings?',
@@ -40,7 +40,7 @@ const promptForConfig = async () => {
     if (answer === 'Interactive Configuration') {
         await interactiveConfig();
     } else {
-        createEnvFile();
+        await createEnvFile();
         updateAssistantConfigJSON(defaultAssistantConfig);
     }
 };

@@ -12,3 +12,4 @@ session.json
 *.env*
 /src/assets/okuu_pfp.*
 assistant.json
+settings.json
