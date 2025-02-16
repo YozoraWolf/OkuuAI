@@ -8,11 +8,14 @@ import { Logger } from "@src/logger";
 import fs from "fs";
 import { ChatMessage, setMessagesCount } from "@src/chat";
 import { redisClientMemory, saveMemoryWithEmbedding } from "../redis";
-import { getSessionMsgs } from "@src/controllers/memory.controller";
-import { l } from "vite/dist/node/types.d-aGj9QkWt";
 
 const SESSION_JSON = "session.json";
 export let SESSION_ID: string;
+
+const generateSessionSettings = () => {
+  fs.writeFileSync(SESSION_JSON, JSON.stringify({}, null, 2));
+  Logger.INFO("Session settings generated successfully.");
+};
 
 export const loadSettings = (): any => {
   if (fs.existsSync(SESSION_JSON)) {
@@ -172,11 +175,6 @@ export const switchToSession = async (sessionId: string | null) => {
   Core.chat_session = await startSession(sessionId);
   //Logger.INFO(`Switched to session: ${Core.chat_session.}`);
   if (sessionId !== null) saveSessionIdToSettings(sessionId); // save to settings if not null
-};
-
-const generateSessionSettings = () => {
-  fs.writeFileSync(SESSION_JSON, JSON.stringify({}, null, 2));
-  Logger.INFO("Session settings generated successfully.");
 };
 
 export const saveSessionIdToSettings = (sessionId: string) => {
