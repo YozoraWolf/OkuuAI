@@ -328,7 +328,7 @@ export const interactiveConfig = async () => {
 
     try {
         await createEnvFile(settings);
-        updateFrontEnv();
+        //updateFrontEnv();
         updateAssistantConfigJSON({
             name: newConfig.ai_name,
             system_prompt: newConfig.system,
@@ -353,22 +353,21 @@ export const interactiveConfig = async () => {
 };
 
 // gui frontend configuration related
-const guiRootPath = path.resolve(__dirname, "../src-gui");
-
+// const guiRootPath = path.resolve(__dirname, "../src-gui");
 
 const updateFrontEnv = () => {
-    let env: ConfigGUI;
-    if (!fs.existsSync(`${guiRootPath}/${envJsonName}`)) {
-        Logger.WARN(`Failed to load GUI's ${envJsonName} file. Creating new one...`);
-        env = {};
+    //let env: ConfigGUI;
+    // if (!fs.existsSync(`${guiRootPath}/${envJsonName}`)) {
+    //     Logger.WARN(`Failed to load GUI's ${envJsonName} file. Creating new one...`);
+    //     env = {};
 
-    } else {
-        Logger.INFO(`Updating frontend ${envJsonName} file...`);
-        env = JSON.parse(fs.readFileSync(`${guiRootPath}/${envJsonName}`, 'utf8'));
-    }
-    env.gui_port = newConfig.gui_port;
-    env.okuuai_port = newConfig.port;
-    createFrontendEnv(env);
+    // } else {
+    //     Logger.INFO(`Updating frontend ${envJsonName} file...`);
+    //     env = JSON.parse(fs.readFileSync(`${guiRootPath}/${envJsonName}`, 'utf8'));
+    // }
+    //env.gui_port = newConfig.gui_port;
+    //env.okuuai_port = newConfig.port;
+    //createFrontendEnv(env);
 };
 
 // Assistant Configuration
