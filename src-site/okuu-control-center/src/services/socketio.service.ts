@@ -68,7 +68,15 @@ export class SocketioService {
             await configStore.fetchOkuuPfp();
             message.avatar = configStore.okuuPfp;
             console.log('Received chat message:', message);
-            this.sessionStore.addMessageToSession(message);
+            if (message.stream) {
+                if (!this.sessionStore.hasMessageInSession(message.memoryKey)) {
+                    this.sessionStore.addMessageToSession(message);
+                } else {
+                    this.sessionStore.updateMessageInSession(message.memoryKey, message.message, message.done);
+                }
+            } else {
+                this.sessionStore.addMessageToSession(message);
+            }
         });
 
         this.socket.on('disconnect', (reason) => {
@@ -80,8 +88,6 @@ export class SocketioService {
             }
             this.updateStatus(Status.DISCONNECTED);
         });
-
-
 
         this.socket.on('ping', () => {
             //console.log('Ping received');

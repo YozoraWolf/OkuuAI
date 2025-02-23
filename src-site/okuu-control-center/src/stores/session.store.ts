@@ -7,6 +7,8 @@ export interface Message {
     message: string;
     avatar?: string;
     memoryKey: string;
+    stream: boolean;
+    done: boolean;
 }
 
 export interface Session {
@@ -19,12 +21,14 @@ export interface Session {
 interface SessionStore {
     sessions: Session[];
     currentSessionId: string;
+    isStreaming: boolean;
 }
 
 export const useSessionStore = defineStore('session', {
     state: (): SessionStore => ({
         sessions: [],
         currentSessionId: '',
+        isStreaming: false,
     }),
     actions: {
         async fetchAllSessions() {
@@ -112,6 +116,29 @@ export const useSessionStore = defineStore('session', {
                 session.lastMessage = message;
                 this.orderSessions();
             }
+            if(message.stream) {
+                this.isStreaming = true;
+            }
+        },
+        updateMessageInSession(memoryKey: string, newMessage: string, finishStreaming: boolean = true) {
+            const session = this.sessions.find((session: Session) => session.sessionId === this.currentSessionId);
+            if (session) {
+                const message = session.messages.find((msg: Message) => msg.memoryKey === memoryKey);
+                if (message) {
+                    message.message = newMessage;
+                }
+            }
+            this.isStreaming = true;
+            if (finishStreaming) {
+                this.isStreaming = false;
+            }
+        },
+        hasMessageInSession(memoryKey: string): boolean {
+            const session = this.sessions.find((session: Session) => session.sessionId === this.currentSessionId);
+            if (session) {
+                return session.messages.some((msg: Message) => msg.memoryKey === memoryKey);
+            }
+            return false;
         },
         setCurrentSessionId(sessionId: string) {
             this.currentSessionId = sessionId;

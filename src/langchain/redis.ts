@@ -14,6 +14,7 @@ export const initRedis = async () => {
         url: REDIS_URL
       });
     await redisClientMemory.connect();
+    //await deleteMemoryIndex(); // DEBUG. Do not uncomment unless you want to lose your memories.
     await createMemoryIndex();
 }
 
@@ -44,6 +45,7 @@ async function createMemoryIndex() {
             user: { type: SchemaFieldTypes.TEXT },
             sessionId: { type: SchemaFieldTypes.TEXT },
             type: { type: SchemaFieldTypes.TAG },
+            recall_count: { type: SchemaFieldTypes.NUMERIC, SORTABLE: true },
             __vector_score: { type: SchemaFieldTypes.NUMERIC, SORTABLE: true },
             embedding: {
               type: SchemaFieldTypes.VECTOR,
@@ -89,7 +91,8 @@ export async function saveMemoryWithEmbedding(memoryKey: string, message: string
       memoryKey,
       type,
       user,
-      embedding: Buffer.from(new Float32Array(embedding).buffer),  // Save as embedding, not base64
+      recall_count: 0,
+      embedding: Buffer.from(new Float32Array(embedding).buffer)
     });
 
     //Logger.DEBUG('Memory with embedding saved. Key: ' + memoryKey);
@@ -114,9 +117,19 @@ function averageEmbeddings(embeddings: number[][]): number[] {
   return summed.map(val => val / embeddings.length); // Divide by the number of embeddings
 }
 
-export async function searchMemoryWithEmbedding(query: string) {
+// If memory is called more frequently increse its recall count
+async function updateRecallCount(memories: any[]) {
+  for (const memory of memories) {
+    const memoryKey = memory.memoryKey;
+    if (memoryKey) {
+      await redisClientMemory.hIncrBy(memoryKey, "recall_count", 1);
+    }
+  }
+}
+
+export async function searchMemoryWithEmbedding(query: string, topK: number = 5) {
   try {
-    // Generate query embedding using Ollama
+    // Generate query embedding
     const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
     const queryEmbeddingResponse = await ollama.embed({ input: query, model: "nomic-embed-text" });
 
@@ -124,22 +137,53 @@ export async function searchMemoryWithEmbedding(query: string) {
       ? queryEmbeddingResponse.embeddings[0]
       : averageEmbeddings(queryEmbeddingResponse.embeddings);
 
-    // Search for the most semantically relevant memory
-    const result = await redisClientMemory.ft.search('idx:memories', '*=>[KNN 5 @embedding $BLOB]', {
-      PARAMS: { BLOB: Buffer.from(new Float32Array(queryEmbedding).buffer) }, // Use the query embedding to search
+    // Ensure correct embedding format (raw binary)
+    const blobEmbedding = Buffer.from(new Float32Array(queryEmbedding).buffer)
+
+    // Perform KNN search with dynamic topK value
+    const result = await redisClientMemory.ft.search('idx:memories', 
+      `*=>[KNN ${topK} @embedding $BLOB]`, {
+      PARAMS: { 
+        BLOB: blobEmbedding // Use the query embedding
+      },
       SORTBY: '__vector_score', // Sort by similarity score
       DIALECT: 2,
-      RETURN: ['message', 'timestamp', 'user', 'sessionId', 'type', '__vector_score'],
+      RETURN: ['message', 'timestamp', 'user', 'sessionId', 'type', '__vector_score', 'recall_count'], // Include recall_count in the return
       FILTER: '@type != "question"', // Exclude documents where @type is 'question'
     } as any); // Cast to any to bypass type checking
 
-    //Logger.DEBUG('Search result: ' + JSON.stringify(result));
-    return result;
+    console.log("Result: ", result);
+    
+    // Sort results manually based on priority logic
+    let memories = result.documents.map(doc => ({
+      message: doc.value.message,
+      timestamp: Number(doc.value.timestamp),
+      user: doc.value.user,
+      sessionId: doc.value.sessionId,
+      type: doc.value.type,
+      vectorScore: Number(doc.value.__vector_score),
+      recallCount: Number(doc.value.recall_count || 0), // Include recall count
+      priority: Number(doc.value.priority || 0),
+    }));
+
+    // Custom scoring: Mix vector similarity with priority & recall count
+    memories.sort((a, b) => {
+      const scoreA = 0.5 * a.vectorScore + 0.3 * -a.timestamp + 0.2 * -a.recallCount + 0.2 * -a.priority;
+      const scoreB = 0.5 * b.vectorScore + 0.3 * -b.timestamp + 0.2 * -b.recallCount + 0.2 * -b.priority;
+      return scoreA - scoreB;
+    });
+
+    // Update recall count for retrieved memories
+    await updateRecallCount(memories);
+
+    return memories;
   } catch (error: any) {
     Logger.ERROR('Error searching memories with embedding: ' + error.message);
     throw error;
   }
 }
+
+
 
 export function isQuestion(input: string): boolean {
   const questionWords = ["who", "what", "where", "when", "why", "how", "is", "are", "do", "does", "can"];
@@ -177,3 +221,14 @@ export async function deleteMemoryKey(key: string) {
     }
   });
 }
+
+// Debug, usually not necessary
+// Delete Memory Index off DB
+const deleteMemoryIndex = async () => {
+  try {
+    await redisClientMemory.ft.dropIndex('idx:memories');
+    Logger.DEBUG('Memory index dropped.');
+  } catch (error) {
+    Logger.ERROR('Error dropping memory index: ' + error);
+  }
+};

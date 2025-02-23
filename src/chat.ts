@@ -56,7 +56,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             message: '',
             done: false,
             lang: 'en-US',
-            timestamp: Date.now(),
+            timestamp: Date.now() + 1000, // Add 1 sec to avoid same timestamp
             sessionId: msg.sessionId || SESSION_ID || '',
             stream: msg.stream || false,
         };
@@ -67,7 +67,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         const memoryQuery = msg.message as string;
         const memories = await searchMemoryWithEmbedding(memoryQuery);
 
-        const memoryContext = memories?.documents.map((doc: any, index: number) => `${index + 1}. ${doc.value.message}`).join('\n');
+        const memoryContext = memories?.map((doc: any, index: number) => `${index + 1}. ${doc.message}`).join('\n');
         Logger.DEBUG(`Retrieved Memories: ${JSON.stringify(memoryContext)}`);
 
         // Save user input in memory
@@ -93,23 +93,31 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             NOTE: Any memories talking in first person are from the user. Only use the following memories only if they are relevant to the conversation.
             ${memoryContext}
             ---
+            Chat History:
             ${chatHistory}
             Okuu: 
         `;
 
         Logger.DEBUG(`Prompt: ${prompt}`);
+        Logger.DEBUG(`Message: ${JSON.stringify(msg, null, 2)}`);
 
         if (msg.stream) {
-            io.emit('chat', reply); // send back AI response (for GUI to display and await)
+
+            reply.done = false;
+            reply.lang = langMappings[franc(reply.message)] || 'en-US';
+            const timestamp = Date.now() + 1000; // Add 1 sec to avoid same timestamp
+            const aiMemoryKey = `okuuMemory:${reply.sessionId}:${timestamp}`;
+            reply.memoryKey = aiMemoryKey;
+            reply.timestamp = timestamp;
+
+            io.to(msg.sessionId).emit('chat', reply); // send back AI response (for GUI to display and await)
             const stream = await ollama.generate({
                 prompt,
                 model: Core.model_name,
                 stream: true,
             });
 
-            reply.done = false;
-            reply.lang = langMappings[franc(reply.message)] || 'en-US';
-            reply.timestamp = timestamp;
+
             
             for await (const part of stream) {
                 if (callback) callback(part.response);
@@ -119,7 +127,17 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             }
 
             reply.done = true;
-            io.emit('chat', reply);
+            
+            // TODO: Search a way to make this the last message sent in stream, since it's not getting sent last
+            io.to(msg.sessionId).emit('chat', reply);
+
+            // Save AI response in memory
+
+            const messageTypeAI = isQuestion(reply.message as string) ? 'question' : 'statement';
+            const aiSaved = await saveMemoryWithEmbedding(aiMemoryKey, reply.message as string, "okuu", messageTypeAI);
+            //Logger.DEBUG(`Saved AI memory: ${aiSaved}`);
+
+            return reply.message;
             //Logger.DEBUG(`Response: ${reply.content}`);
         } else {
             //Logger.DEBUG(`Loading Response...`);

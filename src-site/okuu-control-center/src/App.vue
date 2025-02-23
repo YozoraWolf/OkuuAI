@@ -1,5 +1,5 @@
 <template>
-  <MainLayout />
+  <MainLayout class="q-dark" />
 </template>
 
 <script setup lang="ts">
@@ -13,5 +13,4 @@ onMounted(() => {
   console.log('%c☢️ Hello, OkuuAI Control Center!', 'font-size: 20px;');
   authStore.loadApiKey();
 });
-//
 </script>

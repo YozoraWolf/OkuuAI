@@ -69,3 +69,4 @@ export const sendAttachment = async (formData: FormData) => {
     });
     return response;
 }
+

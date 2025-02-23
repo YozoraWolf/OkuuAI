@@ -1,12 +1,12 @@
 <template>
     <q-layout view="hHh Lpr lFf" class="full-height">
-        <q-drawer side="right" bordered v-model="drawer" :mini="mini" class="border-left" @mouseenter="mini = false"
-            @mouseleave="mini = true">
+        <q-drawer side="right" bordered v-model="drawer" :mini="mini" class="border-left" 
+            @mouseenter="startHoverTimer" @mouseleave="stopHoverTimer">
             <q-list>
                 <q-item v-for="session in sessions" :key="session.sessionId" class="flex flex-center" clickable
                     @click="selectSession(session)" :active="session.sessionId === selectedSession?.sessionId">
                     <q-icon name="chat" color="white" class="q-mx-md" />
-                    <q-item-section color="white">{{ session.sessionId }}: {{ session.lastMessage?.user as string }}: {{ truncate(session.lastMessage?.message as string, 30)
+                    <q-item-section class="text-white">{{ session.sessionId }}: {{ session.lastMessage?.user as string }}: {{ truncate(session.lastMessage?.message as string, 30)
                         }}</q-item-section>
                     <q-btn v-if="!mini" flat round color="white" icon="close"
                         @click="removeSession(session.sessionId)" />
@@ -35,7 +35,7 @@
                     <h1>Chat</h1>
                     <h2>Select a session to start chatting</h2>
                 </div>
-                <div v-if="isLoadingResponse">
+                <div v-if="isLoadingResponse || isStreaming">
                     <q-spinner-dots color="primary" size="md" class="q-mx-md" />
                 </div>
                 <div class="chat-input text-white q-pa-md" v-if="selectedSession">
@@ -111,15 +111,37 @@ const okuu_pfp = ref<string>('');
 
 const attachment = ref<File | null>(null);
 
+const stream = computed(() => configStore.stream);
+const isStreaming = computed(() => sessionStore.isStreaming);
+
+const hoverTimer = ref<number | null>(null);
+
+const startHoverTimer = () => {
+    hoverTimer.value = window.setTimeout(() => {
+        mini.value = false;
+    }, 500);
+};
+
+const stopHoverTimer = () => {
+    if (hoverTimer.value) {
+        clearTimeout(hoverTimer.value);
+        hoverTimer.value = null;
+    }
+    mini.value = true;
+};
+
 const showConfigModal = () => {
     $q.dialog({
-        component: ChatConfigModal
+        component: ChatConfigModal,
+        componentProps: {
+            stream: configStore.stream
+        }
     })
         .onDismiss(() => {
             console.log('dismissed');
         })
-        .onOk(() => {
-            console.log('ok');
+        .onOk((data) => {
+            console.log('ok', data);
         })
         .onCancel(() => {
             console.log('cancel');
@@ -171,6 +193,8 @@ const sendMessage = async () => {
             message: newMessage.value,
             sessionId: selectedSession.value.sessionId,
             memoryKey: '',
+            stream: stream.value,
+            done: false,
         };
         socket.value?.emit('chat', message);
         newMessage.value = '';

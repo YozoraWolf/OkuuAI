@@ -1,5 +1,5 @@
 <template>
-    <div class="chat-message row no-wrap q-mb-sm full-width">
+    <div class="chat-message row no-wrap q-mb-sm full-width" @mouseover="showDeleteBtn = true" @mouseleave="showDeleteBtn = false">
         <q-avatar :src="avatar" size="32px" round class="avatar flex flex-center">
             <template v-if="!avatar">
                 <div class="no-avatar flex flex-center" style="width: 32px; height: 32px;">
@@ -14,7 +14,7 @@
                     <span class="user row">{{ user }}</span>
                     <span class="timestamp row">{{ formattedTimestamp }}</span>
                 </div>
-                <div class="flex self-end" v-if="deleteBtn">
+                <div class="flex self-end" v-if="deleteBtn && showDeleteBtn">
                     <q-btn flat dense icon="mdi-trash-can" class="" color="red-5" @click="deleteMessage">
                     </q-btn>
                 </div>
@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps, computed } from 'vue';
+import { defineProps, computed, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useSessionStore } from 'src/stores/session.store';
 import dayjs from 'dayjs';
@@ -50,6 +50,8 @@ const props = defineProps({
         default: false,
     }
 });
+
+const showDeleteBtn = ref(false);
 
 const formattedTimestamp = computed(() => {
     const userTimezone = localStorage.getItem('userTimezone') || dayjs.tz.guess();

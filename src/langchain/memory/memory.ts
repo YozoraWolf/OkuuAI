@@ -63,7 +63,8 @@ const getSessionsCount = async (): Promise<number> => {
   sessionKeys = sessionKeys.filter(key => !key.includes("file"));
   const uniqueSessionIds = new Set(sessionKeys.map(key => key.split(':')[1]));
   // get the highest index
-  const newSessionId = Math.max(...Array.from(uniqueSessionIds).map(id => parseInt(id)));
+  const newSessionId = uniqueSessionIds.size > 0 ? Math.max(...Array.from(uniqueSessionIds).map(id => parseInt(id))) : 0;
+  Logger.INFO(`New Session ID: ${newSessionId}`);
   return newSessionId;
 };
 

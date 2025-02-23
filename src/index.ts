@@ -45,7 +45,7 @@ export let io: Server;
     app.use(fileUpload({
         limits: { fileSize: 5 * 1024 * 1024 }, // 5MB file size limit
         useTempFiles: false,
-        debug: true,
+        debug: false,
     }));
 
     // REST API routes

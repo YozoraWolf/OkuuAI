@@ -4,7 +4,8 @@ import { getOkuuPfp, uploadOkuuPfp, deleteOkuuPfp } from 'src/services/config.se
 export const useConfigStore = defineStore('config', {
     state: () => ({
         okuuPfp: '',
-        zoomLevel: 100
+        zoomLevel: 100,
+        stream: false,
     }),
     actions: {
         setZoomLevel(zoomLevel: number) {
@@ -37,6 +38,9 @@ export const useConfigStore = defineStore('config', {
             } catch (error) {
                 console.error('Failed to delete Okuu profile picture:', error);
             }
+        },
+        setStream(stream: boolean) {
+            this.stream = stream;
         }
     }
 });
