@@ -10,7 +10,7 @@ const getApiUrl = async () => {
 const getAuthHeaders = () => {
     const authStore = useAuthStore();
     return {
-        'x-api-key': authStore.getApiKey,
+        'x-api-key': authStore.apiKey,
         'Content-Type': 'application/json',
         "ngrok-skip-browser-warning": true,
     };
@@ -21,9 +21,6 @@ export const getAllSessions = async () => {
     const response = await axios.get(`${apiUrl}/memory/sessions`, {
         headers: getAuthHeaders(),
     });
-    console.log("HEarders:", getAuthHeaders());
-    console.log("URL:", `${apiUrl}/memory/sessions`);
-    console.log('Fetched sessions:', response.data);
     return response;
 };
 

@@ -59,10 +59,18 @@ export class Logger {
         }
         return message;
     }
+
+    static LogRateAlertToFile(level: string, req: any) {
+        const currentDate = new Date();
+        const formattedDate = currentDate.toISOString().replace(/T/, ' ').replace(/\..+/, '');
+        const logPrefix = `[${formattedDate}] `;
+        const message = `${logPrefix} ${level.toUpperCase()} Rate limit exceeded for IP: ${req.ip}`;
+        Logger.appendToLogFile(message);
+    }
     
     private static initializeLogFile() {
         if (!fs.existsSync(path.dirname(Logger.logFilePath))) {
-            console.log('Creating logs directory...');
+            Logger.INFO('Creating logs directory...');
             fs.mkdirSync(path.dirname(Logger.logFilePath), { recursive: true });
         }
 

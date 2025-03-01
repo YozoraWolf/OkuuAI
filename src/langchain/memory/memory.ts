@@ -241,10 +241,8 @@ export const createSession = async (): Promise<any> => {
   if (await doesSessionExist(sessionId)) {
     return null;
   }
-  const timestamp = Date.now();
-  const key = `okuuMemory:${sessionId}:${timestamp}`;
-  const memoryKey = await saveMemoryWithEmbedding(key, "Session started", "system", "statement");
-  const session: any = await getLatestMsgsFromSession(sessionId, 1000);
+  const memoryKey = await saveMemoryWithEmbedding(sessionId, "Session started", "system", "statement");
+  const session: any = await getLatestMsgsFromSession(sessionId, 100);
   const newSession: any = {
     sessionId,
     messages: session.messages,
@@ -274,7 +272,8 @@ export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: num
         user: sessionData['user'],
         message: sessionData['message'],
         timestamp: parseInt(sessionData['timestamp']),
-        memoryKey: sessionData['memoryKey']
+        attachment: sessionData['attachment'],
+        file: sessionData['file']
        };
       // Directly add sessionData to the array
       allMessagesWithTimestamps.push(sessData);
@@ -321,7 +320,6 @@ const getLastMsgFromSession = async (sessionId: string): Promise<ChatMessage | n
     user: latestMsg['user'],
     message: latestMsg['message'],
     timestamp: parseInt(latestMsg['timestamp']),
-    memoryKey: latestMsg['memoryKey']
   };
 
   return msg;

@@ -61,10 +61,15 @@ export const init = async () =>
 
     // Load assistant configuration
     const assistantConfig = loadAssistantConfig();
-    Core.ai_name = assistantConfig.name;
-    Core.model_name = assistantConfig.model;
-    Core.model_settings.system = assistantConfig.system_prompt;
-    Core.template = assistantConfig.template;
+    Core.ai_name = assistantConfig.name ? assistantConfig.name : Core.ai_name;
+    Core.model_name = assistantConfig.model ? assistantConfig.model : Core.model_name;
+    Core.model_settings.system = assistantConfig.system_prompt ? assistantConfig.system_prompt : Core.model_settings.system;
+    Core.template = assistantConfig.template ? assistantConfig.template : Core.template;
+    Core.global_memory = assistantConfig.global_memory ? assistantConfig.global_memory : Core.global_memory;
+
+    Logger.DEBUG(`Assistant: ${Core.ai_name}`);
+    Logger.DEBUG(`Model: ${Core.model_name}`);
+    Logger.DEBUG(`System Prompt: ${Core.model_settings.system}`);
   
     // check if the ollama service is on, if not, start it
     //await checkOllamaService();

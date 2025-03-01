@@ -3,6 +3,7 @@ import path from 'path';
 import { Logger } from './logger';
 import { loadAssistantConfig, updateAssistantConfigJSON } from './o_utils';
 import { input, select, search } from '@inquirer/prompts';
+import { Core } from './core';
 
 // Interfaces & Defaults
 
@@ -107,9 +108,6 @@ function envToJSON(env: string): Config {
 
 // Load OVERRIDE if present in arguments
 const arg = process.argv[2];
-
-const envJsonName = 'env.json';
-
 
 let currentConfig: Config = { ...defaultConfigAI };
 const newConfig: Config = { ...defaultConfigAI };
@@ -370,8 +368,50 @@ const updateFrontEnv = () => {
     //createFrontendEnv(env);
 };
 
+// Update assistant.json's model field
+const switchModel = async () => {
+    const currentModel = loadAssistantConfig().model;
+
+    const selectedModel: string = await search({
+        message: `Select a model (${currentModel ? currentModel : "none"}):`,
+        source: async (input, { signal }) => {
+            if (!input) {
+                return [];
+            }
+
+            const response = await fetch(
+                `https://ollamadb.dev/api/v1/models?search=${encodeURIComponent(input)}`,
+                { signal },
+            );
+            const data = await response.json();
+
+            return data.models.map((model: any) => ({
+                name: model.model_name,
+                value: model.model_name,
+            }));
+        },
+    });
+
+    updateAssistantConfigJSON({ model: selectedModel });
+
+    Core.model_name = selectedModel;
+
+    Logger.INFO(`✅ Model updated to ${selectedModel}`);
+}
+    
+
 // Assistant Configuration
+if (require.main === module) {
+    if (arg === undefined) {
+        Logger.INFO(`Usage: npm run config [OVERRIDE | MODEL_OR]`);
+        process.exit(0);
+    }
+}
 
 if (arg === 'OVERRIDE') {
     initConfig(); // this will first check if there's an existing .env file, if not, it will start the interactive configuration
+}
+
+if(arg === 'MODEL_OR')  {
+    switchModel();
 }

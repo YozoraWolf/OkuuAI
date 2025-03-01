@@ -1,12 +1,13 @@
 <template>
     <q-layout view="hHh Lpr lFf" class="full-height">
-        <q-drawer side="right" bordered v-model="drawer" :mini="mini" class="border-left" 
-            @mouseenter="startHoverTimer" @mouseleave="stopHoverTimer">
+        <q-drawer side="right" bordered v-model="drawer" :mini="mini" class="border-left" @mouseenter="startHoverTimer"
+            @mouseleave="stopHoverTimer">
             <q-list>
                 <q-item v-for="session in sessions" :key="session.sessionId" class="flex flex-center" clickable
-                    @click="selectSession(session)" :active="session.sessionId === selectedSession?.sessionId">
+                    @click="selectSession(session.sessionId)" :active="session.sessionId === selectedSessionId">
                     <q-icon name="chat" color="white" class="q-mx-md" />
-                    <q-item-section class="text-white">{{ session.sessionId }}: {{ session.lastMessage?.user as string }}: {{ truncate(session.lastMessage?.message as string, 30)
+                    <q-item-section class="text-white">{{ session.sessionId }}: {{ session.lastMessage?.user as string
+                        }}: {{ truncate(session.lastMessage?.message as string, 30)
                         }}</q-item-section>
                     <q-btn v-if="!mini" flat round color="white" icon="close"
                         @click="removeSession(session.sessionId)" />
@@ -22,13 +23,13 @@
         <q-page-container class="q-pa-none window-height">
             <div class="chat-container full-width window-height">
                 <div class="chat-messages q-pa-md" v-if="selectedSession" ref="chatMessagesRef" v-scale>
+                    <q-inner-loading :showing="isLoadingSessionMessages">
+                        <q-spinner color="primary" size="70" />
+                    </q-inner-loading>
                     <ChatMessage v-for="(message, index) in selectedSession.messages" :key="index"
                         :timestamp="message.timestamp" :user="message.user"
-                        :avatar="message.user.toLocaleLowerCase() === 'okuu' ? okuu_pfp : ''"
-                        :message="message.message" 
-                        :memoryKey="message.memoryKey" 
-                        :deleteBtn="index !== 0"
-                        />
+                        :avatar="message.user.toLocaleLowerCase() === 'okuu' ? okuu_pfp : ''" :message="message"
+                        :deleteBtn="index !== 0" />
                 </div>
                 <div v-else class="chat-messages q-pa-md flex flex-center column">
                     <q-icon name="chat" size="100px" color="white" />
@@ -39,8 +40,9 @@
                     <q-spinner-dots color="primary" size="md" class="q-mx-md" />
                 </div>
                 <div class="chat-input text-white q-pa-md" v-if="selectedSession">
-                    <q-input type="textarea" autogrow :disable="!selectedSession || isLoadingResponse" v-model="newMessage"
-                        placeholder="Type a message" @keyup.enter="sendMessage" @keyup.shift.enter.stop class="q-pb-md">
+                    <q-input type="textarea" autogrow :disable="!selectedSession || isLoadingResponse"
+                        v-model="newMessage" placeholder="Type a message" @keyup.enter="sendMessage"
+                        @keyup.shift.enter.stop class="q-pb-md">
                         <template v-slot:append>
                             <q-btn :disable="sendBtnActive" flat round icon="send"
                                 :color="`${!sendBtnActive ? 'primary' : 'gray-9'}`" @click="sendMessage" />
@@ -85,20 +87,25 @@ import { Socket } from 'socket.io-client';
 import { truncate } from 'src/utils/okuuai_utils';
 import { useConfigStore } from 'src/stores/config.store';
 import ChatConfigModal from 'src/components/chat/ChatConfigModal.vue';
+import { useAuthStore } from 'src/stores/auth.store';
+import { useRouter } from 'vue-router';
 
 const drawer = ref(true);
 const mini = ref(true);
 const newMessage = ref('');
 const sessionStore = useSessionStore();
 const configStore = useConfigStore();
+const authStore = useAuthStore();
 const sessions = computed(() => sessionStore.sessions);
-const selectedSession = ref<Session | null>(null);
+const selectedSessionId = ref<string | undefined>(undefined);
 const chatMessagesRef = ref();
 
 const isLoadingResponse = ref(false);
+const isLoadingSessionMessages = ref(false);
 const inputTimeout = ref();
 
 const $q = useQuasar();
+const router = useRouter();
 
 const socketIO = ref<SocketioService | null>();
 const socket = ref<Socket>();
@@ -138,51 +145,62 @@ const showConfigModal = () => {
         }
     })
         .onDismiss(() => {
-            console.log('dismissed');
         })
         .onOk((data) => {
-            console.log('ok', data);
         })
         .onCancel(() => {
-            console.log('cancel');
         });
 };
 
 onMounted(async () => {
-    $q.loading.show();
+
+    authStore.loadApiKey();
+    // if the user is not logged in, redirect to login page
+    if(!authStore.apiKey) {
+        router.push('/login');
+        return;
+    }
+
+    isLoadingSessionMessages.value = true;
     await sessionStore.fetchAllSessions();
     await nextTick();
     sessionStore.orderSessions();
     await configStore.fetchOkuuPfp();
     if (sessionStore.currentSession !== undefined) {
-        selectSession(sessionStore.currentSession);
+        selectSession(sessionStore.currentSession.sessionId);
     }
     okuu_pfp.value = configStore.okuuPfp;
-    $q.loading.hide();
+    isLoadingSessionMessages.value = false;
 });
 
 onBeforeUnmount(() => {
     socket.value?.disconnect();
 });
 
-const selectSession = async (session: Session) => {
-    if(socketIO.value) {
+const selectSession = async (sessionId: string) => {
+    if (socketIO.value) {
         socketIO.value.disconnectSocket();
         socketIO.value = null;
     }
-    selectedSession.value = session;
-    await sessionStore.fetchSessionMessages(session.sessionId);
+    isLoadingSessionMessages.value = true;
+    await sessionStore.fetchSessionMessages(sessionId);
+    sessionStore.orderSessions();
+    sessionStore.setCurrentSessionId(sessionId);
+    selectedSessionId.value = sessionId;
+    console.log('Selected session', sessionId);
     scrollToBottom();
-    sessionStore.setCurrentSessionId(session.sessionId);
+    const session = await sessionStore.getSessionById(sessionId);
 
     mini.value = true;
 
     socketIO.value = new SocketioService();
-    socket.value = await socketIO.value.initializeSocket(session.sessionId, sessionStore);
+    socket.value = await socketIO.value.initializeSocket(sessionId, sessionStore);
+    isLoadingSessionMessages.value = false;
 };
 
 const addNewSession = async () => {
-    await sessionStore.addSession();
+    const sessionId = await sessionStore.addSession();
+    selectSession(sessionId);
 };
 
 const sendMessage = async () => {
@@ -244,11 +262,11 @@ const removeSession = async (sessionId: string) => {
         persistent: true
     }).onOk(async () => {
         await sessionStore.deleteSession(sessionId);
-        if (selectedSession.value?.sessionId === sessionId) {
-            selectedSession.value = null;
+        if (selectedSessionId.value === sessionId) {
+            selectedSessionId.value = undefined;
         }
     }).onCancel(() => {
-        console.log('Cancelled');
+        //console.log('Cancelled');
     });
 };
 
@@ -260,16 +278,20 @@ const sendBtnActive = computed(() => {
 
 const status = computed(() => socketIO.value?.getStatus());
 
+const selectedSession = computed(() => {
+    return selectedSessionId.value ? sessionStore.getSessionById(selectedSessionId.value) : undefined;
+});
+
 // watch
 watch(
-    () => selectedSession.value?.messages,
-    (messages) => {
-        if (messages) {
+    () => selectedSession.value,
+    (session) => {
+        if (session) {
             renableInput();
             scrollToBottom();
-            console.log("Messages", messages);
-            console.log('last message', messages[messages.length - 1]);
-            if (messages[messages.length - 1]?.user.toLowerCase() === "okuu") {
+            console.log("Messages", session.messages);
+            console.log('last message', session.messages[session.messages.length - 1]);
+            if (session.messages[session.messages.length - 1]?.user.toLowerCase() === "okuu") {
                 isLoadingResponse.value = false;
             }
         }

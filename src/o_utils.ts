@@ -26,7 +26,9 @@ export const loadAssistantConfig = () => {
 
 export const updateAssistantConfigJSON = (config: any) => {
     try {
-        fs.writeFileSync(assistantConfigFile, JSON.stringify(config, null, 2));
+        const existingConfig = JSON.parse(fs.readFileSync(assistantConfigFile, 'utf8'));
+        const updatedConfig = { ...existingConfig, ...config };
+        fs.writeFileSync(assistantConfigFile, JSON.stringify(updatedConfig, null, 2));
     } catch (error) {
         Logger.ERROR(`Failed to update assistant.json file\n${error}`);
     }
@@ -110,4 +112,16 @@ export const checkOllamaService = async () => {
       }
     });
   });
+};
+
+export const doesModelExistInOllama = async (modelName: string) => {
+  const response = await axios.get(
+    `https://ollamadb.dev/api/v1/models?search=${encodeURIComponent(modelName)}`,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+  return response.data.length > 0;
 };

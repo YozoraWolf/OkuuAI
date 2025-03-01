@@ -5,17 +5,10 @@
                 <div class="text-h6">Enter API Key</div>
             </q-card-section>
             <q-card-section>
-                <q-input
-                    v-model="apiKey"
-                    type="password"
-                    label="API Key"
-                    @keyup.enter="submitApiKey"
-                    outlined
-                    dense
-                />
+                <q-input v-model="apiKey" type="password" :disable="isRateLimited" label="API Key" @keyup.enter="submitApiKey" outlined dense />
             </q-card-section>
             <q-card-actions align="right">
-                <q-btn label="Login" color="primary" @click="submitApiKey" />
+                <q-btn label="Login" color="primary" :disable="isRateLimited" @click="submitApiKey" />
             </q-card-actions>
         </q-card>
     </q-page>
@@ -35,18 +28,30 @@ const authStore = useAuthStore();
 
 const apiKey = ref('');
 
+const isRateLimited = ref(false);
+
 const submitApiKey = async () => {
     // Handle API key submission
     const result = await authStore.checkApiKey(apiKey.value);
     if (result) {
-        // Redirect to status page
-        router.push('/');
-    } else {
-        // Notify error
-        $q.notify({
-            type: 'negative',
-            message: 'Invalid API Key',
-        });
+        if (result.status === 429) {
+            $q.notify({
+                type: 'negative',
+                message: 'Too many requests. Please try again later.',
+            });
+
+            // Disable the input field and login button
+            isRateLimited.value = true;
+        } else if(result.status === 200) {
+            // Redirect to index page
+            router.push('/');
+        } else {
+            // Notify error
+            $q.notify({
+                type: 'negative',
+                message: 'Invalid API Key',
+            });
+        }
     }
 }
 </script>

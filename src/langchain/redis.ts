@@ -1,3 +1,5 @@
+import { ChatMessage } from '@src/chat';
+import { Core } from '@src/core';
 import { Logger } from '@src/logger';
 import { Ollama } from 'ollama';
 import { createClient, RedisClientType, SchemaFieldTypes, VectorAlgorithms } from 'redis';
@@ -9,13 +11,13 @@ export const REDIS_URL = `redis://default:${REDIS_PWD}@localhost:${REDIS_PORT}/0
 export let redisClientMemory: RedisClientType;
 
 export const initRedis = async () => {
-    console.log("URL: ", REDIS_URL);
-    redisClientMemory = createClient({
-        url: REDIS_URL
-      });
-    await redisClientMemory.connect();
-    //await deleteMemoryIndex(); // DEBUG. Do not uncomment unless you want to lose your memories.
-    await createMemoryIndex();
+  console.log("URL: ", REDIS_URL);
+  redisClientMemory = createClient({
+    url: REDIS_URL
+  });
+  await redisClientMemory.connect();
+  //await deleteMemoryIndex(); // DEBUG. Do not uncomment unless you want to lose your memories.
+  await createMemoryIndex();
 }
 
 async function createMemoryIndex() {
@@ -43,7 +45,8 @@ async function createMemoryIndex() {
             message: { type: SchemaFieldTypes.TEXT, SORTABLE: true },
             timestamp: { type: SchemaFieldTypes.NUMERIC },
             user: { type: SchemaFieldTypes.TEXT },
-            sessionId: { type: SchemaFieldTypes.TEXT },
+            memoryKey: { type: SchemaFieldTypes.TEXT },
+            sessionId: { type: SchemaFieldTypes.NUMERIC, SORTABLE: true },
             type: { type: SchemaFieldTypes.TAG },
             recall_count: { type: SchemaFieldTypes.NUMERIC, SORTABLE: true },
             __vector_score: { type: SchemaFieldTypes.NUMERIC, SORTABLE: true },
@@ -55,6 +58,8 @@ async function createMemoryIndex() {
               DISTANCE_METRIC: 'COSINE',
               AS: 'embedding',
             },
+            file: { type: SchemaFieldTypes.TEXT },
+            attachment: { type: SchemaFieldTypes.TEXT },
           },
           { PREFIX: 'okuuMemory:' }
         );
@@ -68,7 +73,7 @@ async function createMemoryIndex() {
   }
 }
 
-export async function saveMemoryWithEmbedding(memoryKey: string, message: string, user: string, type: string = 'statement') {
+export async function saveMemoryWithEmbedding(sessionId: string, message: string, user: string, type: string = 'statement') {
 
   try {
     // Generate embedding for the statement (e.g., "I live in Tokyo")
@@ -84,11 +89,15 @@ export async function saveMemoryWithEmbedding(memoryKey: string, message: string
       throw new Error(`Embedding dimensionality mismatch: Expected 768, got ${embedding.length}`);
     }
 
+    const timestamp = Date.now();
+
+    const memoryKey = `okuuMemory:${sessionId}:${timestamp}`;
     // Save the answer or relevant statement (not the question)
     await redisClientMemory.hSet(memoryKey, {
       message,
-      timestamp: Date.now(),
+      timestamp: timestamp,
       memoryKey,
+      sessionId: sessionId ? Number(sessionId) : -1,
       type,
       user,
       recall_count: 0,
@@ -96,7 +105,16 @@ export async function saveMemoryWithEmbedding(memoryKey: string, message: string
     });
 
     //Logger.DEBUG('Memory with embedding saved. Key: ' + memoryKey);
-    return memoryKey;
+    return {
+      memoryKey,
+      message,
+      timestamp,
+      user,
+      sessionId,
+      type,
+      recall_count: 0,
+      embedding
+    };
   } catch (error: any) {
     Logger.ERROR('Error saving memory: ' + error.message);
     throw error;
@@ -127,7 +145,7 @@ async function updateRecallCount(memories: any[]) {
   }
 }
 
-export async function searchMemoryWithEmbedding(query: string, topK: number = 5) {
+export async function searchMemoryWithEmbedding(query: string, sessionId: number = -1, topK: number = 5) {
   try {
     // Generate query embedding
     const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
@@ -140,20 +158,26 @@ export async function searchMemoryWithEmbedding(query: string, topK: number = 5)
     // Ensure correct embedding format (raw binary)
     const blobEmbedding = Buffer.from(new Float32Array(queryEmbedding).buffer)
 
-    // Perform KNN search with dynamic topK value
-    const result = await redisClientMemory.ft.search('idx:memories', 
-      `*=>[KNN ${topK} @embedding $BLOB]`, {
-      PARAMS: { 
-        BLOB: blobEmbedding // Use the query embedding
-      },
-      SORTBY: '__vector_score', // Sort by similarity score
-      DIALECT: 2,
-      RETURN: ['message', 'timestamp', 'user', 'sessionId', 'type', '__vector_score', 'recall_count'], // Include recall_count in the return
-      FILTER: '@type != "question"', // Exclude documents where @type is 'question'
-    } as any); // Cast to any to bypass type checking
+    Logger.DEBUG(`Searching memory: ${sessionId === -1 ? 'all sessions' : `session ${sessionId}`}`);
 
+    const search_query = sessionId !== -1 && !Core.global_memory
+      ? `(@sessionId:[${sessionId} ${sessionId}] -@type:question)`
+      : `(-@type:question)`;
+
+    Logger.DEBUG(`Search query: ${search_query}`);
+
+    const result = await redisClientMemory.ft.search(
+      'idx:memories',
+      `${search_query}=>[KNN ${topK} @embedding $BLOB AS score]`,
+      {
+        PARAMS: { BLOB: blobEmbedding },
+        SORTBY: 'score',
+        DIALECT: 2,
+        RETURN: ['message', 'timestamp', 'user', 'sessionId', 'type', 'score', 'recall_count'],
+      }
+    );
     console.log("Result: ", result);
-    
+
     // Sort results manually based on priority logic
     let memories = result.documents.map(doc => ({
       message: doc.value.message,
@@ -220,6 +244,38 @@ export async function deleteMemoryKey(key: string) {
       reject(err);
     }
   });
+}
+
+export async function updateAttachmentForMemory(memoryKey: string, attachment: string, fileName: string) {
+  try {
+    await redisClientMemory.hSet(memoryKey, { attachment, file: fileName });
+    return true;
+  } catch (error: any) {
+    Logger.ERROR('Error updating attachment for memory: ' + error.message);
+    throw error;
+  }
+};
+export async function updateMemory(message: ChatMessage) {
+  try {
+    // discern memory key from message
+    const memoryKey = message.memoryKey;
+    // if not present construct from session id and timestamp
+    if (!memoryKey) {
+      message.memoryKey = `okuuMemory:${message.sessionId}:${message.timestamp}`;
+    }
+    // update memory
+    if (memoryKey) {
+      const existingMemory = await redisClientMemory.hGetAll(memoryKey);
+      const { done, stream, ...updatedMemory } = { ...existingMemory, ...message };
+      await redisClientMemory.hSet(memoryKey, updatedMemory);
+      return true;
+    } else {
+      return false;
+    }
+  } catch (error: any) {
+    Logger.ERROR('Error updating memory: ' + error.message);
+    throw error;
+  }
 }
 
 // Debug, usually not necessary

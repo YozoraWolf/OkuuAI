@@ -10,7 +10,7 @@ import memoryRoutes from './routes/memory.route';
 import guiRoutes from './routes/gui.route';
 import configRoutes from './routes/config.route';
 import { setupSockets } from './sockets';
-import mainRoutes from './routes/main.route';
+import mainRoutes, { apiLimiter } from './routes/main.route';
 import { Server } from 'socket.io';
 import userRoutes from './routes/user.route';
 
@@ -37,9 +37,14 @@ export let io: Server;
         }
     };
 
+    // Trust the reverse proxy
+    app.set('trust proxy', 1);
+
     app.use(cors({
         allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key', 'ngrok-skip-browser-warning'], // Allow 'x-api-key' header
     }));
+
+    app.use(apiLimiter); // Apply rate limiter
 
     // File upload middleware
     app.use(fileUpload({

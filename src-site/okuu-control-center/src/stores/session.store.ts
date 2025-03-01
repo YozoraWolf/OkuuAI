@@ -7,8 +7,11 @@ export interface Message {
     message: string;
     avatar?: string;
     memoryKey: string;
+    sessionId: string;
     stream: boolean;
     done: boolean;
+    attachment?: string;
+    file?: string;
 }
 
 export interface Session {
@@ -44,28 +47,37 @@ export const useSessionStore = defineStore('session', {
         async sendAttachment(file: File, msg: Message) {
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('message', msg.message);
-            const { data, status } = await sendAttachment(formData);
-            if (status !== 200) {
-                console.error('Failed to send attachment');
-                return;
+            formData.append('message', JSON.stringify(msg));
+            try {
+                const response = await sendAttachment(formData);
+                if (response.status !== 200) {
+                    console.error('Failed to send attachment');
+                    return false;
+                }
+                return response;
+            } catch (error) {
+                console.error('Failed to send attachment:', error);
+                return false;
             }
+
         },
         async fetchSessionMessages(sessionId: string) {
-            const session = this.sessions.find((session: Session) => session.sessionId === sessionId);
             const { data, status } = await getSessionMessages(sessionId);
             if(status !== 200) {
                 console.error('Failed to fetch messages for session', sessionId);
                 return;
             }
             const { messages } = data;
+            this.updateSessionMessagesLocal(sessionId, messages);
+            //this.orderSessions();
+        },
+        updateSessionMessagesLocal(sessionId: string, messages: Message[]) {
+            const session = this.sessions.find((session: Session) => session.sessionId === sessionId);
             if (session) {
                 session.messages = messages;
-            } else {
-                this.sessions.push({ sessionId, messages });
+                session.lastMessage = messages[messages.length - 1] || undefined;
+                //this.orderSessions();
             }
-            this.setCurrentSessionId(sessionId);
-            this.orderSessions();
         },
         async addSession() {
             const { data, status } = await createSession();
@@ -77,6 +89,7 @@ export const useSessionStore = defineStore('session', {
             newSession.lastMessage = data.messages[data.messages.length - 1]  || '';
             this.sessions.push(newSession);
             this.orderSessions();
+            return data.sessionId;
         },
         async deleteSession(sessionId: string) {
             const { status, data } = await deleteSession(sessionId);
@@ -95,13 +108,16 @@ export const useSessionStore = defineStore('session', {
             }
             this.orderSessions();
         },
-        async deleteChatMessage(memoryKey: string) {
+        getSessionById(sessionId: string): Session | undefined {
+            return this.sessions.find((session: Session) => session.sessionId === sessionId);
+        },
+        async deleteChatMessage(memoryKey: string, sessionId: string) {
             const { status, data } = await deleteChatMessage(memoryKey);
             if (status !== 200 || !data.result) {
                 console.error('Failed to delete chat message:', memoryKey);
                 return;
             }
-            const session = this.sessions.find((session: Session) => session.messages.some((msg: Message) => msg.memoryKey === memoryKey));
+            const session = this.sessions.find((session: Session) => session.sessionId === sessionId);
             if (session) {
                 const messageIndex = session.messages.findIndex((msg: Message) => msg.memoryKey === memoryKey);
                 session.messages.splice(messageIndex, 1);
@@ -152,6 +168,9 @@ export const useSessionStore = defineStore('session', {
                 const bTimestamp = b.messages?.[b.messages.length - 1]?.timestamp ?? 0;
                 return bTimestamp - aTimestamp;
             });
+        },
+        getMemoryKey(sessionId: string, timestamp: number): string {
+            return `okuuMemory:${sessionId}:${timestamp}`;
         }
     },
     getters: {

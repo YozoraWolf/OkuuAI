@@ -1,7 +1,7 @@
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
 import { resolveHostRedirect } from 'src/utils/okuuai_utils';
 
-export const checkApiKey = async (apiKey: string): Promise<boolean> => {
+export const checkApiKey = async (apiKey: string): Promise<AxiosResponse<any> | null> => {
     try {
         const resolvedUrl = await resolveHostRedirect();
         console.log('Resolved URL:', resolvedUrl);
@@ -10,8 +10,8 @@ export const checkApiKey = async (apiKey: string): Promise<boolean> => {
                 'X-Api-Key': apiKey,
             },
         });
-        return response.status === 200;
+        return response;
     } catch (error) {
-        return false;
+        return null;
     }
 };

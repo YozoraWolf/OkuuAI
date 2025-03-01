@@ -1,8 +1,5 @@
 import { ConversationChain } from 'langchain/chains';
 import dotenv from 'dotenv';
-import fs from 'fs';
-import { Logger } from './logger';
-
 dotenv.config();
 
 export enum Status {
@@ -30,6 +27,9 @@ export class Core {
 
     static model_org_name: string = `${process.env.MODEL_URL?.match(/\/([^/]+)\.gguf/)?.[1]}.gguf`;
     static model_path: string = process.env.MODEL_PATH || '';
+
+    // global memory: a toggle to allow okuu to search only session-specific memory or global memory
+    static global_memory: boolean = false;
 
     static chat_settings: any = {
         prefix: '\x1b[32mOkuu:\x1b[0m'

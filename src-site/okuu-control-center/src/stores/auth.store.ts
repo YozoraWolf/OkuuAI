@@ -8,8 +8,9 @@ export const useAuthStore = defineStore('auth', {
     actions: {
         async checkApiKey(key: string) {
             const result = await checkApiKey(key);
-            this.apiKey = result ? key : '';
-            if(result) {
+            const isKeyValid = result && result.status === 200;
+            this.apiKey = isKeyValid ? key : '';
+            if(isKeyValid) {
                 localStorage.setItem('apiKey', this.apiKey);
             }
             return result;

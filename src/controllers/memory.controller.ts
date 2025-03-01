@@ -5,8 +5,10 @@ import { spawn } from "child_process";
 import { Request, Response } from 'express';
 import fileUpload from 'express-fileupload';
 import mammoth from "mammoth"; // docx to text
-import Papa from 'papaparse'; // csv parser
 import { PdfReader } from "pdfreader";
+import { saveFileToStorage } from "@src/langchain/memory/storage";
+
+const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'];
 
 export const checkMemoryStatus = async (req: any, res: any) => {
     try {
@@ -71,71 +73,42 @@ export const createMemoryRecord = async (req: Request, res: Response) => {
     if (!req.files || !req.files.file) {
         return res.status(400).send('No files were uploaded.');
     }
-    Logger.DEBUG(`Received file: ${JSON.stringify(req.files)}`);
+    //Logger.DEBUG(`Received file: ${JSON.stringify(req.files)}`);
     // Read the file contents
     // Allow for only json, docx, txt, pdf, and csv files
     const file = req.files.file as fileUpload.UploadedFile;
-    Logger.DEBUG(`Received file: ${file.name}`);
-    Logger.DEBUG(`Raw buffer: ${file.data}`);
+    const msg = JSON.parse(req.body.message);
+    //Logger.DEBUG(`Received file: ${file.name}`);
+    //Logger.DEBUG(`Raw buffer: ${file.data}`);
     //Logger.DEBUG(`Buffer as JSON: ${JSON.stringify(file.data)}`);
     Logger.DEBUG(`File Size: ${file.size}`);
     Logger.DEBUG(`File type: ${file.mimetype}`);
     //Logger.DEBUG('File data: '+file.data);
-    const allowedExtensions = ['json', 'docx', 'txt', 'pdf', 'csv'];
+    const allowedExtensions = ['json', 'docx', 'txt', 'pdf', 'csv', ...imageExts];
     const extension = file.name.split('.').pop() || '';
     if (!allowedExtensions.includes(extension)) {
-        return res.status(400).send('Invalid file type. Allowed types: json, docx, txt, pdf, csv');
+        res.status(400).send(`Invalid file type. Allowed types: ${allowedExtensions.join(', ')}`);
+        return;
     }
     // Read its contents
     let content: string = '';
     // Append user message to the file content
-    if(req.body.message) {
-        content += req.body.message + '\n----------------\n';
+    if(msg.message) {
+        content += msg.message + '\n----------------\n';
     }
+
     try {
-        if (extension === 'json') {
-            content += JSON.stringify(JSON.parse(file.data.toString('utf8')), null, 2);
-        } else if (extension === 'docx') {
-            const result = await mammoth.extractRawText({ buffer: file.data });
-            content += result.value;
-        } else if (extension === 'txt') {
-            content += file.data.toString('utf8');
-            Logger.DEBUG(`Text content: ${file.data}`);
-        } else if (extension === 'pdf') {
-            const pdfReader = new PdfReader();
-            pdfReader.parseBuffer(file.data, (err: any, item: any) => {
-                if (err) {
-                    Logger.ERROR(`Error parsing PDF file: ${err}`);
-                    return res.status(500).send('Error parsing PDF file.');
-                }
-                if (item && item.text) {
-                    content += item.text + '\n';
-                }
-                if (!item) {
-                    // End of file
-                    // Process the content as needed
-                    console.log('File content:', content);
-                    // Save the content to memory
-                    // await memoryService.saveMemory(content);
-                    res.status(200).json({ message: 'Memory uploaded successfully' });
-                }
-            });
-            return; // Return here to avoid sending response prematurely
-        } else if (extension === 'csv') {
-            content += file.data.toString('utf8');
-        } else {
-            return res.status(400).send('Invalid file type. Allowed types: json, docx, txt, pdf, csv');
-        }
-        const memoryKey = `okuuMemory:file:${file.name}`;
-        const result = await saveMemoryWithEmbedding(memoryKey, content, 'system', 'file');
+        //const memoryKey = `okuuMemory:file:${file.name}`;
+        //const result = await saveMemoryWithEmbedding(memoryKey, content, 'system', 'file');
+        const result = saveFileToStorage(file);
         if (result) {
-            res.status(200).json({ message: 'Memory record created successfully.', key: memoryKey });
+            res.status(200).json({ message: 'File uploaded sucessful!', fileName: result });
         } else {
-            res.status(500).send('Error creating memory record.');
+            res.status(500).send('Error uploading file.');
         }
     } catch (err) {
         Logger.ERROR(`Error processing file: ${err}`);
-        return res.status(500).send('Error processing file.');
+        res.status(500).send('Error processing file.');
     }
 };
 

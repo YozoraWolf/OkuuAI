@@ -17,6 +17,10 @@ const routes: RouteRecordRaw[] = [
     path: '/chat',
     component: () => import('pages/Chat.vue')
   },
+  {
+    path: '/inactive',
+    component: () => import('pages/OkuuInactive.vue')
+  },
 
   // Always leave this as last one,
   // but you can also remove it
