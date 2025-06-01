@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { getOkuuPfp, uploadOkuuPfp, deleteOkuuPfp, getSystemPrompt, UpdateSystemPrompt, UpdateGlobalMemory, FetchGlobalMemory, CheckOkuuAIStatus } from 'src/services/config.service';
+import { getOkuuPfp, uploadOkuuPfp, deleteOkuuPfp, getSystemPrompt, UpdateSystemPrompt, UpdateGlobalMemory, FetchGlobalMemory, CheckOkuuAIStatus, UpdateThink } from 'src/services/config.service';
 
 export const useConfigStore = defineStore('config', {
     state: () => ({
@@ -8,6 +8,8 @@ export const useConfigStore = defineStore('config', {
         stream: false,
         systemPrompt: '',
         globalMemory: false,
+        toggleThinking: false,
+        showThinkingInChat: true,
     }),
     actions: {
         setZoomLevel(zoomLevel: number) {
@@ -28,7 +30,6 @@ export const useConfigStore = defineStore('config', {
         async uploadOkuuPfp(file: File) {
             try {
                 await uploadOkuuPfp(file);
-                await this.fetchOkuuPfp();
             } catch (error) {
                 console.error('Failed to upload Okuu profile picture:', error);
             }
@@ -103,6 +104,17 @@ export const useConfigStore = defineStore('config', {
                 console.error('Failed to check Okuu AI status:', error);
                 return false;
             }
+        },
+        async updateToggleThinking(toggleThinking: boolean) {
+            try {
+                // Assuming there's a service to update the thinking state
+                await UpdateThink(toggleThinking);
+                return true;
+            } catch (error) {
+                console.error('Failed to update thinking state:', error);
+                return false;
+            }
         }
-    }
+    },
+   
 });

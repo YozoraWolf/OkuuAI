@@ -65,6 +65,18 @@ export const UpdateGlobalMemory = async (globalMemory: boolean) => {
     return response.data;
 }
 
+export const FetchThink = async () => {
+    const apiUrl = await getApiUrl();
+    const response = await axios.get(`${apiUrl}/config/okuu/think`, { headers: getAuthHeaders() });
+    return response.data;
+}
+
+export const UpdateThink = async (think: boolean) => {
+    const apiUrl = await getApiUrl();
+    const response = await axios.post(`${apiUrl}/config/okuu/think`, { think }, { headers: getAuthHeaders() });
+    return response.data;
+}
+
 
 // Misc 
 

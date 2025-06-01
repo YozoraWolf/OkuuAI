@@ -9,6 +9,7 @@ export interface Message {
     memoryKey: string;
     sessionId: string;
     stream: boolean;
+    thinking?: string;
     done: boolean;
     attachment?: string;
     file?: string;

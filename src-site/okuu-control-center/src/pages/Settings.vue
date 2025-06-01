@@ -1,6 +1,6 @@
 <template>
-    <div class="q-mx-md">
-        <h1>Settings</h1>
+    <div class="q-mx-lg">
+        <h1 class="q-ma-none q-py-md">Settings</h1>
         <div v-if="currentOkuuPfp" class="q-my-lg">
             <div class="avatar-cont row flex-center" style="width: 250px;" >
                 <q-avatar size="200px" round>
@@ -11,6 +11,7 @@
                     @click="toggleOkuuPfpSelector" />
             </div>
             <Zoom/>
+            <GlobalToggles />
         </div>
         <ImageSelectorModal :showModal="showOkuuPfpModal" @close="toggleOkuuPfpSelector" @save="fetchCurrentOkuuPfp" />
     </div>
@@ -22,6 +23,7 @@ import Zoom from 'src/components/settings/Zoom.vue';
 import { ref, onMounted } from 'vue';
 import { useConfigStore } from 'src/stores/config.store';
 import { useQuasar } from 'quasar';
+import GlobalToggles from 'src/components/settings/GlobalToggles.vue';
 
 const showOkuuPfpModal = ref(false);
 const configStore = useConfigStore();
@@ -46,10 +48,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-h1 {
-    color: #333;
-}
-
 p {
     font-size: 16px;
 }

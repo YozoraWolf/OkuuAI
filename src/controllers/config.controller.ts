@@ -114,3 +114,18 @@ export const setGlobalMemory = (req: Request, res: Response) => {
     Logger.INFO(`✅ (API) Global Memory set to: ${global_memory}`);
     res.status(200).send({ global_memory: Core.global_memory });
 };
+
+export const getOkuuThink = (req: Request, res: Response) => {
+    res.status(200).send({ think: Core.model_settings.think });
+};
+
+export const setOkuuThink = (req: Request, res: Response) => {
+    const { think } = req.body;
+    if(think === undefined) {
+        return res.status(400).send('Think setting not provided.');
+    }
+    updateAssistantConfigJSON({ think });
+    Core.model_settings.think = think;
+    Logger.INFO(`✅ (API) Think setting set to: ${think}`);
+    res.status(200).send({ think: Core.model_settings.think });
+};

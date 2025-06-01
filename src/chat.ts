@@ -18,6 +18,7 @@ export interface ChatMessage {
     lang?: string;
     timestamp: number;
     stream?: boolean;
+    thinking?: string;
     memoryKey?: string;
     file?: string;
     attachment?: string;
@@ -143,6 +144,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 model: Core.model_name,
                 stream: true,
                 system: Core.model_settings.system,
+                think: Core.model_settings.think,
                 images: sentImage,
             });
 
@@ -168,21 +170,24 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             //Logger.DEBUG(`Response: ${reply.content}`);
         } else {
             //Logger.DEBUG(`Loading Response...`);
+            Logger.DEBUG(`🧠 Think: ${Core.model_settings.think}`);
             const resp = await ollama.generate({
                 prompt,
                 model: Core.model_name,
                 system: Core.model_settings.system,
+                think: Core.model_settings.think,
                 images: sentImage,
             });
 
-            //Logger.DEBUG(`Response: ${resp.response}`);
+            //Logger.DEBUG(`Response: ${JSON.stringify(resp, null, 2)}`);
             reply.done = true;
             reply.message = resp.response;
             reply.lang = langMappings[franc(reply.message)] || 'en-US';
+            reply.thinking = resp.thinking || '';
 
             // Save AI response in memory
             const messageTypeAI = isQuestion(reply.message) ? 'question' : 'statement';
-            const aiMemory = await saveMemoryWithEmbedding(reply.sessionId, reply.message, "okuu", messageTypeAI);
+            const aiMemory = await saveMemoryWithEmbedding(reply.sessionId, reply.message, "okuu", messageTypeAI, reply.thinking);
             //Logger.DEBUG(`Saved AI memory: ${aiSaved}`);
             reply.memoryKey = aiMemory.memoryKey;
             reply.timestamp = aiMemory.timestamp;

@@ -44,7 +44,8 @@ export class Core {
         numPredict: 250,
         system: "You are a friendly AI assistant.",
         stop: ["<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"], // Stop tokens
-        template: Core.template // Pass the template here
+        template: Core.template, // Pass the template here
+        think: false, // whether to use the think feature for some models
     };
 
 

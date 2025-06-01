@@ -20,6 +20,7 @@
           </div>
         </div>
         <SystemPromptEdit @prompt-edited="onPromptEdited" />
+        <GlobalToggles class="q-mt-md" />
       </div>
 
       <q-card-actions align="right">
@@ -35,6 +36,7 @@ import { ref, onMounted, watch } from 'vue';
 import { useDialogPluginComponent, useQuasar } from 'quasar';
 import Zoom from 'src/components/settings/Zoom.vue';
 import SystemPromptEdit from 'src/components/settings/SystemPromptEdit.vue';
+import GlobalToggles from 'src/components/settings/GlobalToggles.vue';
 import { useConfigStore } from 'src/stores/config.store';
 
 defineEmits([

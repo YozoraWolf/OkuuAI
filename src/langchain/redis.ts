@@ -43,6 +43,7 @@ async function createMemoryIndex() {
           'idx:memories',
           {
             message: { type: SchemaFieldTypes.TEXT, SORTABLE: true },
+            thinking: { type: SchemaFieldTypes.TEXT, SORTABLE: true },
             timestamp: { type: SchemaFieldTypes.NUMERIC },
             user: { type: SchemaFieldTypes.TEXT },
             memoryKey: { type: SchemaFieldTypes.TEXT },
@@ -73,7 +74,7 @@ async function createMemoryIndex() {
   }
 }
 
-export async function saveMemoryWithEmbedding(sessionId: string, message: string, user: string, type: string = 'statement') {
+export async function saveMemoryWithEmbedding(sessionId: string, message: string, user: string, type: string = 'statement', thinking: string = '') {
 
   try {
     // Generate embedding for the statement (e.g., "I live in Tokyo")
@@ -95,6 +96,7 @@ export async function saveMemoryWithEmbedding(sessionId: string, message: string
     // Save the answer or relevant statement (not the question)
     await redisClientMemory.hSet(memoryKey, {
       message,
+      thinking,
       timestamp: timestamp,
       memoryKey,
       sessionId: sessionId ? Number(sessionId) : -1,
@@ -108,6 +110,7 @@ export async function saveMemoryWithEmbedding(sessionId: string, message: string
     return {
       memoryKey,
       message,
+      thinking,
       timestamp,
       user,
       sessionId,
@@ -181,6 +184,7 @@ export async function searchMemoryWithEmbedding(query: string, sessionId: number
     // Sort results manually based on priority logic
     let memories = result.documents.map(doc => ({
       message: doc.value.message,
+      thinking: doc.value.thinking || '', // Include thinking if available
       timestamp: Number(doc.value.timestamp),
       user: doc.value.user,
       sessionId: doc.value.sessionId,

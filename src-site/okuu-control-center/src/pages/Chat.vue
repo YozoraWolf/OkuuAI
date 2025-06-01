@@ -3,6 +3,10 @@
         <q-drawer side="right" bordered v-model="drawer" :mini="mini" class="border-left" @mouseenter="startHoverTimer"
             @mouseleave="stopHoverTimer">
             <q-list>
+                <q-item class="flex flex-center" clickable @click="addNewSession">
+                    <q-icon name="add" size="sm" class="q-mx-md" />
+                    <q-item-section>Add New Session</q-item-section>
+                </q-item>
                 <q-item v-for="session in sessions" :key="session.sessionId" class="flex flex-center" clickable
                     @click="selectSession(session.sessionId)" :active="session.sessionId === selectedSessionId">
                     <q-icon name="chat" color="white" class="q-mx-md" />
@@ -12,10 +16,7 @@
                     <q-btn v-if="!mini" flat round color="white" icon="close"
                         @click="removeSession(session.sessionId)" />
                 </q-item>
-                <q-item class="flex flex-center" clickable @click="addNewSession">
-                    <q-icon name="add" size="sm" class="q-mx-md" />
-                    <q-item-section>Add New Session</q-item-section>
-                </q-item>
+
             </q-list>
 
         </q-drawer>
@@ -41,13 +42,22 @@
                 </div>
                 <div class="chat-input text-white q-pa-md" v-if="selectedSession">
                     <q-input type="textarea" autogrow :disable="!selectedSession || isLoadingResponse"
-                        v-model="newMessage" placeholder="Type a message" @keyup.enter="sendMessage"
-                        @keyup.shift.enter.stop class="q-pb-md">
+                        v-model="newMessage" placeholder="Type a message" @keyup.enter="onEnter" @keyup.shift.enter.stop
+                        class="q-pb-md">
                         <template v-slot:append>
                             <q-btn :disable="sendBtnActive" flat round icon="send"
                                 :color="`${!sendBtnActive ? 'primary' : 'gray-9'}`" @click="sendMessage" />
                         </template>
                     </q-input>
+                    <div class="sub-actions row">
+                        <div class="col-7 flex items-center">
+                            <q-chip class="q-mx-sm" size="md" color="primary" :outline="!configStore.toggleThinking"
+                                clickable @click="toggleThinking">
+                                <q-icon name="mdi-brain" size="sm" class="q-mr-sm"></q-icon>
+                                <div class="text-weight-bold">Think</div>
+                            </q-chip>
+                        </div>
+                    </div>
                     <div class="sub-menu row">
                         <div class="status-bar col-9">
                             <q-icon :name="statusIcon" class="q-mr-sm" :color="statusColor" />
@@ -89,6 +99,7 @@ import { useConfigStore } from 'src/stores/config.store';
 import ChatConfigModal from 'src/components/chat/ChatConfigModal.vue';
 import { useAuthStore } from 'src/stores/auth.store';
 import { useRouter } from 'vue-router';
+import { config } from 'process';
 
 const drawer = ref(true);
 const mini = ref(true);
@@ -212,6 +223,7 @@ const sendMessage = async () => {
             sessionId: selectedSession.value.sessionId,
             memoryKey: '',
             stream: stream.value,
+            think: configStore.toggleThinking,
             done: false,
         };
         socket.value?.emit('chat', message);
@@ -267,6 +279,17 @@ const removeSession = async (sessionId: string) => {
         }
     }).onCancel(() => {
         //console.log('Cancelled');
+    });
+};
+
+const toggleThinking = async () => {
+    configStore.toggleThinking = !configStore.toggleThinking;
+    await configStore.updateToggleThinking(configStore.toggleThinking);
+    $q.notify({
+        message: `Thinking mode is now ${configStore.toggleThinking ? 'enabled' : 'disabled'}.`,
+        color: configStore.toggleThinking ? 'green' : 'red',
+        position: 'bottom',
+        timeout: 2000,
     });
 };
 
@@ -326,6 +349,16 @@ watch(() => status.value, (status) => {
         });
     }
 });
+
+// Replace sendMessage on enter with this handler
+const onEnter = (e: KeyboardEvent) => {
+    if (e.shiftKey) {
+        // Let Quasar handle new line (default behavior)
+        return;
+    }
+    e.preventDefault();
+    sendMessage();
+};
 
 </script>
 

@@ -20,17 +20,33 @@
                 </div>
             </div>
             <div class="flex column">
-                <span class="message-body q-mt-xs">{{ localMessage.message }}</span>
-                <q-img v-if="localMessage.attachment && isAttachmentImage" 
-                :src="`data:image/png;base64,${localMessage.attachment}`"
-                loading="lazy"
-                class="attachment-image q-mt-sm q-ml-sm cursor-pointer non-selectable"
-                @click="openPreview"
+                <div class="message-body q-mt-xs">
+                    <template v-for="(part, idx) in generateComponents(localMessage.message, localMessage.thinking)" :key="idx">
+                        <component
+                            v-if="part.type === 'component'"
+                            :is="part.component"
+                            v-bind="part.props"
+                        />
+                        <span
+                            v-else-if="part.type === 'html'"
+                            v-html="part.content"
+                        />
+                        <span
+                            v-else-if="part.type === 'nl'"
+                            class="newline"
+                        ><br></span>
+                    </template>
+                </div>
+                <q-img v-if="localMessage.attachment && isAttachmentImage"
+                    :src="`data:image/png;base64,${localMessage.attachment}`"
+                    loading="lazy"
+                    class="attachment-image q-mt-sm q-ml-sm cursor-pointer non-selectable"
+                    @click="openPreview"
                 >
-                <template v-slot:loading>
-                    <q-spinner size="50px" color="primary" />
-                </template>    
-            </q-img>
+                    <template v-slot:loading>
+                        <q-spinner size="50px" color="primary" />
+                    </template>
+                </q-img>
             </div>
             
         </div>
@@ -45,6 +61,8 @@ import { useQuasar } from 'quasar';
 import { useSessionStore, Message } from 'src/stores/session.store';
 import { useConfigStore } from 'src/stores/config.store';
 import PreviewImage from 'src/components/chat/PreviewImage.vue';
+import { generateComponents } from 'src/utils/txt_format_utils';
+
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import tz from 'dayjs/plugin/timezone';
@@ -164,6 +182,8 @@ watch(
 
 .message-body {
     margin-top: 5px;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .attachment-image {

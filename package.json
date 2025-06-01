@@ -41,7 +41,7 @@
     "franc-ce": "^0.1.3",
     "langchain": "^0.1.36",
     "mammoth": "^1.9.0",
-    "ollama": "^0.5.11",
+    "ollama": "^0.5.16",
     "papaparse": "^5.5.1",
     "pdfreader": "^3.0.7",
     "redis": "^4.7.0",
