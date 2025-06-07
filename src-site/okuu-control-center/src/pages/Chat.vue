@@ -315,7 +315,7 @@ const sendBtnActive = computed(() => {
 });
 
 const sendBtnLoading = computed(() => {
-    return isLoadingResponse.value || isStreaming.value  ||  configLoading.value;
+    return isLoadingResponse.value ||  configLoading.value;
 });
 
 const status = computed(() => socketIO.value?.getStatus());

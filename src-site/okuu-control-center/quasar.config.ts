@@ -2,7 +2,6 @@
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
 import { defineConfig } from '#q-app/wrappers';
-import { emitWarning } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 export default defineConfig((ctx) => {

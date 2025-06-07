@@ -142,9 +142,11 @@ export const useConfigStore = defineStore('config', {
                 // Assuming there's a service to update the thinking state
                 await UpdateThink(toggleThinking);
                 this.toggleThinking = toggleThinking;
+                this.configLoading = false;
                 return true;
             } catch (error) {
                 console.error('Failed to update thinking state:', error);
+                this.configLoading = false;
                 return false;
             }
         },
