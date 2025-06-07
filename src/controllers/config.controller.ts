@@ -1,6 +1,6 @@
 import { Core } from '@src/core';
 import { Logger } from '@src/logger';
-import { doesModelExistInOllama, updateAssistantConfigJSON } from '@src/o_utils';
+import { doesModelExistInOllama, getOllamaDownloadedModels, updateAssistantConfigJSON } from '@src/o_utils';
 import { Request, Response } from 'express';
 import fileUpload from 'express-fileupload';
 import fs from 'fs';
@@ -72,14 +72,23 @@ export const setOkuuModel = async (req: Request, res: Response) => {
     const { model } = req.body;
     if(model === undefined) {
         return res.status(400).send('Model name not provided.');
-    } else if(await doesModelExistInOllama(model) === false) {
-        return res.status(400).send('Model does not exist in Ollama.');
     }
+    // Need to think about this implementation better since theres no
+    // nice way to check if the model exists in Ollama without pulling it first
+    /*} else if(await doesModelExistInOllama(model) === false) {
+        return res.status(400).send('Model does not exist in Ollama.');
+    }*/
     updateAssistantConfigJSON({ model });
     Core.model_name = model;
     Logger.INFO(`✅ (API) Model set to: ${model}`);
     res.status(200).send({ model: Core.model_name });
 };
+
+export const getDownloadedModels = async (req: Request, res: Response) => {
+    const models = await getOllamaDownloadedModels();
+    res.status(200).send({ models });
+};
+
 
 // System Prompt Related
 

@@ -46,16 +46,26 @@
                         class="q-pb-md">
                         <template v-slot:append>
                             <q-btn :disable="sendBtnActive" flat round icon="send"
+                                :loading="sendBtnLoading"
                                 :color="`${!sendBtnActive ? 'primary' : 'gray-9'}`" @click="sendMessage" />
                         </template>
                     </q-input>
                     <div class="sub-actions row">
                         <div class="col-7 flex items-center">
                             <q-chip class="q-mx-sm" size="md" color="primary" :outline="!configStore.toggleThinking"
-                                clickable @click="toggleThinking">
+                                clickable @click="toggleThinkingFunc">
                                 <q-icon name="mdi-brain" size="sm" class="q-mr-sm"></q-icon>
                                 <div class="text-weight-bold">Think</div>
                             </q-chip>
+                            <q-select v-model="currentModel" :options="modelList"
+                                option-value="name" option-label="name" emit-value
+                                class="q-mx-sm" dense outlined
+                                v-on:update:modelValue="configStore.setOkuuModel"
+                                >
+                                <template v-slot:prepend>
+                                    <q-icon name="mdi-head-snowflake" />
+                                </template>
+                            </q-select>
                         </div>
                     </div>
                     <div class="sub-menu row">
@@ -89,7 +99,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, computed, onBeforeUnmount, watch } from 'vue';
-import { Session, useSessionStore } from 'src/stores/session.store';
+import { useSessionStore } from 'src/stores/session.store';
 import { useQuasar } from 'quasar';
 import ChatMessage from 'src/components/chat/ChatMessage.vue';
 import { SocketioService, Status } from 'src/services/socketio.service';
@@ -99,17 +109,28 @@ import { useConfigStore } from 'src/stores/config.store';
 import ChatConfigModal from 'src/components/chat/ChatConfigModal.vue';
 import { useAuthStore } from 'src/stores/auth.store';
 import { useRouter } from 'vue-router';
-import { config } from 'process';
+import { storeToRefs } from 'pinia';
 
 const drawer = ref(true);
 const mini = ref(true);
 const newMessage = ref('');
+
+// Use storeToRefs for all store properties we want to remain reactive
 const sessionStore = useSessionStore();
 const configStore = useConfigStore();
 const authStore = useAuthStore();
-const sessions = computed(() => sessionStore.sessions);
+
+// Session store refs
+const { sessions, currentSession, isStreaming } = storeToRefs(sessionStore);
 const selectedSessionId = ref<string | undefined>(undefined);
 const chatMessagesRef = ref();
+
+// Config store refs
+const { stream, okuuPfp, toggleThinking, currentModel, modelList, configLoading } = storeToRefs(configStore);
+const okuu_pfp = computed(() => okuuPfp.value);
+
+// Auth store refs
+const { apiKey } = storeToRefs(authStore);
 
 const isLoadingResponse = ref(false);
 const isLoadingSessionMessages = ref(false);
@@ -125,12 +146,7 @@ const statusIcon = ref('cloud_off');
 const statusColor = ref('red');
 const statusMessage = ref('Disconnected');
 
-const okuu_pfp = ref<string>('');
-
 const attachment = ref<File | null>(null);
-
-const stream = computed(() => configStore.stream);
-const isStreaming = computed(() => sessionStore.isStreaming);
 
 const hoverTimer = ref<number | null>(null);
 
@@ -155,19 +171,12 @@ const showConfigModal = () => {
             stream: configStore.stream
         }
     })
-        .onDismiss(() => {
-        })
-        .onOk((data) => {
-        })
-        .onCancel(() => {
-        });
 };
 
 onMounted(async () => {
-
     authStore.loadApiKey();
     // if the user is not logged in, redirect to login page
-    if(!authStore.apiKey) {
+    if(!apiKey.value) {
         router.push('/login');
         return;
     }
@@ -177,11 +186,20 @@ onMounted(async () => {
     await nextTick();
     sessionStore.orderSessions();
     await configStore.fetchOkuuPfp();
-    if (sessionStore.currentSession !== undefined) {
-        selectSession(sessionStore.currentSession.sessionId);
+    if (currentSession.value !== undefined) {
+        selectSession(currentSession.value.sessionId);
     }
-    okuu_pfp.value = configStore.okuuPfp;
     isLoadingSessionMessages.value = false;
+
+    // fetch thinking mode status from config store
+    await configStore.fetchThinkingState();
+    console.log('Successfully loaded sessions', sessions.value);
+
+    // fetch all downloadable models
+    await configStore.fetchAllDownloadedModels();
+
+    // fetch current model
+    await configStore.getOkuuModel();
 });
 
 onBeforeUnmount(() => {
@@ -198,9 +216,8 @@ const selectSession = async (sessionId: string) => {
     sessionStore.orderSessions();
     sessionStore.setCurrentSessionId(sessionId);
     selectedSessionId.value = sessionId;
-    console.log('Selected session', sessionId);
+    //console.log('Selected session', sessionId);
     scrollToBottom();
-    const session = await sessionStore.getSessionById(sessionId);
 
     mini.value = true;
 
@@ -223,7 +240,7 @@ const sendMessage = async () => {
             sessionId: selectedSession.value.sessionId,
             memoryKey: '',
             stream: stream.value,
-            think: configStore.toggleThinking,
+            think: toggleThinking.value,
             done: false,
         };
         socket.value?.emit('chat', message);
@@ -241,8 +258,6 @@ const sendMessage = async () => {
             await sessionStore.sendAttachment(attachment.value, message);
             removeAttachment();
         }
-
-
     }
 };
 
@@ -282,12 +297,12 @@ const removeSession = async (sessionId: string) => {
     });
 };
 
-const toggleThinking = async () => {
-    configStore.toggleThinking = !configStore.toggleThinking;
-    await configStore.updateToggleThinking(configStore.toggleThinking);
+const toggleThinkingFunc = async () => {
+    configStore.toggleThinking = !toggleThinking.value;
+    await configStore.updateToggleThinking(toggleThinking.value);
     $q.notify({
-        message: `Thinking mode is now ${configStore.toggleThinking ? 'enabled' : 'disabled'}.`,
-        color: configStore.toggleThinking ? 'green' : 'red',
+        message: `Thinking mode is now ${toggleThinking.value ? 'enabled' : 'disabled'}.`,
+        color: toggleThinking.value ? 'green' : 'red',
         position: 'bottom',
         timeout: 2000,
     });
@@ -297,6 +312,10 @@ const toggleThinking = async () => {
 
 const sendBtnActive = computed(() => {
     return !selectedSession.value || !newMessage.value.trim();
+});
+
+const sendBtnLoading = computed(() => {
+    return isLoadingResponse.value || isStreaming.value  ||  configLoading.value;
 });
 
 const status = computed(() => socketIO.value?.getStatus());

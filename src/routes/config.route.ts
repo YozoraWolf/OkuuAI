@@ -1,4 +1,4 @@
-import { deleteOkuuPfp, getGlobalMemory, getOkuuModel, getOkuuPfp, getOkuuThink, getSystemPrompt, setGlobalMemory, setOkuuModel, setOkuuPfp, setOkuuThink, setSystemPrompt } from '@src/controllers/config.controller';
+import { deleteOkuuPfp, getDownloadedModels, getGlobalMemory, getOkuuModel, getOkuuPfp, getOkuuThink, getSystemPrompt, setGlobalMemory, setOkuuModel, setOkuuPfp, setOkuuThink, setSystemPrompt } from '@src/controllers/config.controller';
 import express from 'express';
 const router = express.Router();
 
@@ -7,6 +7,7 @@ router.get('/okuu/pfp', getOkuuPfp);
 router.delete('/okuu/pfp', deleteOkuuPfp);
 
 router.get('/okuu/model', getOkuuModel);
+router.get('/okuu/models', getDownloadedModels);
 router.post('/okuu/model', setOkuuModel);
 
 router.get('/okuu/system-prompt', getSystemPrompt);

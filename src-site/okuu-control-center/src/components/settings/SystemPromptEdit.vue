@@ -5,12 +5,12 @@
     label="System Prompt" 
     type="textarea"
     rows="8"
-    @update:model-value="updateSystemPrompt" />
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useConfigStore } from 'src/stores/config.store';
 
 const configStore = useConfigStore();
@@ -37,6 +37,19 @@ const updateSystemPrompt = (value: string | number | null) => {
   }
   emit('prompt-edited', value);
 };
+
+watch(systemPrompt, (newValue, oldValue) => {
+  // if oldValue was empty that means it was the initial fetch
+  if (oldValue === '') {
+    return;
+  }
+  // if the new value is the same as the current system prompt, do nothing
+  if (newValue === configStore.systemPrompt) {
+    return;
+  }
+  // otherwise, update the system prompt
+  updateSystemPrompt(newValue);
+});
 
 onMounted(async () => {
   await fetchSystemPrompt();

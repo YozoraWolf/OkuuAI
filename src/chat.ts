@@ -1,4 +1,3 @@
-import { createClient } from 'redis';
 import { io } from './index';
 import { Core } from './core';
 import { Logger } from './logger';
@@ -66,8 +65,6 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             sessionId: msg.sessionId || SESSION_ID || '',
             stream: msg.stream || false,
         };
-
-        const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
 
         // Step 1: Save user input in memory
         const timestamp = Date.now();
@@ -139,7 +136,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             
             reply.memoryKey = aiSaved.memoryKey;
 
-            const stream = await ollama.generate({
+            const stream = await Core.ollama_instance.generate({
                 prompt,
                 model: Core.model_name,
                 stream: true,
@@ -169,9 +166,11 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             return reply.message;
             //Logger.DEBUG(`Response: ${reply.content}`);
         } else {
-            //Logger.DEBUG(`Loading Response...`);
+            Logger.DEBUG(`Loading Response...`);
+            Logger.DEBUG(`Core Settings: ${JSON.stringify(Core.model_settings, null, 2)}`);
+            Logger.DEBUG(`Model: ${Core.model_name}`);
             Logger.DEBUG(`🧠 Think: ${Core.model_settings.think}`);
-            const resp = await ollama.generate({
+            const resp = await Core.ollama_instance.generate({
                 prompt,
                 model: Core.model_name,
                 system: Core.model_settings.system,
@@ -203,3 +202,13 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         return null;
     }
 };
+
+export const initOllamaInstance = async () => {
+    try {
+        Core.ollama_instance = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
+        Logger.INFO(`✅🦙 Ollama instance initialized.`);
+    } catch (error: any) {
+        Logger.ERROR(`❌🦙 Error initializing Ollama instance: ${error.message}`);
+        throw error;
+    }
+}

@@ -29,6 +29,8 @@ export const uploadOkuuPfp = async (file: File) => {
     return response.data;
 };
 
+// Okuu PFP related
+
 export const getOkuuPfp = async () => {
     const apiUrl = await getApiUrl();
     const response = await axios.get(`${apiUrl}/config/okuu/pfp`, { responseType: 'blob', headers: getAuthHeaders() });
@@ -40,6 +42,8 @@ export const deleteOkuuPfp = async () => {
     const response = await axios.delete(`${apiUrl}/config/okuu/pfp`, { headers: getAuthHeaders() });
     return response.data;
 };
+
+// Okuu Prompt related
 
 export const getSystemPrompt = async () => {
     const apiUrl = await getApiUrl();
@@ -53,6 +57,8 @@ export const UpdateSystemPrompt = async (systemPrompt: string) => {
     return response.data;
 };
 
+// Okuu Global Memory related
+
 export const FetchGlobalMemory = async () => {
     const apiUrl = await getApiUrl();
     const response = await axios.get(`${apiUrl}/config/okuu/global-memory`, { headers: getAuthHeaders() });
@@ -64,6 +70,8 @@ export const UpdateGlobalMemory = async (globalMemory: boolean) => {
     const response = await axios.post(`${apiUrl}/config/okuu/global-memory`, { global_memory: globalMemory }, { headers: getAuthHeaders() });
     return response.data;
 }
+
+// Okuu Think related
 
 export const FetchThink = async () => {
     const apiUrl = await getApiUrl();
@@ -77,6 +85,25 @@ export const UpdateThink = async (think: boolean) => {
     return response.data;
 }
 
+// Okuu Model related
+
+export const getOkuuModel = async () => {
+    const apiUrl = await getApiUrl();
+    const response = await axios.get(`${apiUrl}/config/okuu/model`, { headers: getAuthHeaders() });
+    return response.data;
+};
+
+export const setOkuuModel = async (model: string) => {
+    const apiUrl = await getApiUrl();
+    const response = await axios.post(`${apiUrl}/config/okuu/model`, { model }, { headers: getAuthHeaders() });
+    return response.data;
+};
+
+export const getDownloadedModels = async () => {
+    const apiUrl = await getApiUrl();
+    const response = await axios.get(`${apiUrl}/config/okuu/models`, { headers: getAuthHeaders() });
+    return response.data;
+};
 
 // Misc 
 

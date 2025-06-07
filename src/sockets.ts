@@ -47,15 +47,6 @@ export const setupSockets = (server: HTTPServer) => {
         socket.on('disconnect', () => {
             Logger.INFO('Client disconnected: '+socket.id);
         });
-
-        // Custom ping-pong mechanism
-        setInterval(() => {
-            socket.emit('ping', {});
-        }, 5000);
-
-        socket.on('pong', () => {
-            Logger.DEBUG('Pong received from client: '+socket.id);
-        });
     });
 
     Logger.INFO('Socket server initialized');

@@ -1,4 +1,4 @@
-import { downloadFile, loadAssistantConfig, updateAssistantConfigJSON } from './o_utils';
+import { downloadFile, getOllamaDownloadedModels, loadAssistantConfig, updateAssistantConfigJSON } from './o_utils';
 import fs from 'fs';
 import { Core, Status } from './core';
 import { centeredLogoTxt } from './intro';
@@ -12,6 +12,7 @@ import { initUsersDB } from './services/user.service';
 import { runModel, startAndMonitorContainers } from './compose/containers';
 import { initRedis } from './langchain/redis';
 import { select } from '@inquirer/prompts';
+import { initOllamaInstance } from './chat';
 
 dotenv.config();
 
@@ -61,11 +62,16 @@ export const init = async () =>
 
     // Load assistant configuration
     const assistantConfig = loadAssistantConfig();
-    Core.ai_name = assistantConfig.name ? assistantConfig.name : Core.ai_name;
-    Core.model_name = assistantConfig.model ? assistantConfig.model : Core.model_name;
-    Core.model_settings.system = assistantConfig.system_prompt ? assistantConfig.system_prompt : Core.model_settings.system;
-    Core.template = assistantConfig.template ? assistantConfig.template : Core.template;
-    Core.global_memory = assistantConfig.global_memory ? assistantConfig.global_memory : Core.global_memory;
+    Object.assign(Core, {
+        ai_name: assistantConfig.name ?? Core.ai_name,
+        model_name: assistantConfig.model ?? Core.model_name,
+        template: assistantConfig.template ?? Core.template,
+        global_memory: assistantConfig.global_memory ?? Core.global_memory,
+    });
+    Object.assign(Core.model_settings, {
+        system: assistantConfig.system_prompt ?? Core.model_settings.system,
+        think: assistantConfig.think ?? Core.model_settings.think,
+    });
 
     Logger.DEBUG(`Assistant: ${Core.ai_name}`);
     Logger.DEBUG(`Model: ${Core.model_name}`);
@@ -74,6 +80,9 @@ export const init = async () =>
     // check if the ollama service is on, if not, start it
     //await checkOllamaService();
     await startAndMonitorContainers();
+
+    // start ollama instance
+    await initOllamaInstance();
     
     // run model
     await runModel(Core.model_name);
@@ -90,7 +99,7 @@ export const init = async () =>
     // initialize chromadb
     //await initDockerChromaDB();
 
-    // initialize sqlite3
+    // initialize sqlite3 (future implementation prep)
     await initUsersDB();
 
     // get latest history

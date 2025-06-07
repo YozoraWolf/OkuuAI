@@ -52,7 +52,7 @@ const globalMemory = ref(configStore.globalMemory);
 const isSaving = ref(false);
 const isLoadingConfigs = ref(false);
 let originalPrompt = '';
-const editedPrompt = ref('');
+const editedPrompt = ref();
 
 const onPromptEdited = (newPrompt: string) => {
   editedPrompt.value = newPrompt;

@@ -28,7 +28,12 @@ onMounted(async () => {
     try {
         const url = new URL(resolvedUrl);
         const hostname = url.hostname;
-        connection = io(`wss://${hostname}`, {
+        let port = '';
+        if (process.env.LOCAL) {
+            // get the port from the environment variable
+            port = process.env.VITE_LOCAL_API_URL ? `:${process.env.VITE_LOCAL_API_URL.split(':')[2]}` : '';
+        }
+        connection = io(`${process.env.LOCAL ? 'ws' : 'wss'}://${hostname}${port}`, {
             transports: ['websocket'],
             timeout: 5000,
         });

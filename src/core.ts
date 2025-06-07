@@ -1,5 +1,6 @@
 import { ConversationChain } from 'langchain/chains';
 import dotenv from 'dotenv';
+import { Ollama } from 'ollama';
 dotenv.config();
 
 export enum Status {
@@ -13,6 +14,7 @@ export class Core {
 
     static ai_name: string = 'OkuuAI';
     static model_name: string = 'llama3';
+    static ollama_instance: Ollama;
     static defaultTemplate: string = `{{ if .System }}<|start_header_id|>system<|end_header_id|>
     
     {{ .System }}<|eot_id|>{{ end }}{{ if .Prompt }}<|start_header_id|>user<|end_header_id|>

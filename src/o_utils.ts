@@ -2,6 +2,7 @@ import fs from 'fs';
 import axios, { AxiosResponse } from 'axios';
 import { exec } from 'child_process';
 import { Logger } from './logger';
+import { ModelResponse, Ollama } from 'ollama';
 
 // Assistant Configuration
 const assistantConfigFile = 'assistant.json';
@@ -115,6 +116,7 @@ export const checkOllamaService = async () => {
 };
 
 export const doesModelExistInOllama = async (modelName: string) => {
+  // might deprecate at some point, but for now we'll keep it
   const response = await axios.get(
     `https://ollamadb.dev/api/v1/models?search=${encodeURIComponent(modelName)}`,
     {
@@ -124,4 +126,11 @@ export const doesModelExistInOllama = async (modelName: string) => {
     }
   );
   return response.data.length > 0;
+};
+
+export const getOllamaDownloadedModels = async (): Promise<ModelResponse[]> => {
+  // get all models from ollama using ollamajs
+  const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
+  const downloadedModels = await ollama.list();
+  return downloadedModels.models;
 };

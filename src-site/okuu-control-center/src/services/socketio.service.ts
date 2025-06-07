@@ -1,7 +1,6 @@
-import { Store } from 'pinia';
 import { io, Socket } from 'socket.io-client';
 import { useConfigStore } from 'src/stores/config.store';
-import { Message, useSessionStore } from 'src/stores/session.store';
+import { Message } from 'src/stores/session.store';
 import { resolveHostRedirect } from 'src/utils/okuuai_utils';
 
 export enum Status {
@@ -16,7 +15,6 @@ export class SocketioService {
     private sessionId: string = '';
     private status: Status = Status.DISCONNECTED;
     private sessionStore: any;
-    private lastPing = 0;
 
     constructor() {
         this.sessionStore = null;
@@ -34,12 +32,17 @@ export class SocketioService {
             if (!url) throw new Error('Invalid URL');
             // Remove protocol from URL
             url = url.replace(/^https?:\/\//, '');
-            this.socket = io(`wss://${url}`, {
+
+            this.socket = io(`${process.env.LOCAL ? 'ws' : 'wss' }://${url}`, {
                 transports: ['websocket'],
                 timeout: 30000,
                 reconnectionAttempts: 3,
-                reconnectionDelay: 1000,
+                reconnectionDelay: 5000,
             });
+
+            this.socket.connect();
+
+            console.log('Socket initialized with URL:', `${process.env.LOCAL ? 'ws' : 'wss' }://${url}`);
             this.sessionId = sessionId;
             
             console.log('Socket initialized:', this.sessionId);
@@ -59,7 +62,6 @@ export class SocketioService {
 
         this.socket.on('connect', () => {
             console.log('Connected to socket');
-            this.lastPing = Date.now();
             this.updateStatus(Status.CONNECTED);
         });
 
@@ -89,17 +91,8 @@ export class SocketioService {
             this.updateStatus(Status.DISCONNECTED);
         });
 
-        this.socket.on('ping', () => {
-            //console.log('Ping received');
-            this.lastPing = Date.now();
-        });
-
         this.socket.on('connect_error', (err) => {
             console.error('Socket connection error:', err);
-        });
-
-        this.socket.on('disconnect', (reason) => {
-            console.warn(`Disconnected: ${reason}`);
         });
     }
 

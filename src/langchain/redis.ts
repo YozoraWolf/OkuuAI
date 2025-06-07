@@ -78,8 +78,7 @@ export async function saveMemoryWithEmbedding(sessionId: string, message: string
 
   try {
     // Generate embedding for the statement (e.g., "I live in Tokyo")
-    const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
-    const embeddingResponse = await ollama.embed({ input: message, model: "nomic-embed-text" });
+    const embeddingResponse = await Core.ollama_instance.embed({ input: message, model: "nomic-embed-text" });
 
     const embedding = embeddingResponse.embeddings.length === 1
       ? embeddingResponse.embeddings[0]
@@ -151,8 +150,7 @@ async function updateRecallCount(memories: any[]) {
 export async function searchMemoryWithEmbedding(query: string, sessionId: number = -1, topK: number = 5) {
   try {
     // Generate query embedding
-    const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
-    const queryEmbeddingResponse = await ollama.embed({ input: query, model: "nomic-embed-text" });
+    const queryEmbeddingResponse = await Core.ollama_instance.embed({ input: query, model: "nomic-embed-text" });
 
     const queryEmbedding = queryEmbeddingResponse.embeddings.length === 1
       ? queryEmbeddingResponse.embeddings[0]
