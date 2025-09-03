@@ -108,7 +108,7 @@ import { truncate } from 'src/utils/okuuai_utils';
 import { useConfigStore } from 'src/stores/config.store';
 import ChatConfigModal from 'src/components/chat/ChatConfigModal.vue';
 import { useAuthStore } from 'src/stores/auth.store';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 
 const drawer = ref(true);
@@ -138,6 +138,7 @@ const inputTimeout = ref();
 
 const $q = useQuasar();
 const router = useRouter();
+const route = useRoute();
 
 const socketIO = ref<SocketioService | null>();
 const socket = ref<Socket>();
@@ -175,32 +176,42 @@ const showConfigModal = () => {
 
 onMounted(async () => {
     authStore.loadApiKey();
-    // if the user is not logged in, redirect to login page
     if(!apiKey.value) {
         router.push('/login');
         return;
     }
-
     isLoadingSessionMessages.value = true;
     await sessionStore.fetchAllSessions();
     await nextTick();
     sessionStore.orderSessions();
     await configStore.fetchOkuuPfp();
-    if (currentSession.value !== undefined) {
-        selectSession(currentSession.value.sessionId);
-    }
-    isLoadingSessionMessages.value = false;
-
     // fetch thinking mode status from config store
     await configStore.fetchThinkingState();
-    console.log('Successfully loaded sessions', sessions.value);
-
     // fetch all downloadable models
     await configStore.fetchAllDownloadedModels();
-
     // fetch current model
     await configStore.getOkuuModel();
+
+    // If route param id is present, select that session
+    if (route.params.id) {
+        selectSession(route.params.id as string);
+    } else {
+        selectedSessionId.value = undefined;
+    }
+    isLoadingSessionMessages.value = false;
 });
+
+// Watch for route changes to update chat session
+watch(
+    () => route.params.id,
+    async (id) => {
+        if (id) {
+            await selectSession(id as string);
+        } else {
+            selectedSessionId.value = undefined;
+        }
+    }
+);
 
 onBeforeUnmount(() => {
     socket.value?.disconnect();
@@ -213,22 +224,24 @@ const selectSession = async (sessionId: string) => {
     }
     isLoadingSessionMessages.value = true;
     await sessionStore.fetchSessionMessages(sessionId);
-    sessionStore.orderSessions();
     sessionStore.setCurrentSessionId(sessionId);
     selectedSessionId.value = sessionId;
-    //console.log('Selected session', sessionId);
+    
     scrollToBottom();
-
     mini.value = true;
-
     socketIO.value = new SocketioService();
     socket.value = await socketIO.value.initializeSocket(sessionId, sessionStore);
     isLoadingSessionMessages.value = false;
+    
+    if (route.params.id !== sessionId) {
+        router.replace({ path: `/chat/${sessionId}` });
+    }
 };
 
 const addNewSession = async () => {
     const sessionId = await sessionStore.addSession();
-    selectSession(sessionId);
+    sessionStore.orderSessions();
+    router.replace({ path: `/chat/${sessionId}` });
 };
 
 const sendMessage = async () => {
@@ -291,6 +304,8 @@ const removeSession = async (sessionId: string) => {
         await sessionStore.deleteSession(sessionId);
         if (selectedSessionId.value === sessionId) {
             selectedSessionId.value = undefined;
+            // Update route to /chat (no id) using path navigation
+            router.replace({ path: `/chat` });
         }
     }).onCancel(() => {
         //console.log('Cancelled');

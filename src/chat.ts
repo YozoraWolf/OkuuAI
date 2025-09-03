@@ -4,7 +4,13 @@ import { Logger } from './logger';
 import { getLatestMsgsFromSession, SESSION_ID } from './langchain/memory/memory';
 import { franc } from 'franc-ce';
 import { Ollama } from 'ollama';
-import { isQuestion, saveMemoryWithEmbedding, searchMemoryWithEmbedding, updateAttachmentForMemory, updateMemory } from './langchain/redis';
+import { 
+    isQuestion, 
+    saveMemoryWithEmbedding, 
+    searchMemoryWithEmbedding, 
+    updateAttachmentForMemory, 
+    updateMemory 
+} from './langchain/redis';
 import { loadFileContentFromStorage } from './langchain/memory/storage';
 
 export interface ChatMessage {
@@ -32,19 +38,49 @@ export const langMappings: { [key: string]: string } = {
 
 let messagesCount = 0;
 
-export const setMessagesCount = (cnt: number) => {
-    messagesCount = cnt;
-};
-
-export const getMessagesCount = () => {
-    return messagesCount;
-};
-
-export const incrementMessagesCount = () => {
-    return messagesCount++;
-};
+export const setMessagesCount = (cnt: number) => { messagesCount = cnt; };
+export const getMessagesCount = () => messagesCount;
+export const incrementMessagesCount = () => ++messagesCount;
 
 const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+const MAX_RELEVANT_MEMORIES = 5;
+const MAX_HISTORY_CHARS = 4000; // Ollama: use char proxy instead of tokens
+
+async function buildPrompt(msg: ChatMessage) {
+    // 1. Retrieve top-k relevant memories
+    const memoryQuery = msg.message || '';
+    let memories = await searchMemoryWithEmbedding(memoryQuery, Number(msg.sessionId));
+    if (memories && memories.length > MAX_RELEVANT_MEMORIES) {
+        memories = memories.slice(0, MAX_RELEVANT_MEMORIES);
+    }
+    const memoryContext = memories?.map((doc: any) => `- ${doc.message}`).join('\n');
+
+    // 2. Get recent chat history, clamp by length
+    const lastMsgs = await getLatestMsgsFromSession(msg.sessionId, 50);
+    let historyLines = lastMsgs.messages.map((m: any) => `${m.user}: ${m.message}`);
+    let history = historyLines.join('\n');
+    if (history.length > MAX_HISTORY_CHARS) {
+        history = history.slice(history.length - MAX_HISTORY_CHARS);
+    }
+
+    // 3. Build structured prompt
+    const prompt = `
+System:
+You are Okuu, a helpful AI assistant. Be consistent, concise, and relevant.
+
+Relevant Memories (from user):
+${memoryContext || 'None'}
+
+Conversation so far:
+${history}
+
+User: ${msg.message}
+Okuu:
+    `.trim();
+
+    return prompt;
+}
 
 export const sendChat = async (msg: ChatMessage, callback?: (data: string) => void) => {
     try {
@@ -53,7 +89,6 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             id: msg.id || incrementMessagesCount(),
         };
         Logger.DEBUG(`Sending chat: ${msg.id}`);
-        incrementMessagesCount();
 
         const reply: ChatMessage = {
             id: incrementMessagesCount(),
@@ -61,26 +96,25 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             message: '',
             done: false,
             lang: 'en-US',
-            timestamp: Date.now() + 1000, // Add 1 sec to avoid same timestamp
+            timestamp: Date.now(),
             sessionId: msg.sessionId || SESSION_ID || '',
             stream: msg.stream || false,
         };
 
         // Step 1: Save user input in memory
-        const timestamp = Date.now();
         const messageType = isQuestion(msg.message as string) ? 'question' : 'statement';
         const memory = await saveMemoryWithEmbedding(msg.sessionId, msg.message as string, "user", messageType);
         Logger.DEBUG(`Saved memory: ${memory.memoryKey}`);
 
-        // Step 2 (Optional): Update attachment in memory
+        // Step 2: Update attachment in memory if file exists
         let sentImage: string[] | undefined = undefined;
         if (msg.file) {
-            // Note: Images get encoded to base64 before sending
             const fileContent = await loadFileContentFromStorage(msg.file);
             if (fileContent) {
                 await updateAttachmentForMemory(memory.memoryKey, fileContent, msg.file);
-                if(imageExts.includes(msg.file.split('.').pop() || ''))
+                if (imageExts.includes(msg.file.split('.').pop() || '')) {
                     sentImage = [fileContent];
+                }
                 msg.attachment = fileContent;
                 Logger.INFO(`Attachment updated for memory: ${memory.memoryKey}`);
             } else {
@@ -88,53 +122,24 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             }
         }
 
-        // Step 3: Query Redis for related memories
-        const memoryQuery = msg.message as string;
-        const memories = await searchMemoryWithEmbedding(memoryQuery, Number(msg.sessionId));
+        // Step 3: Build prompt (memories + history + user msg)
+        const prompt = await buildPrompt(msg);
+        Logger.DEBUG(`Prompt built:\n${prompt}`);
 
-        const memoryContext = memories?.map((doc: any, index: number) => `${index + 1}. ${doc.message}`).join('\n');
-        Logger.DEBUG(`Retrieved Memories: ${JSON.stringify(memoryContext)}`);
-
-        // Get last 6 messages from current session
-        const lastMsgs = await getLatestMsgsFromSession(msg.sessionId, 20);
-
-        // Join them in a string to use as context for the AI, adding User: message
-        const chatHistory = lastMsgs.messages.map((msg: any) => `${msg.user}: ${msg.message}`).join('\n');
-
-        // Send message back to client
+        // Step 4: Notify client of user message
         io.to(msg.sessionId).emit('chat', { ...msg, memoryKey: memory.memoryKey, timestamp: memory.timestamp });
 
-        // Step 2: Prepare prompt with memory context
-        const prompt = `
-            Relevant memories:
-            NOTE: Any memories talking in first person are from the user. Only use the following memories only if they are relevant to the conversation.
-            ${memoryContext}
-            ---
-            Chat History:
-            ${chatHistory}
-            Okuu: 
-        `;
-
-        Logger.DEBUG(`Prompt: ${prompt}`);
-        Logger.DEBUG(`Message: ${JSON.stringify(msg, null, 2)}`);
-
+        // --- STREAMING MODE ---
         if (msg.stream) {
-
             reply.done = false;
-            reply.lang = langMappings[franc(reply.message)] || 'en-US';
-            const timestamp = Date.now() + 1000; // Add 1 sec to avoid same timestamp
+            reply.lang = langMappings[franc(msg.message || '')] || 'en-US';
             reply.sessionId = msg.sessionId;
-            reply.timestamp = timestamp;
+            reply.timestamp = Date.now();
 
-            io.to(msg.sessionId).emit('chat', reply); // send back AI response (for GUI to display and await)
-            
+            // Let client know AI reply started
+            io.to(msg.sessionId).emit('chat', reply);
 
-            // Save AI response in memory
-
-            const messageTypeAI = isQuestion(reply.message as string) ? 'question' : 'statement';
-            const aiSaved = await saveMemoryWithEmbedding(reply.sessionId, reply.message as string, "okuu", messageTypeAI);
-            
-            reply.memoryKey = aiSaved.memoryKey;
+            let aiReply = '';
 
             const stream = await Core.ollama_instance.generate({
                 prompt,
@@ -145,58 +150,53 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 images: sentImage,
             });
 
-
-
             for await (const part of stream) {
-                if (callback) callback(part.response);
-                reply.message += part.response;
+                aiReply += part.response;
+                reply.message = aiReply;
                 reply.done = false;
                 io.to(msg.sessionId).emit('chat', reply);
+                if (callback) callback(part.response);
             }
 
+            // Finalize AI reply
             reply.done = true;
+            reply.message = aiReply;
 
-            // Update memory with AI response
+            // Save AI reply in memory
+            const messageTypeAI = isQuestion(aiReply) ? 'question' : 'statement';
+            const aiSaved = await saveMemoryWithEmbedding(reply.sessionId, aiReply, "okuu", messageTypeAI);
+            reply.memoryKey = aiSaved.memoryKey;
             await updateMemory(reply);
-            
-            // TODO: Search a way to make this the last message sent in stream, since it's not getting sent last
-            io.to(msg.sessionId).emit('chat', reply);
-            //Logger.DEBUG(`Saved AI memory: ${aiSaved}`);
-
-            return reply.message;
-            //Logger.DEBUG(`Response: ${reply.content}`);
-        } else {
-            Logger.DEBUG(`Loading Response...`);
-            Logger.DEBUG(`Core Settings: ${JSON.stringify(Core.model_settings, null, 2)}`);
-            Logger.DEBUG(`Model: ${Core.model_name}`);
-            Logger.DEBUG(`🧠 Think: ${Core.model_settings.think}`);
-            const resp = await Core.ollama_instance.generate({
-                prompt,
-                model: Core.model_name,
-                system: Core.model_settings.system,
-                think: Core.model_settings.think,
-                images: sentImage,
-            });
-
-            //Logger.DEBUG(`Response: ${JSON.stringify(resp, null, 2)}`);
-            reply.done = true;
-            reply.message = resp.response;
-            reply.lang = langMappings[franc(reply.message)] || 'en-US';
-            reply.thinking = resp.thinking || '';
-
-            // Save AI response in memory
-            const messageTypeAI = isQuestion(reply.message) ? 'question' : 'statement';
-            const aiMemory = await saveMemoryWithEmbedding(reply.sessionId, reply.message, "okuu", messageTypeAI, reply.thinking);
-            //Logger.DEBUG(`Saved AI memory: ${aiSaved}`);
-            reply.memoryKey = aiMemory.memoryKey;
-            reply.timestamp = aiMemory.timestamp;
 
             io.to(msg.sessionId).emit('chat', reply);
-
-            callback && callback(reply.message);
-            Logger.DEBUG("Returning...")
-            return reply.message;
+            return aiReply;
         }
+
+        // --- NON-STREAM MODE ---
+        Logger.DEBUG(`Loading full response...`);
+        const resp = await Core.ollama_instance.generate({
+            prompt,
+            model: Core.model_name,
+            system: Core.model_settings.system,
+            think: Core.model_settings.think,
+            images: sentImage,
+        });
+
+        reply.done = true;
+        reply.message = resp.response;
+        reply.lang = langMappings[franc(msg.message || '')] || 'en-US';
+        reply.thinking = resp.thinking || '';
+
+        const messageTypeAI = isQuestion(reply.message) ? 'question' : 'statement';
+        const aiMemory = await saveMemoryWithEmbedding(reply.sessionId, reply.message, "okuu", messageTypeAI, reply.thinking);
+        reply.memoryKey = aiMemory.memoryKey;
+        reply.timestamp = aiMemory.timestamp;
+
+        io.to(msg.sessionId).emit('chat', reply);
+
+        callback && callback(reply.message);
+        return reply.message;
+
     } catch (error: any) {
         Logger.ERROR(`Error sending chat: ${error.response ? error.response.data : error.message}`);
         return null;
@@ -211,4 +211,4 @@ export const initOllamaInstance = async () => {
         Logger.ERROR(`❌🦙 Error initializing Ollama instance: ${error.message}`);
         throw error;
     }
-}
+};

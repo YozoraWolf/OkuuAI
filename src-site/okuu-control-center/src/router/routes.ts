@@ -18,6 +18,10 @@ const routes: RouteRecordRaw[] = [
     component: () => import('pages/Chat.vue')
   },
   {
+    path: '/chat/:id',
+    component: () => import('pages/Chat.vue')
+  },
+  {
     path: '/inactive',
     component: () => import('pages/OkuuInactive.vue')
   },
