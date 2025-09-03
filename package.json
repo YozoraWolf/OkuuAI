@@ -5,6 +5,7 @@
   "exports": "./index.js",
   "scripts": {
     "start-tunnel": "./setup_ngrok.sh && ts-node ./src/index.ts",
+    "start-tunnel-win": "call setup_ngrok.bat && ts-node ./src/index.ts",
     "start": "ts-node ./src/index.ts",
     "sync-ngrok": "ts-node ./sync-ngrok.ts",
     "nodemon": "nodemon --no-stdin",
