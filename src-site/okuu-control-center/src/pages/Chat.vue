@@ -48,6 +48,7 @@
                             <q-btn :disable="sendBtnActive" flat round icon="send"
                                 :loading="sendBtnLoading"
                                 :color="`${!sendBtnActive ? 'primary' : 'gray-9'}`" @click="sendMessage" />
+                            <q-btn icon="mic" flat round :color="`${isAudioStreamActive ? 'primary' : 'gray-9'}`" @click="toggleAudioStream" />
                         </template>
                     </q-input>
                     <div class="sub-actions row">
@@ -92,8 +93,10 @@
                 </div>
             </div>
         </q-page-container>
-
-
+        <ConsentConfirmation
+            v-model="showConsentModal"
+            @consent="onConsentGiven"
+        />
     </q-layout>
 </template>
 
@@ -110,6 +113,7 @@ import ChatConfigModal from 'src/components/chat/ChatConfigModal.vue';
 import { useAuthStore } from 'src/stores/auth.store';
 import { useRouter, useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
+import ConsentConfirmation from 'src/components/ConsentConfirmation.vue';
 
 const drawer = ref(true);
 const mini = ref(true);
@@ -146,6 +150,9 @@ const socket = ref<Socket>();
 const statusIcon = ref('cloud_off');
 const statusColor = ref('red');
 const statusMessage = ref('Disconnected');
+
+const isAudioStreamActive = ref(false);
+const showConsentModal = ref(false);
 
 const attachment = ref<File | null>(null);
 
@@ -215,6 +222,7 @@ watch(
 
 onBeforeUnmount(() => {
     socket.value?.disconnect();
+    socketIO.value?.stopAudioStream();
 });
 
 const selectSession = async (sessionId: string) => {
@@ -321,6 +329,85 @@ const toggleThinkingFunc = async () => {
         position: 'bottom',
         timeout: 2000,
     });
+};
+
+// start audio stream functionality and sending unsing websocket to /mic
+const toggleAudioStream = () => {
+    if (!selectedSession.value) {
+        $q.notify({
+            message: 'Please select a session first.',
+            color: 'red',
+            position: 'bottom',
+            timeout: 2000,
+        });
+        return;
+    }
+    if (isLoadingResponse.value) {
+        $q.notify({
+            message: 'Please wait for the current response to finish.',
+            color: 'red',
+            position: 'bottom',
+            timeout: 2000,
+        });
+        return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        $q.notify({
+            message: 'Your browser does not support audio input.',
+            color: 'red',
+            position: 'bottom',
+            timeout: 2000,
+        });
+        return;
+    }
+    // Check consent
+    if (!localStorage.getItem('audioConsent')) {
+        showConsentModal.value = true;
+        return;
+    }
+    // Toggle audio stream
+    if (!isAudioStreamActive.value) {
+        isAudioStreamActive.value = true;
+        socketIO.value?.startAudioStream(
+            socket.value!,
+            (msg) => {
+                $q.notify({
+                    message: msg,
+                    color: 'red',
+                    position: 'bottom',
+                    timeout: 2000,
+                });
+                isAudioStreamActive.value = false;
+            },
+            () => {
+                isAudioStreamActive.value = false;
+            }
+        );
+    } else {
+        isAudioStreamActive.value = false;
+        socketIO.value?.stopAudioStream();
+    }
+};
+
+const onConsentGiven = () => {
+    localStorage.setItem('audioConsent', '1');
+    showConsentModal.value = false;
+    isAudioStreamActive.value = true;
+    socketIO.value?.startAudioStream(
+        socket.value!,
+        (msg) => {
+            $q.notify({
+                message: msg,
+                color: 'red',
+                position: 'bottom',
+                timeout: 2000,
+            });
+            isAudioStreamActive.value = false;
+        },
+        () => {
+            isAudioStreamActive.value = false;
+        }
+    );
 };
 
 // computed

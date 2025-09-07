@@ -15,6 +15,8 @@ export class SocketioService {
     private sessionId: string = '';
     private status: Status = Status.DISCONNECTED;
     private sessionStore: any;
+    private mediaRecorder: MediaRecorder | null = null;
+    private audioStream: MediaStream | null = null;
 
     constructor() {
         this.sessionStore = null;
@@ -122,6 +124,65 @@ export class SocketioService {
     public retryConnection(): void {
         if (this.socket) {
             this.socket.connect();
+        }
+    }
+
+    public async startAudioStream(socket: Socket, onError?: (msg: string) => void, onStop?: () => void) {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            onError?.('Your browser does not support audio input.');
+            onStop?.();
+            return;
+        }
+        try {
+            this.audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this.mediaRecorder = new MediaRecorder(this.audioStream);
+            this.mediaRecorder.start(250);
+
+            this.mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0 && socket) {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const arrayBuffer = reader.result as ArrayBuffer;
+                        const uint8Array = new Uint8Array(arrayBuffer);
+                        socket.emit('mic', uint8Array);
+                    };
+                    reader.readAsArrayBuffer(e.data);
+                }
+            };
+
+            this.mediaRecorder.onstop = () => {
+                socket.emit('mic_end');
+                if (this.audioStream) {
+                    this.audioStream.getTracks().forEach(track => track.stop());
+                    this.audioStream = null;
+                }
+                onStop?.();
+            };
+
+            // Stop after 60 seconds
+            setTimeout(() => {
+                if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+                    this.mediaRecorder.stop();
+                }
+            }, 60000);
+
+        } catch (err) {
+            onError?.('Error accessing microphone.');
+            if (this.audioStream) {
+                this.audioStream.getTracks().forEach(track => track.stop());
+                this.audioStream = null;
+            }
+            onStop?.();
+        }
+    }
+
+    public stopAudioStream() {
+        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+            this.mediaRecorder.stop();
+        }
+        if (this.audioStream) {
+            this.audioStream.getTracks().forEach(track => track.stop());
+            this.audioStream = null;
         }
     }
 }
