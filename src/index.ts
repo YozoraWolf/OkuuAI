@@ -24,7 +24,7 @@ export let io: Server;
     const server = http.createServer(app); // Create HTTP server
     
     // Websockets
-    io = setupSockets(server);
+    io = await setupSockets(server);
 
     // Middleware to check the API key
     const checkApiKey = (req: Request, res: Response, next: NextFunction) => {
