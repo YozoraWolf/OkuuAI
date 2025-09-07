@@ -36,16 +36,16 @@ export function ensureWhisperSetup() {
         ];
 
         WHISPER_BINARY = mainBinaryCandidates.find(p => fs.existsSync(p)) || "";
+
         if (!WHISPER_BINARY) {
-            throw new Error("No binary found! Did you build whisper.cpp?");
+            Logger.ERROR('No whisper binary found!');
+            if (!fs.existsSync(path.join(WHISPER_BASE_DIR, "build", "bin", "whisper-cli"))) {
+                Logger.INFO("Building whisper.cpp...");
+                execSync(`cd ${WHISPER_BASE_DIR} && make whisper-cli`, { stdio: "inherit" });
+            }
         }
+
         Logger.INFO("Whisper binary: " + WHISPER_BINARY);
-
-        if (!fs.existsSync(path.join(WHISPER_BASE_DIR, "build", "bin", "whisper-cli"))) {
-            Logger.INFO("Building whisper.cpp...");
-            execSync(`cd ${WHISPER_BASE_DIR} && make whisper-cli`, { stdio: "inherit" });
-        }
-
         // 3️⃣ Download models
         if (!fs.existsSync(MODELS_DIR)) fs.mkdirSync(MODELS_DIR, { recursive: true });
 

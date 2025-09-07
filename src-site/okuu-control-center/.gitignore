@@ -35,6 +35,5 @@ yarn-error.log*
 
 # Ignore whisper.cpp cloned repo
 /whisper_cpp/
-
 # Ignore models downloaded
 /whisper_cpp/models/
