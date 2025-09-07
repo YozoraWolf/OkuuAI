@@ -10,7 +10,7 @@ export class Whisperer {
     private transcriptionCallbacks: Record<Language, Array<(text: string) => void>> = {} as any;
 
     private pcmBuffer: Buffer = Buffer.alloc(0);
-    
+
     private constructor() {}
 
     static async initWhisper() {
@@ -41,7 +41,7 @@ export class Whisperer {
 
     feedAudio(chunk: Buffer, lang: Language = 'en') {
         // Debug log
-        console.debug(`[Whisperer] feedAudio called for lang=${lang}, chunk size=${chunk.length}`);
+        //console.debug(`[Whisperer] feedAudio called for lang=${lang}, chunk size=${chunk.length}`);
         const worker = this.workers[lang];
         if (!worker) throw new Error(`No worker loaded for language: ${lang}`);
         worker.feedAudio(chunk);
@@ -49,7 +49,7 @@ export class Whisperer {
 
     onTranscription(lang: Language, callback: (text: string) => void) {
         // Debug log
-        console.debug(`[Whisperer] onTranscription registered for lang=${lang}`);
+        //console.debug(`[Whisperer] onTranscription registered for lang=${lang}`);
         if (!this.transcriptionCallbacks[lang]) {
             this.transcriptionCallbacks[lang] = [];
             // Register a single handler with the worker that fans out to all callbacks

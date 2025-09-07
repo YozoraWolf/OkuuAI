@@ -48,7 +48,7 @@
                             <q-btn :disable="sendBtnActive" flat round icon="send"
                                 :loading="sendBtnLoading"
                                 :color="`${!sendBtnActive ? 'primary' : 'gray-9'}`" @click="sendMessage" />
-                            <q-btn icon="mic" flat round :color="`${isAudioStreamActive ? 'primary' : 'gray-9'}`" @click="toggleAudioStream" />
+                            <q-btn icon="mic" flat round :color="`${isAudioStreamActive ? 'primary' : 'gray-9'}`" @click="() => toggleAudioStream(true)" />
                         </template>
                     </q-input>
                     <div class="sub-actions row">
@@ -222,7 +222,7 @@ watch(
 
 onBeforeUnmount(() => {
     socket.value?.disconnect();
-    socketIO.value?.stopAudioStream();
+    socketIO.value?.stopAudioStream(false); // not manual, just cleanup
 });
 
 const selectSession = async (sessionId: string) => {
@@ -332,7 +332,7 @@ const toggleThinkingFunc = async () => {
 };
 
 // start audio stream functionality and sending unsing websocket to /mic
-const toggleAudioStream = () => {
+const toggleAudioStream = (manual = false) => {
     if (!selectedSession.value) {
         $q.notify({
             message: 'Please select a session first.',
@@ -385,7 +385,7 @@ const toggleAudioStream = () => {
         );
     } else {
         isAudioStreamActive.value = false;
-        socketIO.value?.stopAudioStream();
+        socketIO.value?.stopAudioStream(manual); // pass manual flag
     }
 };
 
@@ -480,6 +480,44 @@ const onEnter = (e: KeyboardEvent) => {
     e.preventDefault();
     sendMessage();
 };
+
+// After socket initialization:
+watch(socket, (s) => {
+    if (!s) return;
+    s.on('transcription', (payload: { text: string }) => {
+        if (payload && payload.text !== undefined) {
+            // Only append new transcription text that is not already present
+            if (!newMessage.value.endsWith(payload.text)) {
+                const current = newMessage.value;
+                const incoming = payload.text;
+                let toAppend = incoming;
+                if (current && incoming.startsWith(current)) {
+                    toAppend = incoming.slice(current.length);
+                }
+                newMessage.value += toAppend;
+            }
+        }
+    });
+    s.on('transcription_final', (payload: { text: string }) => {
+        if (payload && payload.text !== undefined && payload.text.trim()) {
+            // Always append any final text not already present
+            if (!newMessage.value.endsWith(payload.text)) {
+                const current = newMessage.value;
+                const incoming = payload.text;
+                let toAppend = incoming;
+                if (current && incoming.startsWith(current)) {
+                    toAppend = incoming.slice(current.length);
+                }
+                newMessage.value += toAppend;
+            }
+            sendMessage();
+            newMessage.value = '';
+            // Stop audio stream after sending message to avoid leakages
+            socketIO.value?.stopAudioStream(false);
+            isAudioStreamActive.value = false;
+        }
+    });
+});
 
 </script>
 

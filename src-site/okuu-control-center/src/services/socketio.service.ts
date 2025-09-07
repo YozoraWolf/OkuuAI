@@ -144,14 +144,17 @@ export class SocketioService {
                     reader.onload = () => {
                         const arrayBuffer = reader.result as ArrayBuffer;
                         const uint8Array = new Uint8Array(arrayBuffer);
-                        socket.emit('mic', uint8Array);
+                        // Send mimeType with each chunk
+                        socket.emit('mic', { data: uint8Array, mimeType: e.data.type });
                     };
                     reader.readAsArrayBuffer(e.data);
                 }
             };
 
             this.mediaRecorder.onstop = () => {
-                socket.emit('mic_end');
+                if (socket) {
+                    socket.emit('mic_end', { manual: false });
+                }
                 if (this.audioStream) {
                     this.audioStream.getTracks().forEach(track => track.stop());
                     this.audioStream = null;
@@ -176,8 +179,11 @@ export class SocketioService {
         }
     }
 
-    public stopAudioStream() {
+    public stopAudioStream(manual = false) {
         if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+            if (this.socket) {
+                this.socket.emit('mic_end', { manual });
+            }
             this.mediaRecorder.stop();
         }
         if (this.audioStream) {

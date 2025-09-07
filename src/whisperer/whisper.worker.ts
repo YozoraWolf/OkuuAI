@@ -81,7 +81,7 @@ export class WhisperWorker extends EventEmitter {
     });
 
     proc.stderr.on('data', (data: Buffer) => {
-      console.error('Whisper stderr:', data.toString());
+      // console.error('Whisper stderr:', data.toString());
     });
 
     proc.on('close', () => {
