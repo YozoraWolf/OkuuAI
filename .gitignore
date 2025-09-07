@@ -14,3 +14,8 @@ session.json
 /src/assets/okuu_pfp.*
 assistant.json
 settings.json
+
+# Ignore whisper.cpp cloned repo
+whisper_cpp/
+# Ignore models downloaded
+whisper_cpp/models/
