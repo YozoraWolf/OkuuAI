@@ -3,6 +3,7 @@ import axios, { AxiosResponse } from 'axios';
 import { exec } from 'child_process';
 import { Logger } from './logger';
 import { ModelResponse, Ollama } from 'ollama';
+import { createUnzip } from "zlib";
 
 // Assistant Configuration
 const assistantConfigFile = 'assistant.json';
@@ -134,3 +135,14 @@ export const getOllamaDownloadedModels = async (): Promise<ModelResponse[]> => {
   const downloadedModels = await ollama.list();
   return downloadedModels.models;
 };
+
+export async function extractZip(zipFile: string, outDir: string) {
+  const unzip = createUnzip();
+  const cmd = process.platform === "win32" 
+    ? `powershell -Command "Expand-Archive -Path '${zipFile}' -DestinationPath '${outDir}'"` 
+    : `unzip -o '${zipFile}' -d '${outDir}'`;
+
+  import("child_process").then(({ execSync }) => {
+    execSync(cmd, { stdio: "inherit" });
+  });
+}

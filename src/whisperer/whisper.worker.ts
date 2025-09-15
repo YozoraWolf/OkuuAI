@@ -3,7 +3,7 @@ import EventEmitter from 'events';
 import path from 'path';
 import fs from 'fs';
 import wav from 'wav';
-import { TMP_DIR, WHISPER_BASE_DIR } from './whisper.config';
+import { getSystemTmpDir, WHISPER_BASE_DIR } from './whisper.config';
 
 export class WhisperWorker extends EventEmitter {
   private modelPath: string;
@@ -15,24 +15,22 @@ export class WhisperWorker extends EventEmitter {
   private bitDepth: number = 16;
   private isTranscribing: boolean = false;
 
+  static TMP_DIR: string;
+
   constructor(modelPath: string) {
     super();
     this.modelPath = modelPath;
-    this.binaryPath = path.join(WHISPER_BASE_DIR, 'build', 'bin', 'whisper-cli');
+    this.binaryPath = path.join(WHISPER_BASE_DIR, process.platform === 'win32' ? 'whisper-stream.exe' : 'whisper-stream');
+    WhisperWorker.TMP_DIR = getSystemTmpDir();
     if (!fs.existsSync(this.binaryPath)) {
       throw new Error(`Whisper binary not found at ${this.binaryPath}. Make sure it is built.`);
     }
-  }
-
-  async start() {
-    // nothing to do for file-based mode
   }
 
   feedAudio(chunk: Buffer) {
     // Convert incoming Buffer to Uint8Array
     const chunkArray = new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
 
-    // Concatenate manually
     const combined = new Uint8Array(this.pcmBuffer.length + chunkArray.length);
     combined.set(this.pcmBuffer, 0);
     combined.set(chunkArray, this.pcmBuffer.length);
@@ -48,7 +46,7 @@ export class WhisperWorker extends EventEmitter {
     this.isTranscribing = true;
 
     const wavFile = path.join(
-      TMP_DIR,
+      WhisperWorker.TMP_DIR,
       `stream_${Date.now()}_${Math.random().toString(36).slice(2)}.wav`
     );
 
@@ -102,7 +100,9 @@ export class WhisperWorker extends EventEmitter {
     this.on('transcription', callback);
   }
 
+  async start() {
+  }
+
   async stop() {
-    // nothing to do for file-based mode
   }
 }

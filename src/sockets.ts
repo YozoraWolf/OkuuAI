@@ -77,7 +77,7 @@ export const setupSockets = async (server: HTTPServer) => {
         // Register transcription callback for English (or other langs i decide to support in the future)
         try {
             const whisper = Whisperer.getInstance();
-            whisper.onTranscription('en', (text: string) => {
+            whisper.onTranscription((text: string) => {
                 Logger.DEBUG('Transcription: ' + text);
 
                 // Clean up text for incremental display
