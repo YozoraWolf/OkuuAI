@@ -11,7 +11,7 @@
         <div class="full-width">
             <div class="flex full-width justify-between">
                 <div class="flex column">
-                    <span class="user row">{{ localMessage.user }}</span>
+                    <span class="user row">{{ message.user }}</span>
                     <span class="timestamp row">{{ formattedTimestamp }}</span>
                 </div>
                 <div class="flex self-end" v-if="deleteBtn && showDeleteBtn">
@@ -21,7 +21,7 @@
             </div>
             <div class="flex column">
                 <div class="message-body q-mt-xs">
-                    <template v-for="(part, idx) in generateComponents(localMessage.message, localMessage.thinking)" :key="idx">
+                    <template v-for="(part, idx) in generateComponents(message.message, message.thinking)" :key="idx">
                         <component
                             v-if="part.type === 'component'"
                             :is="part.component"
@@ -37,8 +37,8 @@
                         ><br></span>
                     </template>
                 </div>
-                <q-img v-if="localMessage.attachment && isAttachmentImage"
-                    :src="`data:image/png;base64,${localMessage.attachment}`"
+                <q-img v-if="message.attachment && isAttachmentImage"
+                    :src="`data:image/png;base64,${message.attachment}`"
                     loading="lazy"
                     class="attachment-image q-mt-sm q-ml-sm cursor-pointer non-selectable"
                     @click="openPreview"
@@ -51,7 +51,7 @@
             
         </div>
         <!-- TODO: Work on this -->
-        <PreviewImage :imageSrc="`data:image/png;base64,${localMessage.attachment}` || ''" :visible="previewVisible" @close="closePreview" />
+    <PreviewImage :imageSrc="`data:image/png;base64,${message.attachment}` || ''" :visible="previewVisible" @close="closePreview" />
     </div>
 </template>
 
@@ -91,28 +91,24 @@ const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
 
 const showDeleteBtn = ref(false);
 
-const localMessage = ref({ ...props.message });
 
 const okuu_pfp = ref();
 
-const avatar: ComputedRef<any>   = computed(() => localMessage.value.user.toLocaleLowerCase() === 'okuu' ? okuu_pfp : '');
+const avatar: ComputedRef<any> = computed(() => props.message.user.toLocaleLowerCase() === 'okuu' ? okuu_pfp : '');
 
 const formattedTimestamp = computed(() => {
     const userTimezone = localStorage.getItem('userTimezone') || dayjs.tz.guess();
-    const ts = dayjs(Number(localMessage.value.timestamp)).tz(userTimezone);
-
-    // Get the offset in hours
-    const offset = ts.utcOffset() / 60; // Convert minutes to hours
-    const offsetSign = offset >= 0 ? '+' : '-'; // Determine the sign
-    const formattedOffset = `${offsetSign}${Math.abs(offset)}`; // Format as "+9" or "-9"
-
+    const ts = dayjs(Number(props.message.timestamp)).tz(userTimezone);
+    const offset = ts.utcOffset() / 60;
+    const offsetSign = offset >= 0 ? '+' : '-';
+    const formattedOffset = `${offsetSign}${Math.abs(offset)}`;
     return ts.format(`YYYY-MM-DD HH:mm:ss (UTC${formattedOffset})`);
 });
 
 const previewVisible = ref(false);
 
 const isAttachmentImage = computed(() => {
-    const ext = localMessage.value.file?.split('.').pop()?.toLowerCase();
+    const ext = props.message.file?.split('.').pop()?.toLowerCase();
     return imageExts.includes(ext || '');
 });
 
@@ -123,13 +119,13 @@ const deleteMessage = () => {
         ok: 'Yes',
         cancel: 'No',
     }).onOk(async () => {
-        const memoryKey = await sessionStore.getMemoryKey(localMessage.value.sessionId, localMessage.value.timestamp);
+        const memoryKey = await sessionStore.getMemoryKey(props.message.sessionId, props.message.timestamp);
         console.log('Deleting message', memoryKey);
         if (!memoryKey) {
             return;
         }
         $q.loading.show();
-        await sessionStore.deleteChatMessage(memoryKey, localMessage.value.sessionId);
+        await sessionStore.deleteChatMessage(memoryKey, props.message.sessionId);
         $q.loading.hide();
     });
 }
@@ -146,14 +142,6 @@ const closePreview = () => {
 onMounted(async () => {
     okuu_pfp.value = configStore.okuuPfp;
 });
-
-watch(
-    () => props.message,
-    (newMessage) => {
-        localMessage.value = { ...newMessage };
-    },
-    { deep: true }
-);
 
 </script>
 

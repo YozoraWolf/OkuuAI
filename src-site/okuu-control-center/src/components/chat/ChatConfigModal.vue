@@ -32,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import { useDialogPluginComponent, useQuasar } from 'quasar';
 import Zoom from 'src/components/settings/Zoom.vue';
 import SystemPromptEdit from 'src/components/settings/SystemPromptEdit.vue';
@@ -47,64 +47,71 @@ const { dialogRef, onDialogHide, onDialogOK, onDialogCancel } = useDialogPluginC
 const $q = useQuasar();
 
 const configStore = useConfigStore();
+
 const stream = ref(configStore.stream);
 const globalMemory = ref(configStore.globalMemory);
 const isSaving = ref(false);
 const isLoadingConfigs = ref(false);
 let originalPrompt = '';
+let originalStream = configStore.stream;
+let originalGlobalMemory = configStore.globalMemory;
 const editedPrompt = ref();
+
+const hasChanges = computed(() => {
+  return (
+    (editedPrompt.value !== undefined && editedPrompt.value !== originalPrompt) ||
+    stream.value !== originalStream ||
+    globalMemory.value !== originalGlobalMemory
+  );
+});
+
 
 const onPromptEdited = (newPrompt: string) => {
   editedPrompt.value = newPrompt;
 };
 
 const saveConfig = async () => {
-  if (editedPrompt.value.length > 0) {
-    const confirm = await $q.dialog({
-      title: 'Confirm',
-      message: 'You have edited the system prompt. Do you want to save the changes?',
-      cancel: true,
-      persistent: true
-    }).onOk(async () => {
-      isSaving.value = true;
-      try {
-        configStore.setStream(stream.value);
-        await configStore.updateSystemPrompt(editedPrompt.value);
-        await configStore.updateGlobalMemory(globalMemory.value);
-        onDialogOK();
-      } catch (error) {
-        console.error('Failed to save settings:', error);
-      } finally {
-        isSaving.value = false;
-      }
-    }).onCancel(() => false);
-
-    if (!confirm) {
-      return;
-    }
-  } else {
+  if (!hasChanges.value) return;
+  const confirm = await $q.dialog({
+    title: 'Confirm',
+    message: 'You have unsaved changes. Do you want to save the changes?',
+    cancel: true,
+    persistent: true
+  }).onOk(async () => {
     isSaving.value = true;
     try {
       configStore.setStream(stream.value);
-      await configStore.updateSystemPrompt(configStore.systemPrompt);
+      await configStore.updateSystemPrompt(editedPrompt.value !== undefined ? editedPrompt.value : configStore.systemPrompt);
       await configStore.updateGlobalMemory(globalMemory.value);
+      // Update originals
+      originalPrompt = editedPrompt.value !== undefined ? editedPrompt.value : configStore.systemPrompt;
+      originalStream = stream.value;
+      originalGlobalMemory = globalMemory.value;
       onDialogOK();
     } catch (error) {
       console.error('Failed to save settings:', error);
     } finally {
       isSaving.value = false;
     }
+  }).onCancel(() => false);
+
+  if (!confirm) {
+    return;
   }
-}
+};
 
 const onCancelClick = () => {
-  if (editedPrompt.value !== undefined) {
+  if (hasChanges.value) {
     $q.dialog({
       title: 'Confirm',
       message: 'You have unsaved changes. Are you sure you want to cancel?',
       cancel: true,
       persistent: true
     }).onOk(() => {
+      // Reset changes
+      stream.value = originalStream;
+      globalMemory.value = originalGlobalMemory;
+      editedPrompt.value = originalPrompt;
       onDialogCancel();
     });
   } else {
@@ -112,25 +119,30 @@ const onCancelClick = () => {
   }
 };
 
+
 const fetchOriginalPrompt = async () => {
   if (!configStore.systemPrompt) {
     await configStore.fetchSystemPrompt();
   }
   originalPrompt = configStore.systemPrompt;
+  editedPrompt.value = configStore.systemPrompt;
 };
+
 
 const fetchGlobalMemory = async () => {
   await configStore.fetchGlobalMemory();
+  originalGlobalMemory = configStore.globalMemory;
 };
 
-// watch
 
+// watch
 watch(() => configStore.stream, (newStream) => {
   stream.value = newStream;
+  originalStream = newStream;
 });
-
 watch(() => configStore.globalMemory, (newGlobalMemory) => {
   globalMemory.value = newGlobalMemory;
+  originalGlobalMemory = newGlobalMemory;
 });
 
 onMounted(async () => {

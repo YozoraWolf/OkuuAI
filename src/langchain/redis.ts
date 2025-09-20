@@ -74,8 +74,14 @@ async function createMemoryIndex() {
   }
 }
 
-export async function saveMemoryWithEmbedding(sessionId: string, message: string, user: string, type: string = 'statement', thinking: string = '') {
-
+export async function saveMemoryWithEmbedding(
+  sessionId: string, 
+  message: string, 
+  user: string, 
+  type: string = 'statement', 
+  thinking: string = '',
+  existingMemoryKey?: string
+) {
   try {
     // Generate embedding for the statement (e.g., "I live in Tokyo")
     const embeddingResponse = await Core.ollama_instance.embed({ input: message, model: "nomic-embed-text" });
@@ -90,8 +96,7 @@ export async function saveMemoryWithEmbedding(sessionId: string, message: string
     }
 
     const timestamp = Date.now();
-
-    const memoryKey = `okuuMemory:${sessionId}:${timestamp}`;
+    const memoryKey = existingMemoryKey || `okuuMemory:${sessionId}:${timestamp}`;
     // Save the answer or relevant statement (not the question)
     await redisClientMemory.hSet(memoryKey, {
       message,

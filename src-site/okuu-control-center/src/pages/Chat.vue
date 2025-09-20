@@ -23,7 +23,7 @@
 
         <q-page-container class="q-pa-none window-height">
             <div class="chat-container full-width window-height">
-                <div class="chat-messages q-pa-md" v-if="selectedSession" ref="chatMessagesRef" v-scale>
+                <div class="chat-messages q-pa-md" v-if="selectedSession && selectedSession.messages" ref="chatMessagesRef" v-scale>
                     <q-inner-loading :showing="isLoadingSessionMessages">
                         <q-spinner color="primary" size="70" />
                     </q-inner-loading>
@@ -340,17 +340,24 @@ const selectedSession = computed(() => {
 });
 
 // watch
+
+// Watch for streaming completion: if last message is from Okuu and done, clear loading
 watch(
     () => selectedSession.value,
     (session) => {
-        if (session) {
-            renableInput();
-            scrollToBottom();
-            console.log("Messages", session.messages);
-            console.log('last message', session.messages[session.messages.length - 1]);
-            if (session.messages[session.messages.length - 1]?.user.toLowerCase() === "okuu") {
-                isLoadingResponse.value = false;
-            }
+        if (!session) return;
+        renableInput();
+        scrollToBottom();
+        const lastMsg = session.messages[session.messages.length - 1];
+        if (
+            lastMsg &&
+            lastMsg.user &&
+            lastMsg.user.toLowerCase() === 'okuu' &&
+            lastMsg.done === true &&
+            (isLoadingResponse.value || isStreaming.value)
+        ) {
+            isLoadingResponse.value = false;
+            isStreaming.value = false;
         }
     },
     { deep: true }

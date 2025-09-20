@@ -131,12 +131,16 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
         // --- STREAMING MODE ---
         if (msg.stream) {
+            const timestamp = Date.now();
+            const streamMemoryKey = `okuuMemory:${msg.sessionId}:${timestamp}`;
+            
             reply.done = false;
             reply.lang = langMappings[franc(msg.message || '')] || 'en-US';
             reply.sessionId = msg.sessionId;
-            reply.timestamp = Date.now();
+            reply.timestamp = timestamp;
+            reply.memoryKey = streamMemoryKey;
 
-            // Let client know AI reply started
+            // Let client know AI reply started with the memoryKey
             io.to(msg.sessionId).emit('chat', reply);
 
             let aiReply = '';
@@ -162,10 +166,16 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             reply.done = true;
             reply.message = aiReply;
 
-            // Save AI reply in memory
+            // Save AI reply in memory using our existing memoryKey
             const messageTypeAI = isQuestion(aiReply) ? 'question' : 'statement';
-            const aiSaved = await saveMemoryWithEmbedding(reply.sessionId, aiReply, "okuu", messageTypeAI);
-            reply.memoryKey = aiSaved.memoryKey;
+            await saveMemoryWithEmbedding(
+                reply.sessionId, 
+                aiReply, 
+                "okuu", 
+                messageTypeAI,
+                '', // thinking
+                reply.memoryKey // use our pre-generated key
+            );
             await updateMemory(reply);
 
             io.to(msg.sessionId).emit('chat', reply);

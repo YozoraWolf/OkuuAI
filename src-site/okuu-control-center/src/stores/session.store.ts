@@ -127,28 +127,98 @@ export const useSessionStore = defineStore('session', {
             }
         },
         addMessageToSession(message: Message) {
+            console.log('🟢 Adding message to session:', {
+                sessionId: this.currentSessionId,
+                memoryKey: message.memoryKey,
+                messageLength: message.message?.length || 0,
+                isStreaming: message.stream
+            });
+
             const session = this.sessions.find((session: Session) => session.sessionId === this.currentSessionId);
-            if (session) {
-                session.messages.push(message);
-                session.lastMessage = message;
-                this.orderSessions();
+            if (!session) {
+                console.warn('🔴 No session found for:', this.currentSessionId);
+                return;
             }
+
+            // Create a new message object to ensure reactivity
+            const newMessage = { ...message };
+            session.messages = [...session.messages, newMessage];
+            session.lastMessage = newMessage;
+            
             if(message.stream) {
+                console.log('🟢 Setting streaming state true');
                 this.isStreaming = true;
             }
+            
+            this.orderSessions();
+            console.log('🟢 Current messages count:', session.messages.length);
         },
+
         updateMessageInSession(memoryKey: string, newMessage: string, finishStreaming: boolean = true) {
+            console.log('🟡 Updating message:', { 
+                memoryKey,
+                messageLength: newMessage?.length || 0,
+                finishStreaming 
+            });
+            
             const session = this.sessions.find((session: Session) => session.sessionId === this.currentSessionId);
-            if (session) {
-                const message = session.messages.find((msg: Message) => msg.memoryKey === memoryKey);
-                if (message) {
-                    message.message = newMessage;
-                }
+            if (!session) {
+                console.warn('🔴 No session found for update:', this.currentSessionId);
+                return;
             }
-            this.isStreaming = true;
-            if (finishStreaming) {
-                this.isStreaming = false;
+
+            const messageIndex = session.messages.findIndex((msg: Message) => msg.memoryKey === memoryKey);
+            if (messageIndex === -1) {
+                console.warn('🔴 No message found with key:', memoryKey);
+                return;
             }
+
+            const oldMessage = session.messages[messageIndex];
+            if (!oldMessage) {
+                console.warn('🔴 Message at index is undefined:', messageIndex);
+                return;
+            }
+
+            console.log('🟡 Found message to update:', {
+                index: messageIndex,
+                oldLength: oldMessage.message?.length || 0,
+                newLength: newMessage?.length || 0,
+                wasStreaming: oldMessage.stream,
+                wasDone: oldMessage.done
+            });
+
+            // Create completely new array and message objects to force reactivity
+            const updatedMessage: Message = {
+                timestamp: oldMessage.timestamp,
+                user: oldMessage.user,
+                message: newMessage || '',
+                memoryKey: oldMessage.memoryKey,
+                sessionId: oldMessage.sessionId,
+                stream: true, // Ensure stream stays true while updating
+                done: !!finishStreaming,
+                ...(oldMessage.avatar ? { avatar: oldMessage.avatar } : {}),
+                ...(oldMessage.thinking ? { thinking: oldMessage.thinking } : {}),
+                ...(oldMessage.attachment ? { attachment: oldMessage.attachment } : {}),
+                ...(oldMessage.file ? { file: oldMessage.file } : {})
+            };
+            
+            // Create new array to force reactivity
+            const newMessages = [...session.messages];
+            newMessages[messageIndex] = updatedMessage;
+            session.messages = newMessages;
+            
+            if (messageIndex === session.messages.length - 1) {
+                session.lastMessage = { ...updatedMessage };
+            }
+            
+            // Keep streaming true until explicitly finished
+            this.isStreaming = !finishStreaming;
+            
+            console.log('🟡 Updated message result:', {
+                messageLength: updatedMessage.message?.length || 0,
+                isDone: updatedMessage.done,
+                isStreaming: this.isStreaming
+            });
         },
         hasMessageInSession(memoryKey: string): boolean {
             const session = this.sessions.find((session: Session) => session.sessionId === this.currentSessionId);

@@ -66,17 +66,53 @@ export class SocketioService {
         });
 
         this.socket.on('chat', async (message: Message) => {
+            console.log('🔵 Socket received message:', {
+                memoryKey: message.memoryKey,
+                messageLength: message.message?.length || 0,
+                isStreaming: message.stream,
+                isDone: message.done
+            });
+
             const configStore = useConfigStore();
-            await configStore.fetchOkuuPfp();
             message.avatar = configStore.okuuPfp;
-            console.log('Received chat message:', message);
+            
+            // For streaming messages
             if (message.stream) {
-                if (!this.sessionStore.hasMessageInSession(message.memoryKey)) {
-                    this.sessionStore.addMessageToSession(message);
-                } else {
-                    this.sessionStore.updateMessageInSession(message.memoryKey, message.message, message.done);
+                const hasExisting = this.sessionStore.hasMessageInSession(message.memoryKey);
+                console.log('🔵 Stream message check:', { 
+                    hasExisting,
+                    memoryKey: message.memoryKey 
+                });
+
+                // For the first chunk
+                if (!hasExisting) {
+                    const initialMessage = {
+                        ...message,
+                        message: message.message || '',
+                        done: false
+                    };
+                    console.log('🔵 Adding first chunk:', {
+                        memoryKey: initialMessage.memoryKey,
+                        messageLength: initialMessage.message.length,
+                        done: initialMessage.done
+                    });
+                    this.sessionStore.addMessageToSession(initialMessage);
                 }
+
+                // Always update with new content
+                console.log('🔵 Updating with new chunk:', {
+                    memoryKey: message.memoryKey,
+                    messageLength: message.message?.length || 0,
+                    done: message.done
+                });
+                this.sessionStore.updateMessageInSession(
+                    message.memoryKey, 
+                    message.message || '', 
+                    message.done
+                );
             } else {
+                // Non-streaming messages
+                console.log('🔵 Adding non-stream message');
                 this.sessionStore.addMessageToSession(message);
             }
         });
