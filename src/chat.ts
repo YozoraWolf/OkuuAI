@@ -145,38 +145,68 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
             let aiReply = '';
 
-            const stream = await Core.ollama_instance.generate({
-                prompt,
-                model: Core.model_name,
-                stream: true,
-                system: Core.model_settings.system,
-                think: Core.model_settings.think,
-                images: sentImage,
-            });
+            try {
+                // Notify that AI generation is starting (not just processing)
+                io.to(msg.sessionId).emit('generationStarted');
+                
+                const stream = await Core.ollama_instance.generate({
+                    prompt,
+                    model: Core.model_name,
+                    stream: true,
+                    system: Core.model_settings.system,
+                    think: Core.model_settings.think,
+                    images: sentImage,
+                });
 
-            for await (const part of stream) {
-                aiReply += part.response;
-                reply.message = aiReply;
-                reply.done = false;
-                io.to(msg.sessionId).emit('chat', reply);
-                if (callback) callback(part.response);
+                for await (const part of stream) {
+                    // Check if generation should be stopped (additional safety check)
+                    if (Core.shouldStopGeneration) {
+                        Logger.INFO('Generation stopped via flag during streaming');
+                        aiReply += ' ...';
+                        break;
+                    }
+                    aiReply += part.response;
+                    reply.message = aiReply;
+                    reply.done = false;
+                    io.to(msg.sessionId).emit('chat', reply);
+                    if (callback) callback(part.response);
+                }
+            } catch (error: any) {
+                if (error.name === 'AbortError') {
+                    Logger.INFO('Generation was aborted by user');
+                    aiReply += ' ...';
+                } else {
+                    Logger.ERROR(`Error during generation: ${error.message}`);
+                    throw error;
+                }
+            } finally {
+                // Reset the stop flag
+                Core.shouldStopGeneration = false;
+                // Notify that generation has ended
+                io.to(msg.sessionId).emit('generationEnded');
             }
 
             // Finalize AI reply
             reply.done = true;
-            reply.message = aiReply;
+            reply.message = aiReply || '...';
 
-            // Save AI reply in memory using our existing memoryKey
-            const messageTypeAI = isQuestion(aiReply) ? 'question' : 'statement';
-            await saveMemoryWithEmbedding(
-                reply.sessionId, 
-                aiReply, 
-                "okuu", 
-                messageTypeAI,
-                '', // thinking
-                reply.memoryKey // use our pre-generated key
-            );
-            await updateMemory(reply);
+            // Save AI reply in memory only if there's actual content
+            if (aiReply && aiReply.trim().length > 0) {
+                try {
+                    const messageTypeAI = isQuestion(aiReply) ? 'question' : 'statement';
+                    await saveMemoryWithEmbedding(
+                        reply.sessionId, 
+                        aiReply, 
+                        "okuu", 
+                        messageTypeAI,
+                        '', // thinking
+                        reply.memoryKey // use our pre-generated key
+                    );
+                    await updateMemory(reply);
+                } catch (memoryError: any) {
+                    Logger.ERROR(`Error saving memory: ${memoryError.message}`);
+                }
+            }
 
             io.to(msg.sessionId).emit('chat', reply);
             return aiReply;

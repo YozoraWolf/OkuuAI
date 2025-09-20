@@ -26,6 +26,7 @@ interface SessionStore {
     sessions: Session[];
     currentSessionId: string;
     isStreaming: boolean;
+    isGenerating: boolean;
 }
 
 export const useSessionStore = defineStore('session', {
@@ -33,6 +34,7 @@ export const useSessionStore = defineStore('session', {
         sessions: [],
         currentSessionId: '',
         isStreaming: false,
+        isGenerating: false,
     }),
     actions: {
         async fetchAllSessions() {
@@ -242,6 +244,9 @@ export const useSessionStore = defineStore('session', {
         },
         getMemoryKey(sessionId: string, timestamp: number): string {
             return `okuuMemory:${sessionId}:${timestamp}`;
+        },
+        setIsGenerating(value: boolean) {
+            this.isGenerating = value;
         }
     },
     getters: {

@@ -117,6 +117,17 @@ export class SocketioService {
             }
         });
 
+        this.socket.on('generationStarted', () => {
+            console.log('🔵 AI generation started');
+            this.sessionStore.setIsGenerating(true);
+        });
+
+        this.socket.on('generationEnded', () => {
+            console.log('🔵 AI generation ended');
+            this.sessionStore.setIsGenerating(false);
+            this.sessionStore.isStreaming = false;
+        });
+
         this.socket.on('disconnect', (reason) => {
             if (reason === 'ping timeout') {
                 console.warn('Disconnected due to ping timeout');

@@ -11,6 +11,7 @@ export enum Status {
 
 export class Core {
     static status: Status = Status.INACTIVE;
+    static shouldStopGeneration: boolean = false;
 
     static ai_name: string = 'OkuuAI';
     static model_name: string = 'llama3';

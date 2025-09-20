@@ -22,7 +22,7 @@ export const setupSockets = (server: HTTPServer) => {
             socket.join(sessionId);
         });
 
-        // Handle chat messages
+                // Handle chat messages
         socket.on('chat', async (data: any) => {
             try {
                 if (!data || !data.sessionId || !data.message) {
@@ -36,6 +36,41 @@ export const setupSockets = (server: HTTPServer) => {
                 Logger.DEBUG(`Session started: ${SESSION_ID}`);
                 await handleUserInput(data.message, data);
 
+                //socket.emit('chat', { success: true });
+            } catch (err) {
+                Logger.ERROR('Error processing chat message: '+err);
+                socket.emit('error', { message: 'Internal server error' });
+            }
+        });
+
+        // Handle stop generation signal
+        socket.on('stopGeneration', (data: { sessionId: string }) => {
+            try {
+                if (!data || !data.sessionId) {
+                    Logger.ERROR('Invalid stop generation data received');
+                    return;
+                }
+                Logger.DEBUG(`Received stop generation signal for session: ${data.sessionId}`);
+                
+                // Set flag to prevent generation from starting if it hasn't started yet
+                Core.shouldStopGeneration = true;
+                
+                // Use Ollama's built-in abort method to stop all streaming generations
+                Core.ollama_instance.abort();
+                Logger.INFO('Generation aborted successfully');
+            } catch (err) {
+                Logger.ERROR('Error processing stop generation signal: '+err);
+            }
+        });
+
+        // Handle stop generation signal
+        socket.on('stopGeneration', (data: { sessionId: string }) => {
+            try {
+                if (!data || !data.sessionId) {
+                    Logger.ERROR('Invalid stop generation data received');
+                    return;
+                }
+                Logger.DEBUG(`Received stop generation signal for session: ${data.sessionId}`);
                 //socket.emit('chat', { success: true });
             } catch (err) {
                 Logger.ERROR('Error processing chat message: '+err);

@@ -41,13 +41,21 @@
                     <q-spinner-dots color="primary" size="md" class="q-mx-md" />
                 </div>
                 <div class="chat-input text-white q-pa-md" v-if="selectedSession">
-                    <q-input type="textarea" autogrow :disable="!selectedSession || isLoadingResponse"
+                    <q-input type="textarea" autogrow :disable="!selectedSession || (!isLoadingResponse && configLoading)"
                         v-model="newMessage" placeholder="Type a message" @keyup.enter="onEnter" @keyup.shift.enter.stop
+                        :readonly="isLoadingResponse || isStreaming"
                         class="q-pb-md">
                         <template v-slot:append>
-                            <q-btn :disable="sendBtnActive" flat round icon="send"
-                                :loading="sendBtnLoading"
-                                :color="`${!sendBtnActive ? 'primary' : 'gray-9'}`" @click="sendMessage" />
+                            <q-btn v-if="isGenerating" 
+                                flat round icon="stop"
+                                color="red" 
+                                @click="stopGeneration" />
+                            <q-btn v-else
+                                :disable="sendBtnActive || isLoadingResponse" 
+                                :loading="isLoadingResponse && !isGenerating"
+                                flat round icon="send"
+                                :color="`${(!sendBtnActive && !isLoadingResponse) ? 'primary' : 'gray-9'}`" 
+                                @click="sendMessage" />
                         </template>
                     </q-input>
                     <div class="sub-actions row">
@@ -121,7 +129,7 @@ const configStore = useConfigStore();
 const authStore = useAuthStore();
 
 // Session store refs
-const { sessions, currentSession, isStreaming } = storeToRefs(sessionStore);
+const { sessions, currentSession, isStreaming, isGenerating } = storeToRefs(sessionStore);
 const selectedSessionId = ref<string | undefined>(undefined);
 const chatMessagesRef = ref();
 
@@ -274,6 +282,15 @@ const sendMessage = async () => {
     }
 };
 
+const stopGeneration = () => {
+    if (socket.value && selectedSession.value) {
+        socket.value.emit('stopGeneration', { sessionId: selectedSession.value.sessionId });
+        isLoadingResponse.value = false;
+        sessionStore.setIsGenerating(false);
+        sessionStore.isStreaming = false;
+    }
+};
+
 const removeAttachment = () => {
     console.log('remove attachment');
     attachment.value = null;
@@ -340,6 +357,21 @@ const selectedSession = computed(() => {
 });
 
 // watch
+
+// Watch for generation state changes to clear loading state
+watch(() => isGenerating.value, (generating) => {
+    console.log('isGenerating changed:', generating);
+    if (generating) {
+        // When generation starts, clear the loading state so stop button shows
+        console.log('Setting isLoadingResponse to false');
+        isLoadingResponse.value = false;
+    }
+});
+
+// Watch isLoadingResponse changes
+watch(() => isLoadingResponse.value, (loading) => {
+    console.log('isLoadingResponse changed:', loading);
+});
 
 // Watch for streaming completion: if last message is from Okuu and done, clear loading
 watch(
