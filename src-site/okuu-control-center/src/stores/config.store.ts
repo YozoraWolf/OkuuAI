@@ -5,7 +5,7 @@ export const useConfigStore = defineStore('config', {
     state: () => ({
         okuuPfp: '',
         zoomLevel: 100,
-        stream: false,
+        stream: true,
         systemPrompt: '',
         globalMemory: false,
         toggleThinking: false,

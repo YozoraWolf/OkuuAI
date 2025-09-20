@@ -65,6 +65,11 @@
                                 <q-icon name="mdi-brain" size="sm" class="q-mr-sm"></q-icon>
                                 <div class="text-weight-bold">Think</div>
                             </q-chip>
+                            <q-chip class="q-mx-sm" size="md" color="primary" :outline="!stream"
+                                clickable @click="toggleStreaming">
+                                <q-icon name="mdi-arrow-right" size="xs" class="q-mr-sm"></q-icon>
+                                <div class="text-weight-bold">Stream</div>
+                            </q-chip>
                             <q-select v-model="currentModel" :options="modelList"
                                 option-value="name" option-label="name" emit-value
                                 class="q-mx-sm" dense outlined
@@ -335,6 +340,16 @@ const toggleThinkingFunc = async () => {
     $q.notify({
         message: `Thinking mode is now ${toggleThinking.value ? 'enabled' : 'disabled'}.`,
         color: toggleThinking.value ? 'green' : 'red',
+        position: 'bottom',
+        timeout: 2000,
+    });
+};
+
+const toggleStreaming = () => {
+    configStore.stream = !stream.value;
+    $q.notify({
+        message: `Streaming is now ${stream.value ? 'enabled' : 'disabled'}.`,
+        color: stream.value ? 'green' : 'red',
         position: 'bottom',
         timeout: 2000,
     });
