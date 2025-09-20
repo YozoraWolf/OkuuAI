@@ -134,61 +134,37 @@ export class SocketioService {
             return;
         }
         try {
+            // Just signal the backend to start whisper-stream (no audio data needed)
+            socket.emit('mic');
+            console.log('Signaled backend to start whisper transcription');
+            
+            // Set up a fake media stream for UI state management
             this.audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this.mediaRecorder = new MediaRecorder(this.audioStream);
-            this.mediaRecorder.start(250);
-
-            this.mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0 && socket) {
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        const arrayBuffer = reader.result as ArrayBuffer;
-                        const uint8Array = new Uint8Array(arrayBuffer);
-                        // Send mimeType with each chunk
-                        socket.emit('mic', { data: uint8Array, mimeType: e.data.type });
-                    };
-                    reader.readAsArrayBuffer(e.data);
-                }
-            };
-
-            this.mediaRecorder.onstop = () => {
-                if (socket) {
-                    socket.emit('mic_end', { manual: false });
-                }
-                if (this.audioStream) {
-                    this.audioStream.getTracks().forEach(track => track.stop());
-                    this.audioStream = null;
-                }
-                onStop?.();
-            };
-
+            
+            // We don't actually use the MediaRecorder anymore since whisper-stream handles audio
+            // Just track the stream for cleanup purposes
+            
             // Stop after 60 seconds
             setTimeout(() => {
-                if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-                    this.mediaRecorder.stop();
+                if (this.audioStream) {
+                    this.stopAudioStream(false);
                 }
             }, 60000);
 
         } catch (err) {
             onError?.('Error accessing microphone.');
-            if (this.audioStream) {
-                this.audioStream.getTracks().forEach(track => track.stop());
-                this.audioStream = null;
-            }
             onStop?.();
         }
     }
 
     public stopAudioStream(manual = false) {
-        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-            if (this.socket) {
-                this.socket.emit('mic_end', { manual });
-            }
-            this.mediaRecorder.stop();
+        if (this.socket) {
+            this.socket.emit('mic_end', { manual });
         }
         if (this.audioStream) {
             this.audioStream.getTracks().forEach(track => track.stop());
             this.audioStream = null;
         }
+        console.log('Stopped audio stream and signaled backend');
     }
 }

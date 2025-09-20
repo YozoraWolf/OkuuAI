@@ -12,6 +12,7 @@
             </div>
             <Zoom/>
             <GlobalToggles />
+            <MicSelect />
         </div>
         <ImageSelectorModal :showModal="showOkuuPfpModal" @close="toggleOkuuPfpSelector" @save="fetchCurrentOkuuPfp" />
     </div>
@@ -24,6 +25,7 @@ import { ref, onMounted } from 'vue';
 import { useConfigStore } from 'src/stores/config.store';
 import { useQuasar } from 'quasar';
 import GlobalToggles from 'src/components/settings/GlobalToggles.vue';
+import MicSelect from 'src/components/settings/MicSelect.vue';
 
 const showOkuuPfpModal = ref(false);
 const configStore = useConfigStore();

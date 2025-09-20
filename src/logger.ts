@@ -106,11 +106,16 @@ export class Logger {
         fs.appendFileSync(Logger.logFilePath, message + '\n');
     }
 
-    static DEBUG(message: string) {
+    static DEBUG(message: string, module?: string) {
         if (!Logger.settings.log) return;
         if (!Logger.settings.debug) return;
-        Logger.appendToLogFile('[DEBUG] ' + message);
-        console.log('\x1b[32m[DEBUG]\x1b[0m ' + message);
+        
+        // Check if this is a module-specific debug log that requires environment variable
+        if (module === 'WHISPER' && process.env.WHISPER_LOGS !== '1') return;
+        
+        const modulePrefix = module ? `[${module}] ` : '';
+        Logger.appendToLogFile('[DEBUG] ' + modulePrefix + message);
+        console.log('\x1b[32m[DEBUG]\x1b[0m ' + modulePrefix + message);
     }
 
     static INFO(message: string) {

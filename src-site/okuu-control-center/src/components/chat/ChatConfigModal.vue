@@ -1,29 +1,36 @@
 <template>
   <q-dialog ref="dialogRef" @hide="onDialogHide">
-    <q-card v-if="isLoadingConfigs" class="flex flex-center q-pa-md full-width">
+    <q-card v-if="isLoadingConfigs" class="flex flex-center q-pa-md full-width full-height">
       <q-spinner size="50" color="primary" />
     </q-card>
-    <q-card v-else class="q-dialog-plugin q-pa-md full-width">
-      <div class="q-pa-md">
+    <q-card v-else class="q-dialog-plugin full-width" style="max-height: 80vh; display: flex; flex-direction: column;">
+      <q-card-section class="text-h4">
+        <q-icon name="settings" class="q-mr-sm" />
+        Chat Configuration
+      </q-card-section>
+      <div class="q-pa-md q-mx-lg" style="flex: 1; overflow-y: auto;">
         <Zoom />
         <div class="column">
-          <q-toggle v-model="stream" class="col-5" label="Streamed Messages" :color="stream ? 'primary' : 'grey'" />
+          <GlobalToggles class="q-mt-md" />
+
           <div class="row items-center">
             <q-toggle v-model="globalMemory" class="col-4" label="Global Memory"
               :color="globalMemory ? 'primary' : 'grey'" />
             <q-icon name="mdi-information" size="xs">
               <q-tooltip class="bg-grey-9">
-                  <div class="text-body1">Global Memory</div>
-                  <div>When enabled, the system will search all memories from all sessions.</div>
+                <div class="text-body1">Global Memory</div>
+                <div>When enabled, the system will search all memories from all sessions.</div>
               </q-tooltip>
             </q-icon>
           </div>
         </div>
+        <q-separator spaced style="margin: 2rem 0;" />
         <SystemPromptEdit @prompt-edited="onPromptEdited" />
-        <GlobalToggles class="q-mt-md" />
+        <q-separator spaced style="margin: 2rem 0;" />
+        <MicSelect />
       </div>
 
-      <q-card-actions align="right">
+      <q-card-actions align="right" class="q-pa-md" style="border-top: 1px solid #e0e0e0; flex-shrink: 0;">
         <q-btn :loading="isSaving" color="primary" label="Save" @click="saveConfig" />
         <q-btn color="primary" :disable="isSaving" label="Cancel" @click="onCancelClick" />
       </q-card-actions>
@@ -37,6 +44,7 @@ import { useDialogPluginComponent, useQuasar } from 'quasar';
 import Zoom from 'src/components/settings/Zoom.vue';
 import SystemPromptEdit from 'src/components/settings/SystemPromptEdit.vue';
 import GlobalToggles from 'src/components/settings/GlobalToggles.vue';
+import MicSelect from 'src/components/settings/MicSelect.vue';
 import { useConfigStore } from 'src/stores/config.store';
 
 defineEmits([

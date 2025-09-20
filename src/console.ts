@@ -7,6 +7,7 @@ import { handleCommand } from './commands';
 import { killTauri } from './gui';
 import { get } from 'http';
 import { SESSION_ID } from './langchain/memory/memory';
+import { Whisperer } from './whisperer';
 
 let rl: readline.Interface;
 
@@ -114,7 +115,10 @@ export const initConsole = async () =>
 });
 
 // TODO: find out where that "Terminated is coming from"
+
 export const exitOkuuAI = async () => {
+    Logger.INFO('Cleaning up and shutting down...');
+    await Whisperer.cleanup();
     Logger.INFO('Bye!!');
     await killTauri();
     process.exit(0);

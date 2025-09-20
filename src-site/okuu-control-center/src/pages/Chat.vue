@@ -41,20 +41,21 @@
                     <q-spinner-dots color="primary" size="md" class="q-mx-md" />
                 </div>
                 <div class="chat-input text-white q-pa-md" v-if="selectedSession">
-                    <q-input type="textarea" autogrow :disable="!selectedSession || isLoadingResponse"
+                    <q-input type="textarea" autogrow :disable="!selectedSession || isLoadingResponse || status === Status.DISCONNECTED"
                         v-model="newMessage" placeholder="Type a message" @keyup.enter="onEnter" @keyup.shift.enter.stop
                         class="q-pb-md">
                         <template v-slot:append>
-                            <q-btn :disable="sendBtnActive" flat round icon="send"
+                            <q-btn :disable="sendBtnActive || status === Status.DISCONNECTED" flat round icon="send"
                                 :loading="sendBtnLoading"
-                                :color="`${!sendBtnActive ? 'primary' : 'gray-9'}`" @click="sendMessage" />
-                            <q-btn icon="mic" flat round :color="`${isAudioStreamActive ? 'primary' : 'gray-9'}`" @click="() => toggleAudioStream(true)" />
+                                :color="`${!sendBtnActive && status !== Status.DISCONNECTED ? 'primary' : 'gray-9'}`" @click="sendMessage" />
+                            <q-btn icon="mic" flat round :color="`${isAudioStreamActive && status !== Status.DISCONNECTED ? 'primary' : 'gray-9'}`" 
+                                :disable="status === Status.DISCONNECTED" @click="() => toggleAudioStream(true)" />
                         </template>
                     </q-input>
                     <div class="sub-actions row">
                         <div class="col-7 flex items-center">
                             <q-chip class="q-mx-sm" size="md" color="primary" :outline="!configStore.toggleThinking"
-                                clickable @click="toggleThinkingFunc">
+                                clickable @click="toggleThinkingFunc" :disable="status === Status.DISCONNECTED">
                                 <q-icon name="mdi-brain" size="sm" class="q-mr-sm"></q-icon>
                                 <div class="text-weight-bold">Think</div>
                             </q-chip>
@@ -62,6 +63,7 @@
                                 option-value="name" option-label="name" emit-value
                                 class="q-mx-sm" dense outlined
                                 v-on:update:modelValue="configStore.setOkuuModel"
+                                :disable="status === Status.DISCONNECTED"
                                 >
                                 <template v-slot:prepend>
                                     <q-icon name="mdi-head-snowflake" />
@@ -78,7 +80,7 @@
                             </q-btn>
                         </div>
                         <div class="col-2">
-                            <q-file :disable="sendBtnActive" v-model="attachment"
+                            <q-file :disable="sendBtnActive || status === Status.DISCONNECTED" v-model="attachment"
                                 accept=".txt, .pdf, .doc, .docx, .csv, .json">
                                 <template v-slot:prepend>
                                     <q-icon name="attach_file" />
@@ -485,31 +487,15 @@ const onEnter = (e: KeyboardEvent) => {
 watch(socket, (s) => {
     if (!s) return;
     s.on('transcription', (payload: { text: string }) => {
-        if (payload && payload.text !== undefined) {
-            // Only append new transcription text that is not already present
-            if (!newMessage.value.endsWith(payload.text)) {
-                const current = newMessage.value;
-                const incoming = payload.text;
-                let toAppend = incoming;
-                if (current && incoming.startsWith(current)) {
-                    toAppend = incoming.slice(current.length);
-                }
-                newMessage.value += toAppend;
-            }
+        if (payload && payload.text !== undefined && payload.text.trim()) {
+            // Replace the entire message with the latest transcription
+            newMessage.value = payload.text.trim();
         }
     });
     s.on('transcription_final', (payload: { text: string }) => {
         if (payload && payload.text !== undefined && payload.text.trim()) {
-            // Always append any final text not already present
-            if (!newMessage.value.endsWith(payload.text)) {
-                const current = newMessage.value;
-                const incoming = payload.text;
-                let toAppend = incoming;
-                if (current && incoming.startsWith(current)) {
-                    toAppend = incoming.slice(current.length);
-                }
-                newMessage.value += toAppend;
-            }
+            // Set final transcription and send
+            newMessage.value = payload.text.trim();
             sendMessage();
             newMessage.value = '';
             // Stop audio stream after sending message to avoid leakages

@@ -8,7 +8,7 @@ export class Whisperer {
     private static instance: Whisperer;
     private worker: WhisperWorker | null = null;
     private transcriptionCallbacks: Array<(text: string) => void> = [];
-    private pcmBuffer: Buffer = Buffer.alloc(0);
+    private isTranscribing: boolean = false;
     private constructor() {}
 
     static async initWhisper() {
@@ -33,9 +33,14 @@ export class Whisperer {
         return this.instance;
     }
 
-    feedAudio(chunk: Buffer) {
+    async start() {
         if (!this.worker) throw new Error("No worker loaded");
-        this.worker.feedAudio(chunk);
+        if (this.isTranscribing) {
+            Logger.DEBUG("Whisper is already transcribing, ignoring start request");
+            return;
+        }
+        this.isTranscribing = true;
+        await this.worker.start();
     }
 
     onTranscription(callback: (text: string) => void) {
@@ -53,6 +58,18 @@ export class Whisperer {
     async stop() {
         if (this.worker) {
             await this.worker.stop();
+            this.isTranscribing = false;
+            Logger.DEBUG("Whisper transcription stopped");
         }
+    }
+
+    static async cleanup() {
+        if (this.instance) {
+            await this.instance.stop();
+        }
+    }
+
+    getTranscribingState(): boolean {
+        return this.isTranscribing;
     }
 }

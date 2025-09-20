@@ -1,5 +1,5 @@
 <template>
-    <div class="q-my-md flex column" style="width: 400px;">
+    <div class="q-my-md flex q-mx-md column" style="width: 400px;">
         <label for="zoom">Zoom Level: {{ zoomLevel }}%</label>
         <q-slider 
             v-model="zoomLevel" 

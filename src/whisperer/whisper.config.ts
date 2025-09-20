@@ -13,6 +13,9 @@ export const MODEL_MAP: Record<string, string> = {
     en: path.join(MODELS_DIR, "ggml-base.en.bin"),
 };
 
+// Whisper logging control
+export const WHISPER_LOGS = process.env.WHISPER_LOGS === '1' || false;
+
 /**
  * Interactively download a Whisper model using direct HTTP download.
  * Prompts the user for a model name and downloads it to the models directory.

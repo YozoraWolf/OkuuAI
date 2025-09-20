@@ -7,20 +7,12 @@ import { handleUserInput } from "./console";
 
 import { Whisperer } from './whisperer';
 import { sendChat } from "./chat";
-import prism from 'prism-media';
 
 let io: Server;
 const TMP_DIR = "/tmp";
 
 // whisper related
-
 let whisper: Whisperer;
-const opusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 1, rate: 16000 });
-
-// Attach error handler to opusDecoder
-opusDecoder.on('error', (err) => {
-    Logger.ERROR('Opus decoder error: ' + err.message);
-});
 
 export const setupSockets = async (server: HTTPServer) => {
     io = new Server(server, {
@@ -48,6 +40,7 @@ export const setupSockets = async (server: HTTPServer) => {
         let blankTimer: NodeJS.Timeout | null = null;
         const BLANK_TIMEOUT_MS = 1000; // X seconds of blank audio before auto-send
         let lastMicEndManual = false;
+        let lastEmittedTranscription = '';
 
         // Helper to send buffered transcription to chat
         function sendBufferedTranscription(triggeredByBlank = false) {
@@ -77,6 +70,7 @@ export const setupSockets = async (server: HTTPServer) => {
         // Register transcription callback for English (or other langs i decide to support in the future)
         try {
             const whisper = Whisperer.getInstance();
+            
             whisper.onTranscription((text: string) => {
                 Logger.DEBUG('Transcription: ' + text);
 
@@ -87,10 +81,12 @@ export const setupSockets = async (server: HTTPServer) => {
                     .replace(/\s+/g, ' ')
                     .trim();
 
-                // Buffer non-blank transcriptions and emit only if not blank
-                if (!text.includes('[BLANK_AUDIO]') && cleaned) {
-                    transcriptionBuffer += ' ' + cleaned;
-                    socket.emit('transcription', { text: transcriptionBuffer.trim() });
+                // Only process non-blank transcriptions that are different from the last emitted one
+                if (!text.includes('[BLANK_AUDIO]') && cleaned && cleaned !== lastEmittedTranscription) {
+                    transcriptionBuffer = cleaned;
+                    lastEmittedTranscription = cleaned;
+                    socket.emit('transcription', { text: transcriptionBuffer });
+                    
                     if (blankTimer) {
                         clearTimeout(blankTimer);
                         blankTimer = null;
@@ -141,73 +137,37 @@ export const setupSockets = async (server: HTTPServer) => {
             Logger.INFO('Client disconnected: ' + socket.id);
         });
 
-        // Store decoder per socket
-        let socketOpusDecoder: prism.opus.Decoder | null = null;
-        let socketDemuxer: any = null;
-        let decoderShuttingDown = false;
-        let demuxerType: string | null = null;
+        // Store decoder per socket - removed since using whisper-stream now
 
-        socket.on('mic', (payload: any) => {
-            //Logger.DEBUG('Received audio data');
-            let data: Buffer;
-            let mimeType: string | undefined;
-            if (payload && payload.data && payload.mimeType) {
-                data = Buffer.isBuffer(payload.data) ? payload.data : Buffer.from(payload.data);
-                mimeType = payload.mimeType;
-            } else {
-                data = Buffer.isBuffer(payload) ? payload : Buffer.from(payload);
-                mimeType = undefined;
-            }
-            //Logger.DEBUG(`Audio data size: ${data.length} bytes, mimeType: ${mimeType}`);
-
+        socket.on('mic', async (payload: any) => {
+            Logger.DEBUG('Received mic start signal');
             const whisper = Whisperer.getInstance();
-            if (!socketOpusDecoder) {
-                decoderShuttingDown = false;
-                // Pick demuxer based on mimeType
-                if (mimeType && mimeType.includes('webm')) {
-                    socketDemuxer = new prism.opus.WebmDemuxer();
-                    demuxerType = 'webm';
-                } else {
-                    socketDemuxer = new prism.opus.OggDemuxer();
-                    demuxerType = 'ogg';
-                }
-                socketOpusDecoder = new prism.opus.Decoder({ frameSize: 960, channels: 1, rate: 16000 });
-                socketOpusDecoder.on('error', (err) => {
-                    if (!decoderShuttingDown) {
-                        Logger.ERROR('Opus decoder error: ' + err.message);
-                    }
-                });
-                socketOpusDecoder.on('data', (pcmChunk: Buffer) => {
-                    if (whisper) {
-                        //Logger.DEBUG(`[sockets] Calling whisper.feedAudio, chunk size: ${pcmChunk.length}`);
-                        whisper.feedAudio(pcmChunk);
-                    }
-                });
-                socketDemuxer.pipe(socketOpusDecoder);
+            
+            // Only start if not already transcribing
+            if (!whisper || whisper.getTranscribingState()) {
+                Logger.DEBUG('Whisper is already transcribing, ignoring start request');
+                return;
             }
+            
             try {
-                socketDemuxer.write(data);
-            } catch (err) {
-                Logger.ERROR('Error decoding audio data: ' + err);
+                // Reset transcription state for new session
+                lastEmittedTranscription = '';
+                transcriptionBuffer = '';
+                
+                await whisper.start();
+                Logger.DEBUG('Whisper transcription started');
+            } catch (error) {
+                Logger.ERROR('Error starting whisper transcription: ' + error);
             }
+            
             lastMicEndManual = false; // reset manual flag when recording starts
         });
 
         // Handle end of mic stream
         socket.on('mic_end', async (payload: any = {}) => {
-            if (socketOpusDecoder) {
-                decoderShuttingDown = true;
-                socketOpusDecoder.removeAllListeners();
-                socketOpusDecoder.destroy();
-                socketOpusDecoder = null;
-            }
-            if (socketDemuxer) {
-                socketDemuxer.unpipe();
-                socketDemuxer.destroy();
-                socketDemuxer = null;
-            }
             const whisper = Whisperer.getInstance();
-            whisper.stop();
+            await whisper.stop();
+            Logger.DEBUG('Whisper transcription stopped');
 
             lastMicEndManual = payload && payload.manual === true;
             // Do NOT call sendBufferedTranscription here, only clear buffer
@@ -216,6 +176,20 @@ export const setupSockets = async (server: HTTPServer) => {
                 clearTimeout(blankTimer);
                 blankTimer = null;
             }
+        });
+
+        // Force stop all whisper processes (emergency cleanup)
+        socket.on('force_stop_whisper', async () => {
+            Logger.DEBUG('Force stopping all whisper processes');
+            await Whisperer.cleanup();
+        });
+
+        // Debug: Check running whisper processes
+        socket.on('check_whisper_processes', async () => {
+            const { WhisperWorker } = await import('./whisperer/whisper.worker');
+            const processes = await WhisperWorker.checkRunningProcesses();
+            socket.emit('whisper_processes_status', { processes });
+            Logger.DEBUG('Whisper processes status: ' + processes);
         });
 
     });
