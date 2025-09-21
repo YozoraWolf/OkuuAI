@@ -17,6 +17,8 @@ export class WhisperWorker extends EventEmitter {
   private tempFiles: Set<string> = new Set(); // Track all temp files
   private processingQueue: Promise<void> = Promise.resolve(); // Serialize processing
   private runningProcesses: Set<any> = new Set(); // Track running whisper processes
+  private pendingChunks = 0; // Track number of queued chunks
+  private maxConcurrentProcesses = 1; // Limit concurrent processes to prevent model loading overhead
 
   constructor(modelPath: string) {
     super();
@@ -53,6 +55,7 @@ export class WhisperWorker extends EventEmitter {
 
     Logger.DEBUG('Stopping whisper worker immediately...', 'WHISPER');
     this.isProcessing = false;
+    this.pendingChunks = 0; // Reset pending chunks counter
     
     try {
       // Kill any running whisper processes immediately
@@ -61,7 +64,7 @@ export class WhisperWorker extends EventEmitter {
           process.kill('SIGTERM');
           Logger.DEBUG('Killed running whisper process', 'WHISPER');
         } catch (err) {
-          Logger.ERROR('Error killing whisper process: ' + err);
+          Logger.DEBUG('Error killing whisper process: ' + err, 'WHISPER');
         }
       }
       this.runningProcesses.clear();
@@ -74,7 +77,7 @@ export class WhisperWorker extends EventEmitter {
       Logger.DEBUG('Cleared remaining audio buffers without processing', 'WHISPER');
       
     } catch (error) {
-      Logger.ERROR('Error during whisper stop: ' + error);
+      Logger.DEBUG('Error during whisper stop: ' + error, 'WHISPER');
     } finally {
       // Always cleanup, even on error
       await this.cleanup();
@@ -93,9 +96,9 @@ export class WhisperWorker extends EventEmitter {
     }
     this.audioBuffers.push(audioData);
     
-    // Process in smaller chunks for more responsive real-time transcription
+    // Process in larger chunks to reduce model loading overhead
     // Assuming 16kHz 16-bit mono audio = ~32KB per second
-    const CHUNK_SIZE_BYTES = 96000; // ~3 seconds of audio for better context while staying responsive
+    const CHUNK_SIZE_BYTES = 192000; // ~6 seconds of audio to reduce model loading frequency
     const totalSize = this.audioBuffers.reduce((sum, buf) => sum + buf.length, 0);
     
     if (totalSize >= CHUNK_SIZE_BYTES) {
@@ -108,9 +111,30 @@ export class WhisperWorker extends EventEmitter {
   private async processAudioChunk() {
     if (this.audioBuffers.length === 0) return;
 
+    // Check if we have too many pending chunks - drop this one to prevent overload
+    if (this.pendingChunks >= this.maxConcurrentProcesses) {
+      Logger.DEBUG(`Dropping audio chunk - too many pending (${this.pendingChunks}/${this.maxConcurrentProcesses})`, 'WHISPER');
+      return;
+    }
+
+    // Only process if we're not already processing and if we're still supposed to be processing
+    if (!this.isProcessing) {
+      Logger.DEBUG('Skipping audio chunk processing - worker stopped', 'WHISPER');
+      return;
+    }
+
+    this.pendingChunks++;
+
     // Queue this processing to prevent overlapping operations
     this.processingQueue = this.processingQueue.then(async () => {
       try {
+        // Double-check we're still processing (might have stopped while waiting in queue)
+        if (!this.isProcessing) {
+          Logger.DEBUG('Skipping queued audio chunk - worker stopped', 'WHISPER');
+          this.pendingChunks--;
+          return;
+        }
+
         // Take current buffers but keep some overlap for context
         const buffersToProcess = [...this.audioBuffers];
         
@@ -134,17 +158,27 @@ export class WhisperWorker extends EventEmitter {
         // Write WAV audio to temp file
         fs.writeFileSync(tempAudioPath, wavAudio as any);
 
+        // Final check before expensive whisper call
+        if (!this.isProcessing) {
+          Logger.DEBUG('Skipping whisper call - worker stopped', 'WHISPER');
+          this.cleanupTempFile(tempAudioPath);
+          return;
+        }
+
         // Run whisper-cli on the audio file
         await this.transcribeAudioFile(tempAudioPath);
         
         // Cleanup temp file after processing
         this.cleanupTempFile(tempAudioPath);
+        this.pendingChunks--;
         
       } catch (error) {
-        Logger.ERROR('Error processing audio chunk: ' + error);
+        this.pendingChunks--;
+        Logger.DEBUG('Error processing audio chunk: ' + error, 'WHISPER');
       }
     }).catch(error => {
-      Logger.ERROR('Error in processing queue: ' + error);
+      this.pendingChunks--;
+      Logger.DEBUG('Error in processing queue: ' + error, 'WHISPER');
     });
   }
 
@@ -172,7 +206,7 @@ export class WhisperWorker extends EventEmitter {
       await this.transcribeAudioFile(tempAudioPath);
       
     } catch (error) {
-      Logger.ERROR('Error processing final audio buffers: ' + error);
+      Logger.DEBUG('Error processing final audio buffers: ' + error, 'WHISPER');
       throw error; // Re-throw to let caller handle
     }
   }
@@ -183,7 +217,7 @@ export class WhisperWorker extends EventEmitter {
       // Validate input file exists
       if (!fs.existsSync(audioPath)) {
         const error = new Error(`Audio file not found: ${audioPath}`);
-        Logger.ERROR(error.message);
+        Logger.DEBUG(error.message, 'WHISPER');
         reject(error);
         return;
       }
@@ -209,7 +243,7 @@ export class WhisperWorker extends EventEmitter {
       // Set timeout for whisper process (30 seconds max)
       const WHISPER_TIMEOUT = 30000;
       timeoutHandle = setTimeout(() => {
-        Logger.ERROR('Whisper process timeout, killing process');
+        Logger.DEBUG('Whisper process timeout, killing process', 'WHISPER');
         this.runningProcesses.delete(whisperProcess);
         whisperProcess.kill('SIGKILL');
         reject(new Error('Whisper process timeout'));
@@ -243,7 +277,7 @@ export class WhisperWorker extends EventEmitter {
           resolve();
         } else {
           const error = new Error(`Whisper process failed with code ${code}: ${errorOutput}`);
-          Logger.ERROR(error.message);
+          Logger.DEBUG(error.message, 'WHISPER');
           reject(error);
         }
       });
@@ -252,7 +286,7 @@ export class WhisperWorker extends EventEmitter {
         clearTimeout(timeoutHandle);
         // Remove from tracking on error
         this.runningProcesses.delete(whisperProcess);
-        Logger.ERROR('Whisper process error: ' + error.message);
+        Logger.DEBUG('Whisper process error: ' + error.message, 'WHISPER');
         reject(error);
       });
     });
@@ -267,7 +301,7 @@ export class WhisperWorker extends EventEmitter {
           fs.unlinkSync(tempFile);
           Logger.DEBUG('Cleaned up temp audio file: ' + tempFile, 'WHISPER');
         } catch (error) {
-          Logger.ERROR('Error cleaning up temp file: ' + error);
+          Logger.DEBUG('Error cleaning up temp file: ' + error, 'WHISPER');
         }
       }
     }
@@ -278,7 +312,7 @@ export class WhisperWorker extends EventEmitter {
         fs.unlinkSync(this.currentAudioFile);
         Logger.DEBUG('Cleaned up current audio file: ' + this.currentAudioFile, 'WHISPER');
       } catch (error) {
-        Logger.ERROR('Error cleaning up current audio file: ' + error);
+        Logger.DEBUG('Error cleaning up current audio file: ' + error, 'WHISPER');
       }
     }
     
@@ -312,7 +346,7 @@ export class WhisperWorker extends EventEmitter {
       }
       this.tempFiles.delete(filePath);
     } catch (error) {
-      Logger.ERROR('Error cleaning up temp file: ' + error);
+      Logger.DEBUG('Error cleaning up temp file: ' + error, 'WHISPER');
     }
   }
 

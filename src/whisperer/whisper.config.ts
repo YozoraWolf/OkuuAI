@@ -39,7 +39,7 @@ export async function downloadModelInteractive(modelName?: string) {
         });
     }
 
-    Logger.INFO(`Downloading model '${model}' to ${MODELS_DIR}...`);
+    Logger.DEBUG(`Downloading model '${model}' to ${MODELS_DIR}...`, 'WHISPER');
     try {
         // Ensure models directory exists
         if (!fs.existsSync(MODELS_DIR)) fs.mkdirSync(MODELS_DIR, { recursive: true });
@@ -54,7 +54,7 @@ export async function downloadModelInteractive(modelName?: string) {
         const modelPath = path.join(MODELS_DIR, `ggml-${model}.bin`);
 
         if (fs.existsSync(modelPath)) {
-            Logger.INFO(`Model '${model}' already exists at ${modelPath}. Skipping download.`);
+            Logger.DEBUG(`Model '${model}' already exists at ${modelPath}. Skipping download.`, 'WHISPER');
             return;
         }
 
@@ -87,12 +87,12 @@ export async function downloadModelInteractive(modelName?: string) {
         });
 
         if (fs.existsSync(modelPath)) {
-            Logger.INFO(`Model '${model}' downloaded successfully: ${modelPath}`);
+            Logger.DEBUG(`Model '${model}' downloaded successfully: ${modelPath}`, 'WHISPER');
         } else {
-            Logger.ERROR(`Model download failed or file not found: ${modelPath}`);
+            Logger.DEBUG(`Model download failed or file not found: ${modelPath}`, 'WHISPER');
         }
     } catch (err: any) {
-        Logger.ERROR(`Failed to download model '${model}': ${err.message}`);
+        Logger.DEBUG(`Failed to download model '${model}': ${err.message}`, 'WHISPER');
     }
 }
 
@@ -119,32 +119,32 @@ export async function ensureWhisperSetup() {
 
         // Check if the binary exists
         if (!fs.existsSync(binaryPath)) {
-            Logger.ERROR(`Whisper binary not found for platform '${platform}'. Please pull the latest release or ensure the binary exists at: ${binaryPath}`);
+            Logger.DEBUG(`Whisper binary not found for platform '${platform}'. Please pull the latest release or ensure the binary exists at: ${binaryPath}`, 'WHISPER');
             throw new Error("Whisper binary missing");
         }
 
         WHISPER_BINARY = binaryPath;
-        Logger.INFO("Whisper binary: " + WHISPER_BINARY);
+        Logger.DEBUG("Whisper binary: " + WHISPER_BINARY, 'WHISPER');
 
         // Models logic remains unchanged
         if (!fs.existsSync(MODELS_DIR)) fs.mkdirSync(MODELS_DIR, { recursive: true });
 
         for (const [lang, modelPath] of Object.entries(MODEL_MAP)) {
             if (!fs.existsSync(modelPath)) {
-                Logger.INFO(`Model for ${lang} not found. Initiating download...`);
+                Logger.DEBUG(`Model for ${lang} not found. Initiating download...`, 'WHISPER');
                 await downloadModelInteractive(lang === 'en' ? 'base.en' : lang);
                 if (!fs.existsSync(modelPath)) throw new Error(`Model download failed for ${lang}`);
-                Logger.INFO(`Model for ${lang} downloaded successfully`);
+                Logger.DEBUG(`Model for ${lang} downloaded successfully`, 'WHISPER');
             } else {
-                Logger.DEBUG(`Model for ${lang} already exists, skipping download`);
+                Logger.DEBUG(`Model for ${lang} already exists, skipping download`, 'WHISPER');
             }
         }
 
-        Logger.INFO("Whisper setup completed successfully");
+        Logger.DEBUG("Whisper setup completed successfully", 'WHISPER');
 
     } catch (err: any) {
-        Logger.ERROR("Error setting up Whisper: " + err.message);
-        Logger.ERROR(err.stack);
+        Logger.DEBUG("Error setting up Whisper: " + err.message, 'WHISPER');
+        Logger.DEBUG(err.stack, 'WHISPER');
         throw err;
     }
 }

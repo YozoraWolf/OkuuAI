@@ -28,7 +28,7 @@ export const setupSockets = async (server: HTTPServer) => {
         try {        
             whisper = Whisperer.getInstance();
         } catch (error) {
-            Logger.ERROR('Error initializing Whisperer: ' + error);
+            Logger.DEBUG('Error initializing Whisperer: ' + error, 'WHISPER');
         }
     }
 
@@ -164,9 +164,9 @@ export const setupSockets = async (server: HTTPServer) => {
                 transcriptionBuffer = '';
                 
                 await whisper.start();
-                Logger.DEBUG('Whisper transcription started');
+                Logger.DEBUG('Whisper transcription started', 'WHISPER');
             } catch (error) {
-                Logger.ERROR('Error starting whisper transcription: ' + error);
+                Logger.DEBUG('Error starting whisper transcription: ' + error, 'WHISPER');
             }
             
             lastMicEndManual = false; // reset manual flag when recording starts

@@ -20,7 +20,7 @@ export class Whisperer {
         // Use the first model in MODEL_MAP
         const modelPath = Object.values(MODEL_MAP)[0];
         if (!fs.existsSync(modelPath)) {
-            Logger.ERROR(`Model file not found at ${modelPath}`);
+            Logger.DEBUG(`Model file not found at ${modelPath}`, 'WHISPER');
             throw new Error(`Model not found at ${modelPath}`);
         }
         const worker = new WhisperWorker(modelPath);
@@ -36,7 +36,7 @@ export class Whisperer {
     async start() {
         if (!this.worker) throw new Error("No worker loaded");
         if (this.isTranscribing) {
-            Logger.DEBUG("Whisperer is already transcribing, ignoring start request");
+            Logger.DEBUG("Whisperer is already transcribing, ignoring start request", 'WHISPER');
             return;
         }
         this.isTranscribing = true;
@@ -47,7 +47,7 @@ export class Whisperer {
     addAudioData(audioData: Buffer) {
         if (!this.worker) throw new Error("No worker loaded");
         if (!this.isTranscribing) {
-            Logger.DEBUG("Whisperer not transcribing, ignoring audio data");
+            Logger.DEBUG("Whisperer not transcribing, ignoring audio data", 'WHISPER');
             return;
         }
         this.worker.addAudioData(audioData);
@@ -76,7 +76,7 @@ export class Whisperer {
         if (this.worker) {
             await this.worker.stop();
             this.isTranscribing = false;
-            Logger.DEBUG("Whisperer transcription stopped");
+            Logger.DEBUG("Whisperer transcription stopped", 'WHISPER');
         }
     }
 
