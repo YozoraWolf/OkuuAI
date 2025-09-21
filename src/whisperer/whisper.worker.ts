@@ -16,6 +16,7 @@ export class WhisperWorker extends EventEmitter {
   private tempDir: string;
   private tempFiles: Set<string> = new Set(); // Track all temp files
   private processingQueue: Promise<void> = Promise.resolve(); // Serialize processing
+  private runningProcesses: Set<any> = new Set(); // Track running whisper processes
 
   constructor(modelPath: string) {
     super();
@@ -50,17 +51,27 @@ export class WhisperWorker extends EventEmitter {
       return;
     }
 
-    Logger.DEBUG('Stopping whisper worker and processing final audio...', 'WHISPER');
+    Logger.DEBUG('Stopping whisper worker immediately...', 'WHISPER');
     this.isProcessing = false;
     
     try {
-      // Wait for any ongoing processing to complete
+      // Kill any running whisper processes immediately
+      for (const process of this.runningProcesses) {
+        try {
+          process.kill('SIGTERM');
+          Logger.DEBUG('Killed running whisper process', 'WHISPER');
+        } catch (err) {
+          Logger.ERROR('Error killing whisper process: ' + err);
+        }
+      }
+      this.runningProcesses.clear();
+      
+      // Wait for any ongoing processing to complete, but don't process remaining buffers
       await this.processingQueue;
       
-      // Process any remaining audio buffers
-      if (this.audioBuffers.length > 0) {
-        await this.processAudioBuffers();
-      }
+      // Clear any remaining audio buffers without processing them
+      this.audioBuffers = [];
+      Logger.DEBUG('Cleared remaining audio buffers without processing', 'WHISPER');
       
     } catch (error) {
       Logger.ERROR('Error during whisper stop: ' + error);
@@ -188,6 +199,9 @@ export class WhisperWorker extends EventEmitter {
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
+      // Track this process so we can kill it if needed
+      this.runningProcesses.add(whisperProcess);
+
       let transcriptionOutput = '';
       let errorOutput = '';
       let timeoutHandle: NodeJS.Timeout;
@@ -196,6 +210,7 @@ export class WhisperWorker extends EventEmitter {
       const WHISPER_TIMEOUT = 30000;
       timeoutHandle = setTimeout(() => {
         Logger.ERROR('Whisper process timeout, killing process');
+        this.runningProcesses.delete(whisperProcess);
         whisperProcess.kill('SIGKILL');
         reject(new Error('Whisper process timeout'));
       }, WHISPER_TIMEOUT);
@@ -215,6 +230,8 @@ export class WhisperWorker extends EventEmitter {
 
       whisperProcess.on('close', (code: number) => {
         clearTimeout(timeoutHandle);
+        // Remove from tracking when process completes
+        this.runningProcesses.delete(whisperProcess);
         
         if (code === 0) {
           if (transcriptionOutput.trim()) {
@@ -233,6 +250,8 @@ export class WhisperWorker extends EventEmitter {
 
       whisperProcess.on('error', (error: Error) => {
         clearTimeout(timeoutHandle);
+        // Remove from tracking on error
+        this.runningProcesses.delete(whisperProcess);
         Logger.ERROR('Whisper process error: ' + error.message);
         reject(error);
       });
