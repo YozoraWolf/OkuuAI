@@ -19,6 +19,7 @@ export class WhisperWorker extends EventEmitter {
   private runningProcesses: Set<any> = new Set(); // Track running whisper processes
   private pendingChunks = 0; // Track number of queued chunks
   private maxConcurrentProcesses = 1; // Limit concurrent processes to prevent model loading overhead
+  private lastSentText: string = ''; // Track what text we've already sent to avoid duplicates
 
   constructor(modelPath: string) {
     super();
@@ -56,6 +57,7 @@ export class WhisperWorker extends EventEmitter {
     Logger.DEBUG('Stopping whisper worker immediately...', 'WHISPER');
     this.isProcessing = false;
     this.pendingChunks = 0; // Reset pending chunks counter
+    this.lastSentText = ''; // Reset text tracking for fresh start
     
     try {
       // Kill any running whisper processes immediately
@@ -82,6 +84,100 @@ export class WhisperWorker extends EventEmitter {
       // Always cleanup, even on error
       await this.cleanup();
     }
+  }
+
+  // Extract only the new text portion from a transcription result
+  private extractNewText(fullText: string): string {
+    const current = fullText.trim();
+    
+    if (!this.lastSentText) {
+      // First transcription, send everything
+      this.lastSentText = current;
+      return current;
+    }
+
+    const lastSent = this.lastSentText.trim();
+    
+    // Skip if it's exactly the same
+    if (current === lastSent) {
+      return '';
+    }
+
+    // Method 1: Check if new text is simply appended (most common case)
+    if (current.startsWith(lastSent)) {
+      const newText = current.substring(lastSent.length).trim();
+      if (newText) {
+        this.lastSentText = current;
+        Logger.DEBUG(`Found appended text: "${newText}"`, 'WHISPER');
+        return newText;
+      }
+    }
+
+    // Method 2: Find the longest common substring and extract what's after it
+    // This handles cases where whisper might reformat or slightly change previous text
+    const words1 = lastSent.split(/\s+/);
+    const words2 = current.split(/\s+/);
+    
+    // Find the longest suffix of words1 that appears as a prefix in words2
+    let maxOverlap = 0;
+    let overlapStart = 0;
+    
+    for (let i = 0; i < words1.length; i++) {
+      const suffix = words1.slice(i);
+      if (words2.length >= suffix.length) {
+        const prefix = words2.slice(0, suffix.length);
+        if (suffix.join(' ') === prefix.join(' ') && suffix.length > maxOverlap) {
+          maxOverlap = suffix.length;
+          overlapStart = i;
+        }
+      }
+    }
+    
+    if (maxOverlap > 0) {
+      // Found overlap, extract words after the overlap
+      const newWords = words2.slice(maxOverlap);
+      if (newWords.length > 0) {
+        const newText = newWords.join(' ');
+        this.lastSentText = current;
+        Logger.DEBUG(`Found overlapping text, extracting: "${newText}"`, 'WHISPER');
+        return newText;
+      }
+    }
+
+    // Method 3: If no clear overlap, but current is much longer, it might be new content
+    if (current.length > lastSent.length * 1.3) {
+      // Likely new content, send it but be cautious
+      this.lastSentText = current;
+      Logger.DEBUG(`Significantly longer text, treating as new: "${current}"`, 'WHISPER');
+      return current;
+    }
+
+    // Method 4: Check if current contains most of lastSent (handle minor changes)
+    const lastWords = lastSent.split(/\s+/);
+    const currentWords = current.split(/\s+/);
+    let matchingWords = 0;
+    
+    for (const word of lastWords) {
+      if (currentWords.includes(word)) {
+        matchingWords++;
+      }
+    }
+    
+    // If 70% of words match, consider it mostly the same content
+    if (matchingWords / lastWords.length > 0.7) {
+      // Look for new words not in the previous text
+      const newWords = currentWords.filter(word => !lastWords.includes(word));
+      if (newWords.length > 0) {
+        const newText = newWords.join(' ');
+        this.lastSentText = current;
+        Logger.DEBUG(`Found new words in similar text: "${newText}"`, 'WHISPER');
+        return newText;
+      }
+    }
+
+    // No clear new content found
+    Logger.DEBUG(`No new text detected. Last: "${lastSent}" | Current: "${current}"`, 'WHISPER');
+    return '';
   }
 
   onTranscription(callback: (text: string) => void) {
@@ -271,7 +367,13 @@ export class WhisperWorker extends EventEmitter {
           if (transcriptionOutput.trim()) {
             const cleaned = this.cleanTranscriptionOutput(transcriptionOutput);
             if (cleaned) {
-              this.emit('transcription', cleaned);
+              const newText = this.extractNewText(cleaned);
+              if (newText) {
+                Logger.DEBUG(`Emitting new text portion: "${newText}"`, 'WHISPER');
+                this.emit('transcription', newText);
+              } else {
+                Logger.DEBUG(`No new text found, skipping emission`, 'WHISPER');
+              }
             }
           }
           resolve();
@@ -319,6 +421,7 @@ export class WhisperWorker extends EventEmitter {
     this.tempFiles.clear();
     this.currentAudioFile = null;
     this.audioBuffers = [];
+    this.lastSentText = ''; // Reset text tracking
   }
 
   // Synchronous cleanup for process exit handlers
@@ -384,5 +487,36 @@ export class WhisperWorker extends EventEmitter {
     }
     
     return '';
+  }
+
+  // Test method for verifying duplicate detection logic
+  public testTextExtraction() {
+    Logger.DEBUG('Testing text extraction logic...', 'WHISPER');
+    
+    // Reset state
+    this.lastSentText = '';
+    
+    // Test 1: First text
+    let result = this.extractNewText('Hello world');
+    Logger.DEBUG(`Test 1 - First: "${result}" (expected: "Hello world")`, 'WHISPER');
+    
+    // Test 2: Appended text
+    result = this.extractNewText('Hello world how are you');
+    Logger.DEBUG(`Test 2 - Append: "${result}" (expected: "how are you")`, 'WHISPER');
+    
+    // Test 3: Same text (should be empty)
+    result = this.extractNewText('Hello world how are you');
+    Logger.DEBUG(`Test 3 - Same: "${result}" (expected: "")`, 'WHISPER');
+    
+    // Test 4: New sentence
+    result = this.extractNewText('Hello world how are you today');
+    Logger.DEBUG(`Test 4 - New word: "${result}" (expected: "today")`, 'WHISPER');
+    
+    // Test 5: Reset for new phrase
+    this.lastSentText = '';
+    result = this.extractNewText('Oregon! Oregon! Oregon!');
+    Logger.DEBUG(`Test 5 - Chant: "${result}" (expected: "Oregon! Oregon! Oregon!")`, 'WHISPER');
+    
+    Logger.DEBUG('Text extraction test completed', 'WHISPER');
   }
 }
