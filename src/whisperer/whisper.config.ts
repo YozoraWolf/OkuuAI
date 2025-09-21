@@ -109,9 +109,9 @@ export async function ensureWhisperSetup() {
         const platform = os.platform();
         let binaryPath = "";
         if (platform === "win32") {
-            binaryPath = path.join(WHISPER_BASE_DIR, "whisper-stream.exe");
+            binaryPath = path.join(WHISPER_BASE_DIR, "whisper-cli.exe");
         } else if (platform === "linux") {
-            binaryPath = path.join(WHISPER_BASE_DIR, "whisper-stream");
+            binaryPath = path.join(WHISPER_BASE_DIR, "whisper-cli");
         } else {
             throw new Error(`Unsupported platform: ${platform}`);
         }

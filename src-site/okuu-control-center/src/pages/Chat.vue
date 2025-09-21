@@ -156,6 +156,9 @@ const statusMessage = ref('Disconnected');
 const isAudioStreamActive = ref(false);
 const showConsentModal = ref(false);
 
+// Create a ref for the base message capture function
+const captureBaseMessageFn = ref<(() => void) | null>(null);
+
 const attachment = ref<File | null>(null);
 
 const hoverTimer = ref<number | null>(null);
@@ -369,6 +372,11 @@ const toggleAudioStream = (manual = false) => {
     }
     // Toggle audio stream
     if (!isAudioStreamActive.value) {
+        // Capture current message content before starting transcription
+        if (captureBaseMessageFn.value) {
+            captureBaseMessageFn.value();
+        }
+        
         isAudioStreamActive.value = true;
         socketIO.value?.startAudioStream(
             socket.value!,
@@ -486,21 +494,59 @@ const onEnter = (e: KeyboardEvent) => {
 // After socket initialization:
 watch(socket, (s) => {
     if (!s) return;
+    
+    let transcriptionBuffer = '';
+    let baseMessage = ''; // Store the original message before transcription started
+    
+    // Function to capture base message when audio starts
+    const captureBaseMessage = () => {
+        baseMessage = newMessage.value;
+        transcriptionBuffer = '';
+        console.log('Captured base message:', baseMessage);
+    };
+    
+    // Store the function in the ref so toggleAudioStream can access it
+    captureBaseMessageFn.value = captureBaseMessage;
+    
     s.on('transcription', (payload: { text: string }) => {
         if (payload && payload.text !== undefined && payload.text.trim()) {
-            // Replace the entire message with the latest transcription
-            newMessage.value = payload.text.trim();
+            // Each transcription might be from a different audio chunk
+            const newText = payload.text.trim();
+            
+            // For continuous speech, append new transcriptions with proper spacing
+            // Check if this transcription is significantly different from what we have
+            if (!transcriptionBuffer || newText !== transcriptionBuffer) {
+                // If we have existing transcription buffer, check if new text should replace or append
+                if (transcriptionBuffer && !newText.startsWith(transcriptionBuffer)) {
+                    // This looks like a new sentence/phrase, append it
+                    transcriptionBuffer = transcriptionBuffer + ' ' + newText;
+                } else {
+                    // This might be a continuation or replacement of current transcription
+                    transcriptionBuffer = newText;
+                }
+                
+                // Append transcription to base message (preserve existing text)
+                const separator = baseMessage.trim() && transcriptionBuffer.trim() ? ' ' : '';
+                newMessage.value = baseMessage + separator + transcriptionBuffer;
+                
+                console.log('Incremental transcription:', newText, 'Full buffer:', transcriptionBuffer, 'Full message:', newMessage.value);
+            }
         }
     });
+    
     s.on('transcription_final', (payload: { text: string }) => {
         if (payload && payload.text !== undefined && payload.text.trim()) {
-            // Set final transcription and send
-            newMessage.value = payload.text.trim();
-            sendMessage();
-            newMessage.value = '';
-            // Stop audio stream after sending message to avoid leakages
-            socketIO.value?.stopAudioStream(false);
-            isAudioStreamActive.value = false;
+            // Don't replace the message - the final transcription is just a signal that recording stopped
+            // Keep whatever is currently in the input field (which already contains accumulated transcriptions)
+            console.log('Final transcription signal received, keeping current message:', newMessage.value);
+            
+            // Update base message to include everything currently in the input for next recording session
+            baseMessage = newMessage.value;
+            transcriptionBuffer = '';
+            
+            // DO NOT auto-stop audio stream - let user control when to stop
+            // socketIO.value?.stopAudioStream(false);
+            // isAudioStreamActive.value = false;
         }
     });
 });

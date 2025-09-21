@@ -36,11 +36,21 @@ export class Whisperer {
     async start() {
         if (!this.worker) throw new Error("No worker loaded");
         if (this.isTranscribing) {
-            Logger.DEBUG("Whisper is already transcribing, ignoring start request");
+            Logger.DEBUG("Whisperer is already transcribing, ignoring start request");
             return;
         }
         this.isTranscribing = true;
         await this.worker.start();
+    }
+
+    // New method to add audio data for processing
+    addAudioData(audioData: Buffer) {
+        if (!this.worker) throw new Error("No worker loaded");
+        if (!this.isTranscribing) {
+            Logger.DEBUG("Whisperer not transcribing, ignoring audio data");
+            return;
+        }
+        this.worker.addAudioData(audioData);
     }
 
     onTranscription(callback: (text: string) => void) {
@@ -55,11 +65,18 @@ export class Whisperer {
         this.transcriptionCallbacks.push(callback);
     }
 
+    removeTranscriptionCallback(callback: (text: string) => void) {
+        const index = this.transcriptionCallbacks.indexOf(callback);
+        if (index > -1) {
+            this.transcriptionCallbacks.splice(index, 1);
+        }
+    }
+
     async stop() {
         if (this.worker) {
             await this.worker.stop();
             this.isTranscribing = false;
-            Logger.DEBUG("Whisper transcription stopped");
+            Logger.DEBUG("Whisperer transcription stopped");
         }
     }
 
