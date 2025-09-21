@@ -402,6 +402,12 @@ const toggleAudioStream = (manual = false) => {
 const onConsentGiven = () => {
     localStorage.setItem('audioConsent', '1');
     showConsentModal.value = false;
+    
+    // Capture current message content before starting transcription
+    if (captureBaseMessageFn.value) {
+        captureBaseMessageFn.value();
+    }
+    
     isAudioStreamActive.value = true;
     socketIO.value?.startAudioStream(
         socket.value!,
@@ -495,13 +501,11 @@ const onEnter = (e: KeyboardEvent) => {
 watch(socket, (s) => {
     if (!s) return;
     
-    let transcriptionBuffer = '';
     let baseMessage = ''; // Store the original message before transcription started
     
     // Function to capture base message when audio starts
     const captureBaseMessage = () => {
         baseMessage = newMessage.value;
-        transcriptionBuffer = '';
         console.log('Captured base message:', baseMessage);
     };
     
@@ -510,44 +514,22 @@ watch(socket, (s) => {
     
     s.on('transcription', (payload: { text: string }) => {
         if (payload && payload.text !== undefined && payload.text.trim()) {
-            // Each transcription might be from a different audio chunk
             const newText = payload.text.trim();
             
-            // For continuous speech, append new transcriptions with proper spacing
-            // Check if this transcription is significantly different from what we have
-            if (!transcriptionBuffer || newText !== transcriptionBuffer) {
-                // If we have existing transcription buffer, check if new text should replace or append
-                if (transcriptionBuffer && !newText.startsWith(transcriptionBuffer)) {
-                    // This looks like a new sentence/phrase, append it
-                    transcriptionBuffer = transcriptionBuffer + ' ' + newText;
-                } else {
-                    // This might be a continuation or replacement of current transcription
-                    transcriptionBuffer = newText;
-                }
-                
-                // Append transcription to base message (preserve existing text)
-                const separator = baseMessage.trim() && transcriptionBuffer.trim() ? ' ' : '';
-                newMessage.value = baseMessage + separator + transcriptionBuffer;
-                
-                console.log('Incremental transcription:', newText, 'Full buffer:', transcriptionBuffer, 'Full message:', newMessage.value);
-            }
+            // Backend now sends only new text portions, so we can simply append
+            // Ensure proper spacing between base message and transcribed text
+            const separator = baseMessage.trim() && newText ? ' ' : '';
+            newMessage.value = baseMessage + separator + newText;
+            
+            console.log('Received new transcription chunk:', newText, 'Full message:', newMessage.value);
         }
     });
     
     s.on('transcription_final', (payload: { text: string }) => {
-        if (payload && payload.text !== undefined && payload.text.trim()) {
-            // Don't replace the message - the final transcription is just a signal that recording stopped
-            // Keep whatever is currently in the input field (which already contains accumulated transcriptions)
-            console.log('Final transcription signal received, keeping current message:', newMessage.value);
-            
-            // Update base message to include everything currently in the input for next recording session
-            baseMessage = newMessage.value;
-            transcriptionBuffer = '';
-            
-            // DO NOT auto-stop audio stream - let user control when to stop
-            // socketIO.value?.stopAudioStream(false);
-            // isAudioStreamActive.value = false;
-        }
+        // Final transcription signal - just update base message for next session
+        // Don't modify the current text, just prepare for next recording
+        baseMessage = newMessage.value;
+        console.log('Transcription session ended, updated base message:', baseMessage);
     });
 });
 

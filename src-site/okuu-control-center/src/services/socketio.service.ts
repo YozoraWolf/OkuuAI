@@ -206,23 +206,26 @@ export class SocketioService {
             // Check if we're actually getting audio data
             const hasAudio = inputData.some(sample => Math.abs(sample) > 0.001);
             
-            if (chunkCounter % 100 === 0) { // Log every 100 chunks
+            // Log less frequently to reduce console spam
+            if (chunkCounter % 200 === 0) { // Log every 200 chunks (~8 seconds at 4096 buffer)
                 console.log('Audio chunk:', chunkCounter, 'Has audio:', hasAudio, 'Max amplitude:', Math.max(...Array.from(inputData).map(Math.abs)));
             }
             chunkCounter++;
             
-            // Always send data, even if it's silence (backend can handle it)
-            // Downsample from browser's native rate to 16kHz if needed
-            const downsampledData = this.downsampleTo16kHz(inputData, this.audioContext!.sampleRate);
-            
-            // Convert Float32Array to Int16Array for better compression
-            const pcmData = this.float32ToInt16(downsampledData);
-            
-            // Send audio data to backend in real-time
-            socket.emit('audio_data', {
-                data: Array.from(pcmData), // Convert to regular array for JSON serialization
-                sampleRate: 16000 // Tell backend the target sample rate
-            });
+            // Only send audio data if there's actual sound to reduce backend load
+            if (hasAudio) {
+                // Downsample from browser's native rate to 16kHz if needed
+                const downsampledData = this.downsampleTo16kHz(inputData, this.audioContext!.sampleRate);
+                
+                // Convert Float32Array to Int16Array for better compression
+                const pcmData = this.float32ToInt16(downsampledData);
+                
+                // Send audio data to backend in real-time
+                socket.emit('audio_data', {
+                    data: Array.from(pcmData), // Convert to regular array for JSON serialization
+                    sampleRate: 16000 // Tell backend the target sample rate
+                });
+            }
         };
         
         // Connect the audio processing chain
