@@ -13,6 +13,7 @@ import { setupSockets } from './sockets';
 import mainRoutes, { apiLimiter } from './routes/main.route';
 import { Server } from 'socket.io';
 import userRoutes from './routes/user.route';
+import ttsRoutes from './routes/tts.route';
 
 export let io: Server;
 
@@ -61,6 +62,7 @@ export let io: Server;
     app.use('/memory', checkApiKey, memoryRoutes);
     app.use('/users', checkApiKey, userRoutes);
     app.use('/config', checkApiKey, configRoutes);
+    app.use('/tts', ttsRoutes);
 
     server.listen(port, async () => {
         Logger.INFO(`Server is running on port ${port} ${/09$/.test(port.toString()) ? '(☢️)' : ''}`);

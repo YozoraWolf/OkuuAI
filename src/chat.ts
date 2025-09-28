@@ -12,6 +12,8 @@ import {
     updateMemory 
 } from './langchain/redis';
 import { loadFileContentFromStorage } from './langchain/memory/storage';
+import TTSService from './services/tts.service';
+import { emitTTSAudio } from './sockets';
 
 export interface ChatMessage {
     id?: number;
@@ -158,11 +160,20 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                     images: sentImage,
                 });
 
+                let streamFinished = false;
+                let textChunks: string[] = [];
+                
+                // Initialize TTS service for streaming
+                const ttsService = TTSService.getInstance();
+                Logger.DEBUG(`TTS: Service initialized, ready: ${ttsService.isReady()}`);
+                
+                // Process text stream and collect chunks for TTS
                 for await (const part of stream) {
                     // Check if generation should be stopped (additional safety check)
                     if (Core.shouldStopGeneration) {
                         Logger.INFO('Generation stopped via flag during streaming');
                         aiReply += ' ...';
+                        streamFinished = true;
                         break;
                     }
                     aiReply += part.response;
@@ -170,6 +181,60 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                     reply.done = false;
                     io.to(msg.sessionId).emit('chat', reply);
                     if (callback) callback(part.response);
+                    
+                    // Collect text chunks for TTS processing
+                    textChunks.push(part.response);
+                }
+                
+                streamFinished = true;
+                
+                // After streaming is complete, process TTS if enabled
+                Logger.DEBUG(`TTS: Checking if should process - Ready: ${ttsService.isReady()}, Text chunks: ${textChunks.length}`);
+                if (ttsService.isReady() && textChunks.length > 0) {
+                    (async () => {
+                        try {
+                            const fullText = textChunks.join('');
+                            Logger.DEBUG(`TTS: Processing ${fullText.length} chars in ${fullText.split(/[.!?]+/).length} sentences`);
+                            
+                            // Split text into sentences for better TTS processing
+                            // Use a more flexible sentence splitting approach
+                            let sentences = fullText.match(/[^\.!?]+[\.!?]+/g);
+                            
+                            // If no sentences found with punctuation, use the full text
+                            if (!sentences || sentences.length === 0) {
+                                sentences = [fullText];
+                            }
+                            
+
+                            
+                            for (let i = 0; i < sentences.length; i++) {
+                                const sentence = sentences[i].trim();
+                                if (sentence) {
+                                    const audioBuffer = await ttsService.generateAudio(sentence);
+                                    if (audioBuffer) {
+                                        Logger.DEBUG(`TTS: Generated ${audioBuffer.length} bytes for sentence ${i + 1}/${sentences.length}`);
+                                        emitTTSAudio(msg.sessionId, {
+                                            text: sentence,
+                                            audio: audioBuffer,
+                                            index: i
+                                        });
+                                    } else {
+                                        Logger.WARN(`TTS: No audio buffer generated for sentence ${i}`);
+                                    }
+                                }
+                            }
+                            
+                            // Send completion signal
+                            emitTTSAudio(msg.sessionId, {
+                                text: '',
+                                audio: Buffer.alloc(0),
+                                index: -1,
+                                isComplete: true
+                            });
+                        } catch (ttsError) {
+                            Logger.ERROR(`TTS processing error: ${ttsError}`);
+                        }
+                    })();
                 }
             } catch (error: any) {
                 if (error.name === 'AbortError') {

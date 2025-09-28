@@ -28,12 +28,10 @@ export class SocketioService {
         }
 
         try {
-            let url = await resolveHostRedirect();
+            const url = await resolveHostRedirect();
             if (!url) throw new Error('Invalid URL');
-            // Remove protocol from URL
-            url = url.replace(/^https?:\/\//, '');
 
-            this.socket = io(`${process.env.LOCAL ? 'ws' : 'wss' }://${url}`, {
+            this.socket = io(url, {
                 transports: ['websocket'],
                 timeout: 30000,
                 reconnectionAttempts: 3,
@@ -42,11 +40,22 @@ export class SocketioService {
 
             this.socket.connect();
 
-            console.log('Socket initialized with URL:', `${process.env.LOCAL ? 'ws' : 'wss' }://${url}`);
+            console.log('🔍 Socket initialized with URL:', url);
             this.sessionId = sessionId;
             
-            console.log('Socket initialized:', this.sessionId);
-            this.socket.emit("joinChat", sessionId );
+            console.log('🔍 Socket initialized for session:', this.sessionId);
+            
+            // Wait for connection before joining chat
+            this.socket.on('connect', () => {
+                console.log('🔍 Emitting joinChat for session:', sessionId);
+                this.socket?.emit("joinChat", sessionId);
+            });
+            
+            // If already connected, emit immediately
+            if (this.socket.connected) {
+                console.log('🔍 Socket already connected, emitting joinChat immediately');
+                this.socket.emit("joinChat", sessionId);
+            }
 
             this.setupEventHandlers();
 
@@ -61,7 +70,7 @@ export class SocketioService {
         if (!this.socket) return;
 
         this.socket.on('connect', () => {
-            console.log('Connected to socket');
+            console.log('✅ Socket connected successfully - ID:', this.socket?.id, 'Transport:', this.socket?.io.engine.transport.name);
             this.updateStatus(Status.CONNECTED);
         });
 
@@ -139,7 +148,43 @@ export class SocketioService {
         });
 
         this.socket.on('connect_error', (err) => {
-            console.error('Socket connection error:', err);
+            console.error('❌ Socket connection error:', err);
+        });
+
+        this.socket.on('disconnect', (reason) => {
+            console.warn('🔌 Socket disconnected:', reason);
+        });
+
+        // TTS event handlers - forward to sessionStore for component handling
+        this.socket.on('ttsAudio', (audioData: any) => {
+            console.log('🔊 SocketioService received TTS audio chunk:', {
+                index: audioData.index,
+                audioLength: audioData.audio?.length || 0,
+                socketConnected: this.socket?.connected,
+                socketId: this.socket?.id
+            });
+            // Emit a custom event that components can listen to
+            if (this.sessionStore && typeof this.sessionStore.handleTTSAudio === 'function') {
+                this.sessionStore.handleTTSAudio(audioData);
+            }
+            // Also emit on window for components to catch
+            window.dispatchEvent(new CustomEvent('ttsAudio', { detail: audioData }));
+        });
+
+        this.socket.on('ttsSettings', (settings: any) => {
+            console.log('🔊 TTS settings received:', settings);
+            window.dispatchEvent(new CustomEvent('ttsSettings', { detail: settings }));
+        });
+
+        this.socket.on('ttsSettingsUpdated', (settings: any) => {
+            console.log('🔊 TTS settings updated:', settings);
+            window.dispatchEvent(new CustomEvent('ttsSettingsUpdated', { detail: settings }));
+        });
+
+        this.socket.on('joinedChat', (data: any) => {
+            console.log('🔊 Successfully joined chat room:', data);
+            console.log('🔍 Frontend thinks it\'s in session:', this.sessionId);
+            console.log('🔍 Backend confirmed session:', data.sessionId);
         });
     }
 

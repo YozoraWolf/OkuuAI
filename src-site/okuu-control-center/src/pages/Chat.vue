@@ -70,6 +70,11 @@
                                 <q-icon name="mdi-arrow-right" size="xs" class="q-mr-sm"></q-icon>
                                 <div class="text-weight-bold">Stream</div>
                             </q-chip>
+                            <q-chip class="q-mx-sm" size="md" color="primary" :outline="!ttsEnabled"
+                                clickable @click="toggleTTS">
+                                <q-icon name="volume_up" size="xs" class="q-mr-sm"></q-icon>
+                                <div class="text-weight-bold">TTS</div>
+                            </q-chip>
                             <q-select v-model="currentModel" :options="modelList"
                                 option-value="name" option-label="name" emit-value
                                 class="q-mx-sm" dense outlined
@@ -149,6 +154,11 @@ const isLoadingResponse = ref(false);
 const isLoadingSessionMessages = ref(false);
 const inputTimeout = ref();
 
+// TTS functionality
+const ttsEnabled = ref(true);
+const audioQueue = ref<HTMLAudioElement[]>([]);
+const currentAudio = ref<HTMLAudioElement | null>(null);
+
 const $q = useQuasar();
 const router = useRouter();
 const route = useRoute();
@@ -218,6 +228,10 @@ onMounted(async () => {
 watch(
     () => route.params.id,
     async (id) => {
+        // Stop any current audio when switching sessions
+        stopCurrentAudio();
+        clearAudioQueue();
+        
         if (id) {
             await selectSession(id as string);
         } else {
@@ -228,6 +242,12 @@ watch(
 
 onBeforeUnmount(() => {
     socket.value?.disconnect();
+    // Clean up TTS audio
+    stopCurrentAudio();
+    clearAudioQueue();
+    // Remove TTS event listeners
+    window.removeEventListener('ttsAudio', handleTTSAudio);
+    window.removeEventListener('ttsSettings', handleTTSSettings);
 });
 
 const selectSession = async (sessionId: string) => {
@@ -244,6 +264,24 @@ const selectSession = async (sessionId: string) => {
     mini.value = true;
     socketIO.value = new SocketioService();
     socket.value = await socketIO.value.initializeSocket(sessionId, sessionStore);
+    
+    // Set up TTS event listeners using window events (handled by SocketioService)
+    console.log('🔊 Setting up TTS window event listeners for session:', sessionId);
+    
+    // Remove any existing listeners
+    window.removeEventListener('ttsAudio', handleTTSAudio);
+    window.removeEventListener('ttsSettings', handleTTSSettings);
+    
+    // Add new listeners
+    window.addEventListener('ttsAudio', handleTTSAudio);
+    window.addEventListener('ttsSettings', handleTTSSettings);
+    
+    if (socket.value) {
+        // Request current TTS settings
+        socket.value.emit('getTTSSettings');
+        console.log('🔊 Requested TTS settings for session:', sessionId);
+    }
+    
     isLoadingSessionMessages.value = false;
     
     if (route.params.id !== sessionId) {
@@ -293,6 +331,10 @@ const stopGeneration = () => {
         isLoadingResponse.value = false;
         sessionStore.setIsGenerating(false);
         sessionStore.isStreaming = false;
+        
+        // Stop any current TTS audio and clear queue
+        stopCurrentAudio();
+        clearAudioQueue();
     }
 };
 
@@ -353,6 +395,139 @@ const toggleStreaming = () => {
         position: 'bottom',
         timeout: 2000,
     });
+};
+
+const toggleTTS = () => {
+    ttsEnabled.value = !ttsEnabled.value;
+    
+    // Update TTS settings on backend
+    if (socket.value) {
+        socket.value.emit('updateTTSSettings', { enabled: ttsEnabled.value });
+    }
+    
+    // Stop any current audio if disabling TTS
+    if (!ttsEnabled.value) {
+        stopCurrentAudio();
+        clearAudioQueue();
+    }
+    
+    $q.notify({
+        message: `TTS is now ${ttsEnabled.value ? 'enabled' : 'disabled'}.`,
+        color: ttsEnabled.value ? 'green' : 'red',
+        position: 'bottom',
+        timeout: 2000,
+    });
+};
+
+const playTTSAudio = (audioData: string) => {
+    if (!ttsEnabled.value) return;
+    
+    console.log('🔊 Processing TTS audio, data length:', audioData.length);
+    
+    try {
+        // Convert base64 to blob and create audio element
+        const byteCharacters = atob(audioData);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'audio/wav' });
+        
+        console.log('🔊 Created audio blob, size:', blob.size);
+        
+        const audioUrl = URL.createObjectURL(blob);
+        const audio = new Audio(audioUrl);
+        
+        audio.onended = () => {
+            console.log('🔊 Audio playback ended');
+            URL.revokeObjectURL(audioUrl);
+            playNextAudio();
+        };
+        
+        audio.onerror = (error) => {
+            console.error('🔊 Audio playback error:', error);
+            URL.revokeObjectURL(audioUrl);
+            playNextAudio();
+        };
+        
+        audio.oncanplaythrough = () => {
+            console.log('🔊 Audio can play through');
+        };
+        
+        audioQueue.value.push(audio);
+        
+        // If no audio is currently playing, start playing
+        if (!currentAudio.value) {
+            playNextAudio();
+        }
+    } catch (error) {
+        console.error('🔊 Error processing TTS audio:', error);
+    }
+};
+
+const playNextAudio = () => {
+    if (audioQueue.value.length > 0) {
+        currentAudio.value = audioQueue.value.shift() || null;
+        if (currentAudio.value) {
+            console.log('🔊 Playing next audio from queue');
+            currentAudio.value.play().catch(error => {
+                console.error('🔊 Error playing audio:', error);
+                playNextAudio();
+            });
+        }
+    } else {
+        currentAudio.value = null;
+        console.log('🔊 Audio queue is empty');
+    }
+};
+
+const stopCurrentAudio = () => {
+    if (currentAudio.value) {
+        currentAudio.value.pause();
+        currentAudio.value = null;
+    }
+};
+
+const clearAudioQueue = () => {
+    audioQueue.value.forEach(audio => {
+        audio.pause();
+    });
+    audioQueue.value = [];
+};
+
+// TTS event handlers for window events
+const handleTTSAudio = (event: Event) => {
+    const customEvent = event as CustomEvent;
+    const audioData = customEvent.detail;
+    console.log('🔊 Chat.vue received TTS audio event:', audioData);
+    
+    if (audioData.isComplete) {
+        console.log('🔊 TTS generation completed');
+        return;
+    }
+    
+    console.log('🔊 Processing TTS audio chunk:', {
+        index: audioData.index,
+        text: audioData.text,
+        audioLength: audioData.audio ? audioData.audio.length : 0,
+        mimeType: audioData.mimeType
+    });
+    
+    if (audioData.audio && ttsEnabled.value) {
+        playTTSAudio(audioData.audio);
+    } else if (!audioData.audio) {
+        console.warn('🔊 No audio data in chunk');
+    } else {
+        console.log('🔊 TTS disabled, skipping audio playback');
+    }
+};
+
+const handleTTSSettings = (event: Event) => {
+    const customEvent = event as CustomEvent;
+    const settings = customEvent.detail;
+    console.log('🔊 Chat.vue received TTS settings:', settings);
+    ttsEnabled.value = settings.enabled;
 };
 
 // computed

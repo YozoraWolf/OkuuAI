@@ -4,6 +4,7 @@ import { Core } from "./core";
 import { SESSION_ID, startSession } from "./langchain/memory/memory";
 import { Logger } from "./logger";
 import { handleUserInput } from "./console";
+import TTSService from "./services/tts.service";
 
 let io: Server;
 
@@ -11,15 +12,55 @@ export const setupSockets = (server: HTTPServer) => {
     io = new Server(server, {
         pingInterval: 10000,
         pingTimeout: 5000,
-    }
-    );
+        cors: {
+            origin: "*",
+            methods: ["GET", "POST"]
+        }
+    });
 
     io.on('connection', (socket) => {
         Logger.INFO('A client connected: '+socket.id);
 
         socket.on('joinChat', (sessionId: string) => {
-            Logger.DEBUG('Joining chat: '+sessionId);
+            Logger.DEBUG(`Client ${socket.id} joining chat session: ${sessionId}`);
             socket.join(sessionId);
+            Logger.DEBUG(`Client ${socket.id} successfully joined session ${sessionId}`);
+            
+            // Send confirmation back to client
+            socket.emit('joinedChat', { sessionId, socketId: socket.id });
+        });
+
+        // Handle TTS configuration updates
+        socket.on('updateTTSSettings', (data: { voice?: string; enabled?: boolean }) => {
+            try {
+                const ttsService = TTSService.getInstance();
+                if (data.voice) {
+                    ttsService.updateConfig({ voice: data.voice });
+                }
+                if (typeof data.enabled === 'boolean') {
+                    ttsService.setEnabled(data.enabled);
+                }
+                socket.emit('ttsSettingsUpdated', ttsService.getConfig());
+                Logger.DEBUG(`TTS settings updated: ${JSON.stringify(data)}`);
+            } catch (err) {
+                Logger.ERROR(`Error updating TTS settings: ${err}`);
+                socket.emit('error', { message: 'Failed to update TTS settings' });
+            }
+        });
+
+        // Get TTS settings
+        socket.on('getTTSSettings', () => {
+            try {
+                const ttsService = TTSService.getInstance();
+                socket.emit('ttsSettings', {
+                    ...ttsService.getConfig(),
+                    isReady: ttsService.isReady(),
+                    availableVoices: ttsService.getAvailableVoices()
+                });
+            } catch (err) {
+                Logger.ERROR(`Error getting TTS settings: ${err}`);
+                socket.emit('error', { message: 'Failed to get TTS settings' });
+            }
         });
 
                 // Handle chat messages
@@ -87,4 +128,44 @@ export const setupSockets = (server: HTTPServer) => {
     Logger.INFO('Socket server initialized');
 
     return io;
+};
+
+/**
+ * Emit TTS audio chunk to clients in a specific session
+ */
+export const emitTTSAudio = (sessionId: string, audioChunk: {
+    text: string;
+    audio: Buffer;
+    index: number;
+    isComplete?: boolean;
+}) => {
+    Logger.DEBUG(`TTS: Emitting audio chunk ${audioChunk.index} to session ${sessionId} (${audioChunk.audio.length} bytes)`);
+    
+    if (!io) {
+        Logger.WARN('Socket.IO not initialized, cannot emit TTS audio');
+        return;
+    }
+
+    try {
+        // Get the list of clients in this session room
+        const room = io.sockets.adapter.rooms.get(sessionId);
+        const clientCount = room ? room.size : 0;
+        
+        if (clientCount === 0) {
+            Logger.WARN(`TTS: No clients connected to session ${sessionId}, skipping audio emission`);
+            return;
+        }
+
+        // Convert buffer to base64 for transmission
+        const audioData = {
+            ...audioChunk,
+            audio: audioChunk.audio.toString('base64'),
+            mimeType: 'audio/wav'
+        };
+
+        io.to(sessionId).emit('ttsAudio', audioData);
+        Logger.DEBUG(`✅ TTS chunk ${audioChunk.index} sent to ${clientCount} clients`);
+    } catch (error) {
+        Logger.ERROR(`Failed to emit TTS audio: ${error}`);
+    }
 };

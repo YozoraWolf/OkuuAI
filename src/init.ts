@@ -102,6 +102,16 @@ export const init = async () =>
     // initialize sqlite3 (future implementation prep)
     await initUsersDB();
 
+    // initialize TTS service
+    try {
+        const TTSService = (await import('./services/tts.service')).default;
+        const ttsService = TTSService.getInstance();
+        await ttsService.initialize();
+        Logger.INFO('TTS service initialized successfully');
+    } catch (error) {
+        Logger.WARN(`TTS service initialization failed (optional): ${error}`);
+    }
+
     // get latest history
     const sessionId = SESSION_SETTINGS.sessionId;
 
