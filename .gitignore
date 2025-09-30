@@ -14,3 +14,5 @@ session.json
 /src/assets/okuu_pfp.*
 assistant.json
 settings.json
+WARP.md
+copilot-instructions.md

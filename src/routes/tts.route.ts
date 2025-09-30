@@ -57,48 +57,17 @@ router.get('/status', (req, res) => {
     try {
         const ttsService = TTSService.getInstance();
         const isReady = ttsService.isReady();
-        const config = ttsService.getConfig();
         
         Logger.INFO(`TTS Status check: Ready = ${isReady}`);
         
         res.json({
             ready: isReady,
             service: 'kokoro-js',
-            config: {
-                voice: config.voice,
-                enabled: config.enabled,
-                model: config.model_id,
-                dtype: config.dtype
-            }
+            currentVoice: 'af'
         });
     } catch (error) {
         Logger.ERROR(`TTS Status error: ${error}`);
         res.status(500).json({ error: 'Failed to get TTS status', details: error instanceof Error ? error.message : String(error) });
-    }
-});
-
-// Reload TTS configuration from assistant.json
-router.post('/reload-config', (req, res) => {
-    try {
-        const ttsService = TTSService.getInstance();
-        ttsService.reloadConfig();
-        const config = ttsService.getConfig();
-        
-        Logger.INFO('TTS configuration reloaded via API');
-        
-        res.json({
-            success: true,
-            message: 'TTS configuration reloaded',
-            config: {
-                voice: config.voice,
-                enabled: config.enabled,
-                model: config.model_id,
-                dtype: config.dtype
-            }
-        });
-    } catch (error) {
-        Logger.ERROR(`TTS config reload error: ${error}`);
-        res.status(500).json({ error: 'Failed to reload TTS config', details: error instanceof Error ? error.message : String(error) });
     }
 });
 

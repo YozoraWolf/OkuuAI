@@ -156,8 +156,10 @@ const inputTimeout = ref();
 
 // TTS functionality
 const ttsEnabled = ref(true);
-const audioQueue = ref<HTMLAudioElement[]>([]);
-const currentAudio = ref<HTMLAudioElement | null>(null);
+const audioQueue = ref<Array<{audio: HTMLAudioElement, index: number}>>([]);
+const isPlayingAudio = ref(false);
+const receivedChunks = ref<Set<number>>(new Set());
+const expectedChunks = ref<Map<number, {audio: HTMLAudioElement, index: number}>>(new Map());
 
 const $q = useQuasar();
 const router = useRouter();
@@ -229,8 +231,7 @@ watch(
     () => route.params.id,
     async (id) => {
         // Stop any current audio when switching sessions
-        stopCurrentAudio();
-        clearAudioQueue();
+        stopAllAudio();
         
         if (id) {
             await selectSession(id as string);
@@ -243,8 +244,7 @@ watch(
 onBeforeUnmount(() => {
     socket.value?.disconnect();
     // Clean up TTS audio
-    stopCurrentAudio();
-    clearAudioQueue();
+    stopAllAudio();
     // Remove TTS event listeners
     window.removeEventListener('ttsAudio', handleTTSAudio);
     window.removeEventListener('ttsSettings', handleTTSSettings);
@@ -297,6 +297,9 @@ const addNewSession = async () => {
 
 const sendMessage = async () => {
     if (selectedSession.value && newMessage.value.trim()) {
+        // Reset TTS state for new conversation
+        stopAllAudio();
+        
         const message = {
             timestamp: Date.now(),
             user: 'wolf',
@@ -332,9 +335,8 @@ const stopGeneration = () => {
         sessionStore.setIsGenerating(false);
         sessionStore.isStreaming = false;
         
-        // Stop any current TTS audio and clear queue
-        stopCurrentAudio();
-        clearAudioQueue();
+        // Stop any current TTS audio
+        stopAllAudio();
     }
 };
 
@@ -407,8 +409,7 @@ const toggleTTS = () => {
     
     // Stop any current audio if disabling TTS
     if (!ttsEnabled.value) {
-        stopCurrentAudio();
-        clearAudioQueue();
+        stopAllAudio();
     }
     
     $q.notify({
@@ -419,10 +420,14 @@ const toggleTTS = () => {
     });
 };
 
-const playTTSAudio = (audioData: string) => {
+const playTTSAudio = (audioData: string, index: number) => {
     if (!ttsEnabled.value) return;
     
-    console.log('🔊 Processing TTS audio, data length:', audioData.length);
+    console.log(`🔊 Processing TTS audio chunk ${index}, data length:`, audioData.length);
+    
+    // Track that we received this chunk
+    receivedChunks.value.add(index);
+    console.log(`🔊 Received chunks so far:`, Array.from(receivedChunks.value).sort((a, b) => a - b));
     
     try {
         // Convert base64 to blob and create audio element
@@ -434,76 +439,189 @@ const playTTSAudio = (audioData: string) => {
         const byteArray = new Uint8Array(byteNumbers);
         const blob = new Blob([byteArray], { type: 'audio/wav' });
         
-        console.log('🔊 Created audio blob, size:', blob.size);
-        
         const audioUrl = URL.createObjectURL(blob);
         const audio = new Audio(audioUrl);
         
         audio.onended = () => {
-            console.log('🔊 Audio playback ended');
+            console.log(`🔊 ✅ Audio chunk ${index} finished playing`);
             URL.revokeObjectURL(audioUrl);
+            isPlayingAudio.value = false;
+            currentAudio.value = null;
             playNextAudio();
         };
         
         audio.onerror = (error) => {
-            console.error('🔊 Audio playback error:', error);
+            console.error(`🔊 ❌ Audio chunk ${index} error:`, error);
             URL.revokeObjectURL(audioUrl);
+            isPlayingAudio.value = false;
+            currentAudio.value = null;
             playNextAudio();
         };
         
-        audio.oncanplaythrough = () => {
-            console.log('🔊 Audio can play through');
-        };
+        // Store chunk in expected chunks map for ordered processing
+        expectedChunks.value.set(index, { audio, index });
         
-        audioQueue.value.push(audio);
+        console.log(`🔊 Stored chunk ${index}, total chunks:`, expectedChunks.value.size);
         
-        // If no audio is currently playing, start playing
-        if (!currentAudio.value) {
+        // Try to queue chunks in order
+        queueChunksInOrder();
+        
+        // Start playing if nothing is currently playing
+        if (!isPlayingAudio.value) {
             playNextAudio();
         }
+        
     } catch (error) {
-        console.error('🔊 Error processing TTS audio:', error);
+        console.error(`🔊 Error processing TTS audio chunk ${index}:`, error);
+    }
+};
+
+// Sequential audio playback management
+const currentAudio = ref<HTMLAudioElement | null>(null);
+const nextExpectedIndex = ref(0);
+const chunkTimeout = ref<NodeJS.Timeout | null>(null);
+
+const queueChunksInOrder = () => {
+    // Queue all consecutive chunks starting from nextExpectedIndex
+    while (expectedChunks.value.has(nextExpectedIndex.value)) {
+        const chunk = expectedChunks.value.get(nextExpectedIndex.value)!;
+        audioQueue.value.push(chunk);
+        expectedChunks.value.delete(nextExpectedIndex.value);
+        
+        console.log(`🔊 Queued chunk ${nextExpectedIndex.value} for playback, queue length:`, audioQueue.value.length);
+        nextExpectedIndex.value++;
+    }
+    
+    // Set a timeout to process remaining chunks if we're waiting too long
+    if (chunkTimeout.value) {
+        clearTimeout(chunkTimeout.value);
+    }
+    
+    if (expectedChunks.value.size > 0) {
+        chunkTimeout.value = setTimeout(() => {
+            console.log(`🔊 Timeout: Processing remaining chunks after waiting`);
+            // Process any remaining chunks that may have arrived out of order
+            const remainingIndices = Array.from(expectedChunks.value.keys()).sort((a, b) => a - b);
+            for (const index of remainingIndices) {
+                const chunk = expectedChunks.value.get(index)!;
+                audioQueue.value.push(chunk);
+                expectedChunks.value.delete(index);
+                console.log(`🔊 Timeout-queued chunk ${index}`);
+            }
+            
+            if (!isPlayingAudio.value && audioQueue.value.length > 0) {
+                playNextAudio();
+            }
+        }, 2000); // Wait 2 seconds for missing chunks
     }
 };
 
 const playNextAudio = () => {
-    if (audioQueue.value.length > 0) {
-        currentAudio.value = audioQueue.value.shift() || null;
-        if (currentAudio.value) {
-            console.log('🔊 Playing next audio from queue');
-            currentAudio.value.play().catch(error => {
-                console.error('🔊 Error playing audio:', error);
-                playNextAudio();
-            });
-        }
-    } else {
-        currentAudio.value = null;
-        console.log('🔊 Audio queue is empty');
+    console.log(`🔊 playNextAudio called - isPlaying: ${isPlayingAudio.value}, queueLength: ${audioQueue.value.length}`);
+    
+    // If already playing, don't start another
+    if (isPlayingAudio.value) {
+        console.log('🔊 Audio already playing, skipping');
+        return;
     }
+    
+    // If queue is empty, nothing to play
+    if (audioQueue.value.length === 0) {
+        console.log('🔊 Audio queue is empty');
+        isPlayingAudio.value = false;
+        return;
+    }
+    
+    const nextItem = audioQueue.value.shift();
+    if (!nextItem) {
+        console.log('🔊 No next item found');
+        isPlayingAudio.value = false;
+        return;
+    }
+    
+    const { audio, index } = nextItem;
+    currentAudio.value = audio;
+    isPlayingAudio.value = true;
+    
+    console.log(`🔊 🎵 Starting playback of chunk ${index}, remaining in queue: ${audioQueue.value.length}`);
+    
+    // Play the audio
+    audio.play().then(() => {
+        console.log(`🔊 ✅ Successfully started playing chunk ${index}`);
+    }).catch(error => {
+        console.error(`🔊 ❌ Error playing audio chunk ${index}:`, error);
+        isPlayingAudio.value = false;
+        playNextAudio(); // Try next audio on error
+    });
 };
 
-const stopCurrentAudio = () => {
+const stopAllAudio = () => {
+    // Stop current audio
     if (currentAudio.value) {
         currentAudio.value.pause();
+        currentAudio.value.currentTime = 0;
         currentAudio.value = null;
     }
-};
-
-const clearAudioQueue = () => {
-    audioQueue.value.forEach(audio => {
+    
+    // Clear queue
+    audioQueue.value.forEach(({ audio }) => {
         audio.pause();
     });
     audioQueue.value = [];
+    
+    // Clear expected chunks
+    expectedChunks.value.forEach(({ audio }) => {
+        audio.pause();
+    });
+    expectedChunks.value.clear();
+    
+    // Clear timeouts
+    if (chunkTimeout.value) {
+        clearTimeout(chunkTimeout.value);
+        chunkTimeout.value = null;
+    }
+    
+    // Reset tracking variables
+    isPlayingAudio.value = false;
+    receivedChunks.value.clear();
+    nextExpectedIndex.value = 0;
+    
+    console.log('🔊 Stopped all audio and cleared all queues');
 };
 
 // TTS event handlers for window events
 const handleTTSAudio = (event: Event) => {
     const customEvent = event as CustomEvent;
     const audioData = customEvent.detail;
-    console.log('🔊 Chat.vue received TTS audio event:', audioData);
+    console.log('🔊 Chat.vue received TTS audio event:', {
+        index: audioData.index,
+        textPreview: audioData.text?.substring(0, 30),
+        audioLength: audioData.audio?.length || 0,
+        isComplete: audioData.isComplete
+    });
     
     if (audioData.isComplete) {
         console.log('🔊 TTS generation completed');
+        // Force queue any remaining chunks that arrived out of order
+        console.log(`🔊 Final chunk check - Expected chunks remaining:`, expectedChunks.value.size);
+        
+        // Try to queue any remaining chunks (they might have arrived out of order)
+        if (expectedChunks.value.size > 0) {
+            console.log('🔊 Attempting to queue remaining out-of-order chunks...');
+            // Sort and queue remaining chunks
+            const remainingIndices = Array.from(expectedChunks.value.keys()).sort((a, b) => a - b);
+            for (const index of remainingIndices) {
+                const chunk = expectedChunks.value.get(index)!;
+                audioQueue.value.push(chunk);
+                expectedChunks.value.delete(index);
+                console.log(`🔊 Queued out-of-order chunk ${index}`);
+            }
+            
+            // Start playing if not already playing
+            if (!isPlayingAudio.value && audioQueue.value.length > 0) {
+                playNextAudio();
+            }
+        }
         return;
     }
     
@@ -515,7 +633,7 @@ const handleTTSAudio = (event: Event) => {
     });
     
     if (audioData.audio && ttsEnabled.value) {
-        playTTSAudio(audioData.audio);
+        playTTSAudio(audioData.audio, audioData.index);
     } else if (!audioData.audio) {
         console.warn('🔊 No audio data in chunk');
     } else {

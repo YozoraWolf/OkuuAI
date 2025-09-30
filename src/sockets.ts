@@ -164,6 +164,7 @@ export const emitTTSAudio = (sessionId: string, audioChunk: {
         };
 
         io.to(sessionId).emit('ttsAudio', audioData);
+        Logger.INFO(`🔊 TTS: Emitted chunk ${audioChunk.index} to ${clientCount} clients in session ${sessionId} (${audioData.audio.length} chars)`);
         Logger.DEBUG(`✅ TTS chunk ${audioChunk.index} sent to ${clientCount} clients`);
     } catch (error) {
         Logger.ERROR(`Failed to emit TTS audio: ${error}`);

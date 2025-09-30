@@ -161,13 +161,49 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 });
 
                 let streamFinished = false;
-                let textChunks: string[] = [];
                 
-                // Initialize TTS service for streaming
+                // Initialize TTS service for real-time streaming
                 const ttsService = TTSService.getInstance();
                 Logger.DEBUG(`TTS: Service initialized, ready: ${ttsService.isReady()}`);
                 
-                // Process text stream and collect chunks for TTS
+                // Real-time TTS processing variables
+                let textBuffer = '';
+                
+                // TTS processing variables for parallel generation
+                const processedSentences = new Set<string>(); // Prevent duplicates
+                let ttsChunkIndex = 0;
+                
+                // Fire-and-forget TTS processor - completely non-blocking
+                const processTTSChunk = (text: string, index: number) => {
+                    // Skip if already processed
+                    if (processedSentences.has(text) || !ttsService.isReady()) {
+                        return;
+                    }
+                    
+                    processedSentences.add(text);
+                    Logger.DEBUG(`TTS: Starting parallel generation for chunk ${index}: "${text}"`);
+                    
+                    // Fire-and-forget: Generate TTS in parallel without any blocking
+                    setImmediate(() => {
+                        ttsService.generateAudio(text).then(audioBuffer => {
+                            if (audioBuffer) {
+                                Logger.INFO(`TTS: ✅ Generated chunk ${index} (${audioBuffer.length} bytes) for: "${text.substring(0, 50)}..."`);
+                                emitTTSAudio(msg.sessionId, {
+                                    text: text,
+                                    audio: audioBuffer,
+                                    index: index
+                                });
+                                Logger.INFO(`TTS: ✅ Sent chunk ${index} to frontend`);
+                            } else {
+                                Logger.WARN(`TTS: ❌ No audio buffer generated for chunk ${index}`);
+                            }
+                        }).catch(ttsError => {
+                            Logger.ERROR(`TTS: ❌ Processing error for chunk ${index}: ${ttsError}`);
+                        });
+                    });
+                };
+                
+                // Process text stream with non-blocking real-time TTS
                 for await (const part of stream) {
                     // Check if generation should be stopped (additional safety check)
                     if (Core.shouldStopGeneration) {
@@ -176,65 +212,77 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                         streamFinished = true;
                         break;
                     }
+                    
                     aiReply += part.response;
                     reply.message = aiReply;
                     reply.done = false;
                     io.to(msg.sessionId).emit('chat', reply);
                     if (callback) callback(part.response);
                     
-                    // Collect text chunks for TTS processing
-                    textChunks.push(part.response);
+                    // Non-blocking TTS processing as text streams
+                    if (ttsService.isReady()) {
+                        textBuffer += part.response;
+                        
+                        // Look for complete sentences and partial sentence chunks
+                        const sentences = textBuffer.match(/[^.!?]*[.!?]+/g);
+                        
+                        if (sentences) {
+                            // Process complete sentences immediately
+                            for (const sentence of sentences) {
+                                const cleanSentence = sentence.trim();
+                                if (cleanSentence.length > 5 && !processedSentences.has(cleanSentence)) {
+                                    // Process immediately - no queueing, fully parallel
+                                    processTTSChunk(cleanSentence, ttsChunkIndex++);
+                                }
+                            }
+                            
+                            // Remove processed sentences from buffer
+                            const lastSentence = sentences[sentences.length - 1];
+                            const lastIndex = textBuffer.lastIndexOf(lastSentence) + lastSentence.length;
+                            textBuffer = textBuffer.slice(lastIndex);
+                            
+                        } else if (textBuffer.length > 40) {
+                            // If we have a long phrase without sentence endings, process it anyway
+                            // Look for natural breaks like commas, semicolons, or after certain words
+                            const naturalBreaks = textBuffer.match(/[^,.;:]*[,.;:]+/g);
+                            
+                            if (naturalBreaks && naturalBreaks.length > 0) {
+                                const phrase = naturalBreaks[0].trim();
+                                if (phrase.length > 6 && !processedSentences.has(phrase)) {
+                                    // Process immediately - no queueing
+                                    processTTSChunk(phrase, ttsChunkIndex++);
+                                    
+                                    // Remove processed phrase from buffer
+                                    const phraseIndex = textBuffer.indexOf(phrase) + phrase.length;
+                                    textBuffer = textBuffer.slice(phraseIndex);
+                                }
+                            }
+                        }
+                    }
                 }
                 
                 streamFinished = true;
                 
-                // After streaming is complete, process TTS if enabled
-                Logger.DEBUG(`TTS: Checking if should process - Ready: ${ttsService.isReady()}, Text chunks: ${textChunks.length}`);
-                if (ttsService.isReady() && textChunks.length > 0) {
-                    (async () => {
-                        try {
-                            const fullText = textChunks.join('');
-                            Logger.DEBUG(`TTS: Processing ${fullText.length} chars in ${fullText.split(/[.!?]+/).length} sentences`);
-                            
-                            // Split text into sentences for better TTS processing
-                            // Use a more flexible sentence splitting approach
-                            let sentences = fullText.match(/[^\.!?]+[\.!?]+/g);
-                            
-                            // If no sentences found with punctuation, use the full text
-                            if (!sentences || sentences.length === 0) {
-                                sentences = [fullText];
-                            }
-                            
-
-                            
-                            for (let i = 0; i < sentences.length; i++) {
-                                const sentence = sentences[i].trim();
-                                if (sentence) {
-                                    const audioBuffer = await ttsService.generateAudio(sentence);
-                                    if (audioBuffer) {
-                                        Logger.DEBUG(`TTS: Generated ${audioBuffer.length} bytes for sentence ${i + 1}/${sentences.length}`);
-                                        emitTTSAudio(msg.sessionId, {
-                                            text: sentence,
-                                            audio: audioBuffer,
-                                            index: i
-                                        });
-                                    } else {
-                                        Logger.WARN(`TTS: No audio buffer generated for sentence ${i}`);
-                                    }
-                                }
-                            }
-                            
-                            // Send completion signal
-                            emitTTSAudio(msg.sessionId, {
-                                text: '',
-                                audio: Buffer.alloc(0),
-                                index: -1,
-                                isComplete: true
-                            });
-                        } catch (ttsError) {
-                            Logger.ERROR(`TTS processing error: ${ttsError}`);
-                        }
-                    })();
+                // Process any remaining text in the buffer after streaming ends
+                if (ttsService.isReady() && textBuffer.trim()) {
+                    const remainingText = textBuffer.trim();
+                    if (remainingText.length > 3 && !processedSentences.has(remainingText)) {
+                        Logger.DEBUG(`TTS: Processing remaining text: "${remainingText}"`);
+                        // Process remaining text in parallel
+                        processTTSChunk(remainingText, ttsChunkIndex++);
+                    }
+                }
+                
+                // Send completion signal after a short delay to allow final TTS to process
+                if (ttsService.isReady()) {
+                    setTimeout(() => {
+                        emitTTSAudio(msg.sessionId, {
+                            text: '',
+                            audio: Buffer.alloc(0),
+                            index: -1,
+                            isComplete: true
+                        });
+                    }, 100);
                 }
             } catch (error: any) {
                 if (error.name === 'AbortError') {

@@ -1,7 +1,6 @@
 // @ts-ignore - kokoro-js types may not be fully compatible
 import { KokoroTTS, TextSplitterStream } from 'kokoro-js';
 import { Logger } from '@src/logger';
-import { loadAssistantConfig } from '@src/o_utils';
 import fs from 'fs';
 import path from 'path';
 
@@ -10,7 +9,7 @@ export interface TTSConfig {
     enabled: boolean;
     model_id: string;
     dtype: "fp32" | "fp16" | "q8" | "q4" | "q4f16";
-    device: "cpu" | "webgpu" | "wasm" | "cuda";
+    device: "cpu";
 }
 
 export interface TTSChunk {
@@ -24,39 +23,42 @@ export class TTSService {
     private static instance: TTSService;
     private tts: KokoroTTS | null = null;
     private isInitialized = false;
-    private config!: TTSConfig; // Using definite assignment assertion since it's initialized in constructor
+    private config: TTSConfig = {
+        voice: 'af_sarah', // Will be loaded from assistant.json
+        enabled: true,
+        model_id: 'onnx-community/Kokoro-82M-v1.0-ONNX',
+        dtype: 'q8', // Good balance of quality and performance
+        device: 'cpu'
+    };
+    private concurrentGenerations = 0;
+    private maxConcurrentGenerations = 3; // Limit to prevent overwhelming the system
 
-    private constructor() {
-        // Load TTS configuration from assistant.json
-        this.loadConfigFromAssistant();
-    }
+    private constructor() {}
 
     /**
-     * Load TTS configuration from assistant.json file
+     * Load TTS configuration from assistant.json
      */
-    private loadConfigFromAssistant(): void {
+    private async loadConfigFromAssistant(): Promise<void> {
         try {
-            const assistantConfig = loadAssistantConfig();
-            
-            this.config = {
-                voice: assistantConfig.tts_voice || 'af_heart',
-                enabled: assistantConfig.tts_enabled !== false, // Default to true
-                model_id: assistantConfig.tts_model || 'onnx-community/Kokoro-82M-v1.0-ONNX',
-                dtype: assistantConfig.tts_dtype || 'fp16',
-                device: 'cpu'
-            };
+            const assistantPath = path.join(process.cwd(), 'assistant.json');
+            if (!fs.existsSync(assistantPath)) {
+                Logger.WARN('assistant.json not found, using default TTS config');
+                return;
+            }
 
-            Logger.INFO(`TTS Config loaded: voice=${this.config.voice}, enabled=${this.config.enabled}, model=${this.config.model_id}`);
+            const assistantData = JSON.parse(await fs.promises.readFile(assistantPath, 'utf-8'));
+            
+            // Update TTS config from assistant.json
+            if (assistantData.tts_enabled !== undefined) {
+                this.config.enabled = assistantData.tts_enabled;
+            }
+            if (assistantData.tts_voice) {
+                this.config.voice = assistantData.tts_voice;
+            }
+
+            Logger.DEBUG(`TTS config loaded: enabled=${this.config.enabled}, voice=${this.config.voice}`);
         } catch (error) {
-            // Fallback to defaults if config loading fails
-            Logger.WARN(`Failed to load TTS config from assistant.json: ${error}`);
-            this.config = {
-                voice: 'af_sarah',
-                enabled: true,
-                model_id: 'onnx-community/Kokoro-82M-v1.0-ONNX',
-                dtype: 'q8',
-                device: 'cpu'
-            };
+            Logger.WARN(`Failed to load assistant.json TTS config: ${error}`);
         }
     }
 
@@ -76,7 +78,10 @@ export class TTSService {
         }
 
         try {
-            Logger.INFO('Initializing TTS service with Kokoro model...');
+            // Load configuration from assistant.json
+            await this.loadConfigFromAssistant();
+            
+            Logger.INFO(`Initializing TTS service with Kokoro model (voice: ${this.config.voice})...`);
             
             this.tts = await KokoroTTS.from_pretrained(this.config.model_id, {
                 dtype: this.config.dtype,
@@ -99,7 +104,17 @@ export class TTSService {
             Logger.DEBUG('TTS not ready: initialized=' + this.isInitialized + ', tts=' + !!this.tts + ', enabled=' + this.config.enabled);
             return null;
         }
+        
+        // Check concurrency limit
+        if (this.concurrentGenerations >= this.maxConcurrentGenerations) {
+            Logger.DEBUG(`TTS: Skipping generation, too many concurrent requests (${this.concurrentGenerations}/${this.maxConcurrentGenerations})`);
+            return null;
+        }
 
+        // Track concurrent generation
+        this.concurrentGenerations++;
+        Logger.DEBUG(`TTS: Starting generation (${this.concurrentGenerations}/${this.maxConcurrentGenerations} active)`);
+        
         try {
             // Clean the text for TTS - remove roleplay markers and excessive whitespace
             const cleanText = text
@@ -109,6 +124,7 @@ export class TTSService {
             
             if (!cleanText) {
                 Logger.DEBUG('TTS: No speakable text after cleaning');
+                this.concurrentGenerations--;
                 return null;
             }
             
@@ -151,6 +167,9 @@ export class TTSService {
         } catch (error) {
             Logger.ERROR(`Failed to generate TTS audio: ${error}`);
             return null;
+        } finally {
+            this.concurrentGenerations--;
+            Logger.DEBUG(`TTS: Finished generation (${this.concurrentGenerations}/${this.maxConcurrentGenerations} active)`);
         }
     }
 
@@ -275,20 +294,6 @@ export class TTSService {
     }
 
     /**
-     * Reload configuration from assistant.json
-     */
-    public reloadConfig(): void {
-        Logger.INFO('Reloading TTS configuration from assistant.json...');
-        this.loadConfigFromAssistant();
-        
-        // If TTS is already initialized and config changed, we might need to reinitialize
-        // For now, just log the change - full reinit would require stopping current TTS
-        if (this.isInitialized) {
-            Logger.INFO('TTS config reloaded. Restart may be required for some changes to take effect.');
-        }
-    }
-
-    /**
      * Get current configuration
      */
     public getConfig(): TTSConfig {
@@ -367,6 +372,19 @@ export class TTSService {
         
         await fs.promises.writeFile(filePath, new Uint8Array(audioBuffer));
         Logger.INFO(`Audio saved to: ${filePath}`);
+    }
+
+    /**
+     * Reload TTS configuration from assistant.json
+     */
+    public async reloadConfig(): Promise<void> {
+        try {
+            await this.loadConfigFromAssistant();
+            Logger.INFO('TTS configuration reloaded successfully');
+        } catch (error) {
+            Logger.ERROR(`Failed to reload TTS configuration: ${error}`);
+            throw error;
+        }
     }
 }
 
