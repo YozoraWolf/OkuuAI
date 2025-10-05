@@ -173,7 +173,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 const processedSentences = new Set<string>(); // Prevent duplicates
                 let ttsChunkIndex = 0;
                 
-                // Fire-and-forget TTS processor - completely non-blocking
+                // TTS processor - completely decoupled from main stream
                 const processTTSChunk = (text: string, index: number) => {
                     // Skip if already processed
                     if (processedSentences.has(text) || !ttsService.isReady()) {
@@ -181,30 +181,49 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                     }
                     
                     processedSentences.add(text);
-                    Logger.DEBUG(`TTS: Starting parallel generation for chunk ${index}: "${text}"`);
+                    Logger.DEBUG(`TTS: Queuing chunk ${index} for background processing`);
                     
-                    // Fire-and-forget: Generate TTS in parallel without any blocking
-                    setImmediate(() => {
-                        ttsService.generateAudio(text).then(audioBuffer => {
-                            if (audioBuffer) {
-                                Logger.INFO(`TTS: ✅ Generated chunk ${index} (${audioBuffer.length} bytes) for: "${text.substring(0, 50)}..."`);
-                                emitTTSAudio(msg.sessionId, {
-                                    text: text,
-                                    audio: audioBuffer,
-                                    index: index
-                                });
-                                Logger.INFO(`TTS: ✅ Sent chunk ${index} to frontend`);
-                            } else {
-                                Logger.WARN(`TTS: ❌ No audio buffer generated for chunk ${index}`);
-                            }
-                        }).catch(ttsError => {
-                            Logger.ERROR(`TTS: ❌ Processing error for chunk ${index}: ${ttsError}`);
-                        });
+                    // Use process.nextTick for maximum non-blocking behavior
+                    process.nextTick(() => {
+                        // Further defer to ensure text generation continues
+                        setTimeout(() => {
+                            Logger.DEBUG(`TTS: Starting background generation for chunk ${index}`);
+                            
+                            ttsService.generateAudio(text).then(audioBuffer => {
+                                if (audioBuffer) {
+                                    Logger.INFO(`TTS: ✅ Generated chunk ${index} (${audioBuffer.length} bytes)`);
+                                    emitTTSAudio(msg.sessionId, {
+                                        text: text,
+                                        audio: audioBuffer,
+                                        index: index
+                                    });
+                                } else {
+                                    Logger.WARN(`TTS: ❌ No audio buffer generated for chunk ${index}`);
+                                }
+                            }).catch(ttsError => {
+                                Logger.ERROR(`TTS: ❌ Processing error for chunk ${index}: ${ttsError}`);
+                            });
+                        }, 0); // Minimal delay to ensure non-blocking
                     });
                 };
                 
+                // Performance tracking for non-blocking verification
+                let textChunkCount = 0;
+                let lastChunkTime = Date.now();
+                
+                Logger.INFO(`TTS: 🚀 Starting text stream processing with ultra-parallel TTS`);
+                
                 // Process text stream with non-blocking real-time TTS
                 for await (const part of stream) {
+                    textChunkCount++;
+                    const currentTime = Date.now();
+                    const chunkDelay = currentTime - lastChunkTime;
+                    lastChunkTime = currentTime;
+                    
+                    // Log if there's any unusual delay (indicating blocking)
+                    if (chunkDelay > 100) {
+                        Logger.WARN(`TTS: ⚠️ Text chunk ${textChunkCount} delayed by ${chunkDelay}ms - possible blocking`);
+                    }
                     // Check if generation should be stopped (additional safety check)
                     if (Core.shouldStopGeneration) {
                         Logger.INFO('Generation stopped via flag during streaming');
@@ -230,9 +249,12 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                             // Process complete sentences immediately
                             for (const sentence of sentences) {
                                 const cleanSentence = sentence.trim();
-                                if (cleanSentence.length > 5 && !processedSentences.has(cleanSentence)) {
-                                    // Process immediately - no queueing, fully parallel
-                                    processTTSChunk(cleanSentence, ttsChunkIndex++);
+                                if (cleanSentence.length > 3 && !processedSentences.has(cleanSentence)) {
+                                    // Process immediately with micro-delay to prevent blocking
+                                    const delay = Math.random() * 10; // Very small random delay
+                                    setTimeout(() => {
+                                        processTTSChunk(cleanSentence, ttsChunkIndex++);
+                                    }, delay);
                                 }
                             }
                             
@@ -241,16 +263,19 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                             const lastIndex = textBuffer.lastIndexOf(lastSentence) + lastSentence.length;
                             textBuffer = textBuffer.slice(lastIndex);
                             
-                        } else if (textBuffer.length > 40) {
+                        } else if (textBuffer.length > 30) {
                             // If we have a long phrase without sentence endings, process it anyway
                             // Look for natural breaks like commas, semicolons, or after certain words
                             const naturalBreaks = textBuffer.match(/[^,.;:]*[,.;:]+/g);
                             
                             if (naturalBreaks && naturalBreaks.length > 0) {
                                 const phrase = naturalBreaks[0].trim();
-                                if (phrase.length > 6 && !processedSentences.has(phrase)) {
-                                    // Process immediately - no queueing
-                                    processTTSChunk(phrase, ttsChunkIndex++);
+                                if (phrase.length > 5 && !processedSentences.has(phrase)) {
+                                    // Process with slight staggered delay to prevent overwhelming
+                                    const delay = Math.random() * 50; // 0-50ms random delay
+                                    setTimeout(() => {
+                                        processTTSChunk(phrase, ttsChunkIndex++);
+                                    }, delay);
                                     
                                     // Remove processed phrase from buffer
                                     const phraseIndex = textBuffer.indexOf(phrase) + phrase.length;

@@ -31,7 +31,9 @@ export class TTSService {
         device: 'cpu'
     };
     private concurrentGenerations = 0;
-    private maxConcurrentGenerations = 3; // Limit to prevent overwhelming the system
+    private maxConcurrentGenerations = 2; // Reduced limit for faster processing
+    private generationQueue: Array<() => Promise<void>> = [];
+    private isProcessingQueue = false;
 
     private constructor() {}
 
@@ -105,12 +107,40 @@ export class TTSService {
             return null;
         }
         
-        // Check concurrency limit
+        // Check concurrency limit - if busy, queue for later
         if (this.concurrentGenerations >= this.maxConcurrentGenerations) {
-            Logger.DEBUG(`TTS: Skipping generation, too many concurrent requests (${this.concurrentGenerations}/${this.maxConcurrentGenerations})`);
-            return null;
+            Logger.DEBUG(`TTS: Queueing generation, busy (${this.concurrentGenerations}/${this.maxConcurrentGenerations})`);
+            return new Promise((resolve) => {
+                this.generationQueue.push(async () => {
+                    const result = await this.generateAudioInternal(text);
+                    resolve(result);
+                });
+                this.processQueue();
+            });
         }
 
+        return this.generateAudioInternal(text);
+    }
+    
+    private async processQueue(): Promise<void> {
+        if (this.isProcessingQueue || this.generationQueue.length === 0) {
+            return;
+        }
+        
+        this.isProcessingQueue = true;
+        
+        while (this.generationQueue.length > 0 && this.concurrentGenerations < this.maxConcurrentGenerations) {
+            const generator = this.generationQueue.shift()!;
+            // Process in background
+            generator().catch(error => {
+                Logger.ERROR(`Queue processing error: ${error}`);
+            });
+        }
+        
+        this.isProcessingQueue = false;
+    }
+    
+    private async generateAudioInternal(text: string): Promise<Buffer | null> {
         // Track concurrent generation
         this.concurrentGenerations++;
         Logger.DEBUG(`TTS: Starting generation (${this.concurrentGenerations}/${this.maxConcurrentGenerations} active)`);
@@ -170,6 +200,9 @@ export class TTSService {
         } finally {
             this.concurrentGenerations--;
             Logger.DEBUG(`TTS: Finished generation (${this.concurrentGenerations}/${this.maxConcurrentGenerations} active)`);
+            
+            // Process any queued generations
+            this.processQueue();
         }
     }
 
