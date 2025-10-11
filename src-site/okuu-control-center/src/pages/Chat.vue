@@ -70,6 +70,19 @@
                                 <q-icon name="mdi-arrow-right" size="xs" class="q-mr-sm"></q-icon>
                                 <div class="text-weight-bold">Stream</div>
                             </q-chip>
+                            <q-chip class="q-mx-sm" size="md" 
+                                :color="toolsStore.isToolsEnabled ? 'secondary' : 'grey-6'" 
+                                :outline="!toolsStore.isToolsEnabled"
+                                clickable @click="openToolsConfig"
+                                @contextmenu.prevent="quickToggleTools">
+                                <q-icon :name="toolsStore.isToolsEnabled ? 'build' : 'build_circle'" size="sm" class="q-mr-sm"></q-icon>
+                                <div class="text-weight-bold">Tools {{ toolsStore.isToolsEnabled ? `(${toolsStore.enabledToolsCount})` : '' }}</div>
+                                <q-tooltip class="text-body2">
+                                    <div>Left click: Configure tools</div>
+                                    <div>Right click: Quick toggle on/off</div>
+                                    <div v-if="toolsStore.isAutoDetectEnabled" class="q-mt-xs text-green">✨ Smart Detection Active</div>
+                                </q-tooltip>
+                            </q-chip>
                             <q-select v-model="currentModel" :options="modelList"
                                 option-value="name" option-label="name" emit-value
                                 class="q-mx-sm" dense outlined
@@ -82,12 +95,32 @@
                         </div>
                     </div>
                     <div class="sub-menu row">
-                        <div class="status-bar col-9">
+                        <div class="status-bar col-7">
                             <q-icon :name="statusIcon" class="q-mr-sm" :color="statusColor" />
                             <span>{{ statusMessage }}</span>
                             <q-btn v-if="status === Status.DISCONNECTED" flat round icon="refresh" color="primary"
                                 @click="retryConnection">
                             </q-btn>
+                        </div>
+                        <div class="tools-status col-2 flex items-center">
+                            <div v-if="toolsStore.isToolsEnabled" class="flex items-center">
+                                <q-icon name="build" color="secondary" size="xs" class="q-mr-xs" />
+                                <span class="text-caption text-secondary">
+                                    {{ toolsStore.enabledToolsCount }}/4 tools
+                                    <q-tooltip class="text-body2">
+                                        <div>Active Tools:</div>
+                                        <div v-if="toolsStore.config.web_search">🌐 Web Search</div>
+                                        <div v-if="toolsStore.config.calculations">🔢 Calculator</div>
+                                        <div v-if="toolsStore.config.memory_search">🧠 Memory Search</div>
+                                        <div v-if="toolsStore.config.time_info">⏰ Time & Date</div>
+                                        <div v-if="toolsStore.isAutoDetectEnabled" class="q-mt-xs text-green">✨ Smart Detection ON</div>
+                                    </q-tooltip>
+                                </span>
+                            </div>
+                            <div v-else class="flex items-center">
+                                <q-icon name="build_circle" color="grey-6" size="xs" class="q-mr-xs" />
+                                <span class="text-caption text-grey-6">Tools disabled</span>
+                            </div>
                         </div>
                         <div class="col-2">
                             <q-file :disable="sendBtnActive" v-model="attachment"
@@ -106,7 +139,8 @@
             </div>
         </q-page-container>
 
-
+        <!-- Tools Configuration Modal -->
+        <ToolsConfigModal v-model:show="showToolsConfigModal" />
     </q-layout>
 </template>
 
@@ -120,7 +154,9 @@ import { Socket } from 'socket.io-client';
 import { truncate } from 'src/utils/okuuai_utils';
 import { useConfigStore } from 'src/stores/config.store';
 import ChatConfigModal from 'src/components/chat/ChatConfigModal.vue';
+import ToolsConfigModal from 'src/components/chat/ToolsConfigModal.vue';
 import { useAuthStore } from 'src/stores/auth.store';
+import { useToolsStore } from 'src/stores/tools.store';
 import { useRouter, useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 
@@ -132,6 +168,7 @@ const newMessage = ref('');
 const sessionStore = useSessionStore();
 const configStore = useConfigStore();
 const authStore = useAuthStore();
+const toolsStore = useToolsStore();
 
 // Session store refs
 const { sessions, currentSession, isStreaming, isGenerating } = storeToRefs(sessionStore);
@@ -178,6 +215,8 @@ const stopHoverTimer = () => {
     mini.value = true;
 };
 
+const showToolsConfigModal = ref(false);
+
 const showConfigModal = () => {
     $q.dialog({
         component: ChatConfigModal,
@@ -185,6 +224,24 @@ const showConfigModal = () => {
             stream: configStore.stream
         }
     })
+};
+
+const openToolsConfig = () => {
+    showToolsConfigModal.value = true;
+};
+
+const quickToggleTools = async () => {
+    const newState = !toolsStore.isToolsEnabled;
+    const success = await toolsStore.updateConfig({ enabled: newState });
+    if (success) {
+        $q.notify({
+            message: `Tools ${newState ? 'enabled' : 'disabled'}`,
+            color: newState ? 'green' : 'orange',
+            position: 'bottom',
+            timeout: 2000,
+            icon: newState ? 'build' : 'build_circle'
+        });
+    }
 };
 
 onMounted(async () => {
@@ -204,6 +261,9 @@ onMounted(async () => {
     await configStore.fetchAllDownloadedModels();
     // fetch current model
     await configStore.getOkuuModel();
+    // fetch tools configuration
+    await toolsStore.fetchToolsConfig();
+    await toolsStore.fetchAvailableTools();
 
     // If route param id is present, select that session
     if (route.params.id) {
@@ -483,5 +543,12 @@ const onEnter = (e: KeyboardEvent) => {
 
 .q-item--active {
     background-color: var(--q-primary) !important;
+}
+
+.tools-status {
+    .text-caption {
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
 }
 </style>

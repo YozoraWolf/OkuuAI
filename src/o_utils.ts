@@ -11,7 +11,16 @@ const defaultAssistantConfig = {
     name: "assistant",
     system_prompt: "You are an intelligent AI assistant.",
     model: "llama3",
-    template: ""
+    template: "",
+    tools: {
+        enabled: true,              // Master switch for all tools
+        auto_detect: true,          // Let AI decide when to use tools
+        web_search: true,           // Allow internet searches
+        calculations: true,         // Allow math operations
+        file_access: true,          // Allow file system access
+        memory_search: true,        // Allow deep memory queries
+        mcp_servers: []             // List of enabled MCP server URLs
+    }
 };
 
 export const loadAssistantConfig = () => {
