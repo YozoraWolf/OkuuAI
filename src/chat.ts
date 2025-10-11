@@ -14,6 +14,7 @@ import {
 import { loadFileContentFromStorage } from './langchain/memory/storage';
 import TTSService from './services/tts.service';
 import { emitTTSAudio } from './sockets';
+import { enhancedToolSystem } from './tools/enhancedToolSystem';
 
 export interface ChatMessage {
     id?: number;
@@ -49,7 +50,7 @@ const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 const MAX_RELEVANT_MEMORIES = 5;
 const MAX_HISTORY_CHARS = 4000; // Ollama: use char proxy instead of tokens
 
-async function buildPrompt(msg: ChatMessage) {
+async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, toolsWereUsed: boolean = false) {
     // 1. Retrieve top-k relevant memories
     const memoryQuery = msg.message || '';
     let memories = await searchMemoryWithEmbedding(memoryQuery, Number(msg.sessionId));
@@ -66,10 +67,19 @@ async function buildPrompt(msg: ChatMessage) {
         history = history.slice(history.length - MAX_HISTORY_CHARS);
     }
 
-    // 3. Build structured prompt
+    // 3. Include tools only if we didn't already use tools proactively
+    let toolsSection = '';
+    if (includeTools && enhancedToolSystem.getConfig().enabled && !toolsWereUsed) {
+        toolsSection = enhancedToolSystem.getEnabledToolsForPrompt();
+        if (toolsSection) {
+            Logger.DEBUG(`Tools included in prompt`);
+        }
+    }
+
+    // 4. Build structured prompt
     const prompt = `
 System:
-You are Okuu, a helpful AI assistant. Be consistent, concise, and relevant.
+You are Okuu, a helpful AI assistant. Be consistent, concise, and relevant.${toolsSection}
 
 Relevant Memories (from user):
 ${memoryContext || 'None'}
@@ -124,11 +134,34 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             }
         }
 
-        // Step 3: Build prompt (memories + history + user msg)
-        const prompt = await buildPrompt(msg);
+        // Step 3: Check if user message needs tools proactively
+        let toolResult = '';
+        let toolWasUsed = false;
+        if (enhancedToolSystem.getConfig().enabled) {
+            const proactiveToolCall = await enhancedToolSystem.detectProactiveToolUsage(msg.message || '');
+            if (proactiveToolCall) {
+                Logger.INFO(`Proactive tool call detected: ${proactiveToolCall.name}`);
+                try {
+                    toolResult = await enhancedToolSystem.executeTool(proactiveToolCall);
+                    toolWasUsed = true;
+                    Logger.INFO(`Proactive tool executed successfully: ${toolResult.substring(0, 100)}...`);
+                } catch (toolError) {
+                    Logger.ERROR(`Proactive tool execution failed: ${toolError}`);
+                    toolResult = `[Tool execution failed: ${toolError}]`;
+                    toolWasUsed = true;
+                }
+            }
+        }
+
+        // Step 4: Build prompt (memories + history + user msg + tool results if any)
+        let prompt = await buildPrompt(msg, true, toolWasUsed);
+        if (toolWasUsed && toolResult) {
+            // When we used tools proactively, give AI the results without showing tool instructions
+            prompt += `\n\nRelevant Information: ${toolResult}\n\nUser: ${msg.message}\n\nPlease respond naturally using this information.\n\nOkuu:`;
+        }
         Logger.DEBUG(`Prompt built:\n${prompt}`);
 
-        // Step 4: Notify client of user message
+        // Step 5: Notify client of user message
         io.to(msg.sessionId).emit('chat', { ...msg, memoryKey: memory.memoryKey, timestamp: memory.timestamp });
 
         // --- STREAMING MODE ---
@@ -324,6 +357,9 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 io.to(msg.sessionId).emit('generationEnded');
             }
 
+            // Tools are handled proactively before AI response generation
+            // No need for post-response tool parsing
+            
             // Finalize AI reply
             reply.done = true;
             reply.message = aiReply || '...';
@@ -360,8 +396,10 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             images: sentImage,
         });
 
-        reply.done = true;
+        // Tools are handled proactively before AI response generation
         reply.message = resp.response;
+        
+        reply.done = true;
         reply.lang = langMappings[franc(msg.message || '')] || 'en-US';
         reply.thinking = resp.thinking || '';
 
