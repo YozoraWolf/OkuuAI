@@ -102,6 +102,13 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         };
         Logger.DEBUG(`Sending chat: ${msg.id}`);
 
+        // IMMEDIATELY emit user message for instant feedback
+        // We'll update with memory details later
+        io.to(msg.sessionId).emit('chat', { 
+            ...msg, 
+            timestamp: Date.now() 
+        });
+
         const reply: ChatMessage = {
             id: incrementMessagesCount(),
             user: Core.ai_name || 'ai',
@@ -161,8 +168,8 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         }
         Logger.DEBUG(`Prompt built:\n${prompt}`);
 
-        // Step 5: Notify client of user message
-        io.to(msg.sessionId).emit('chat', { ...msg, memoryKey: memory.memoryKey, timestamp: memory.timestamp });
+        // Step 5: User message already emitted immediately at the start
+        // No need to emit again - user saw their message instantly
 
         // --- STREAMING MODE ---
         if (msg.stream) {
@@ -206,7 +213,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 const processedSentences = new Set<string>(); // Prevent duplicates
                 let ttsChunkIndex = 0;
                 
-                // TTS processor - completely decoupled from main stream
+                // TTS processor - Fire-and-forget, no blocking whatsoever
                 const processTTSChunk = (text: string, index: number) => {
                     // Skip if already processed
                     if (processedSentences.has(text) || !ttsService.isReady()) {
@@ -214,30 +221,11 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                     }
                     
                     processedSentences.add(text);
-                    Logger.DEBUG(`TTS: Queuing chunk ${index} for background processing`);
+                    Logger.DEBUG(`TTS: Dispatching chunk ${index} to Worker Thread (fire-and-forget)`);
                     
-                    // Use process.nextTick for maximum non-blocking behavior
-                    process.nextTick(() => {
-                        // Further defer to ensure text generation continues
-                        setTimeout(() => {
-                            Logger.DEBUG(`TTS: Starting background generation for chunk ${index}`);
-                            
-                            ttsService.generateAudio(text).then(audioBuffer => {
-                                if (audioBuffer) {
-                                    Logger.INFO(`TTS: ✅ Generated chunk ${index} (${audioBuffer.length} bytes)`);
-                                    emitTTSAudio(msg.sessionId, {
-                                        text: text,
-                                        audio: audioBuffer,
-                                        index: index
-                                    });
-                                } else {
-                                    Logger.WARN(`TTS: ❌ No audio buffer generated for chunk ${index}`);
-                                }
-                            }).catch(ttsError => {
-                                Logger.ERROR(`TTS: ❌ Processing error for chunk ${index}: ${ttsError}`);
-                            });
-                        }, 0); // Minimal delay to ensure non-blocking
-                    });
+                    // Fire-and-forget: Send to Worker Thread without waiting
+                    // The worker will handle audio generation and emission independently
+                    ttsService.generateAudioAsync(text, index, msg.sessionId);
                 };
                 
                 // Performance tracking for non-blocking verification
@@ -254,7 +242,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                     lastChunkTime = currentTime;
                     
                     // Log if there's any unusual delay (indicating blocking)
-                    if (chunkDelay > 100) {
+                    if (chunkDelay > 50) {
                         Logger.WARN(`TTS: ⚠️ Text chunk ${textChunkCount} delayed by ${chunkDelay}ms - possible blocking`);
                     }
                     // Check if generation should be stopped (additional safety check)
@@ -271,7 +259,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                     io.to(msg.sessionId).emit('chat', reply);
                     if (callback) callback(part.response);
                     
-                    // Non-blocking TTS processing as text streams
+                    // TTS processing with Worker Thread - no blocking concerns
                     if (ttsService.isReady()) {
                         textBuffer += part.response;
                         
@@ -283,11 +271,8 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                             for (const sentence of sentences) {
                                 const cleanSentence = sentence.trim();
                                 if (cleanSentence.length > 3 && !processedSentences.has(cleanSentence)) {
-                                    // Process immediately with micro-delay to prevent blocking
-                                    const delay = Math.random() * 10; // Very small random delay
-                                    setTimeout(() => {
-                                        processTTSChunk(cleanSentence, ttsChunkIndex++);
-                                    }, delay);
+                                    // Process with Worker Thread - non-blocking
+                                    processTTSChunk(cleanSentence, ttsChunkIndex++);
                                 }
                             }
                             
@@ -304,11 +289,8 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                             if (naturalBreaks && naturalBreaks.length > 0) {
                                 const phrase = naturalBreaks[0].trim();
                                 if (phrase.length > 5 && !processedSentences.has(phrase)) {
-                                    // Process with slight staggered delay to prevent overwhelming
-                                    const delay = Math.random() * 50; // 0-50ms random delay
-                                    setTimeout(() => {
-                                        processTTSChunk(phrase, ttsChunkIndex++);
-                                    }, delay);
+                                    // Process with Worker Thread - non-blocking
+                                    processTTSChunk(phrase, ttsChunkIndex++);
                                     
                                     // Remove processed phrase from buffer
                                     const phraseIndex = textBuffer.indexOf(phrase) + phrase.length;
@@ -326,7 +308,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                     const remainingText = textBuffer.trim();
                     if (remainingText.length > 3 && !processedSentences.has(remainingText)) {
                         Logger.DEBUG(`TTS: Processing remaining text: "${remainingText}"`);
-                        // Process remaining text in parallel
+                        // Process remaining text with fire-and-forget Worker Thread
                         processTTSChunk(remainingText, ttsChunkIndex++);
                     }
                 }

@@ -1,8 +1,9 @@
-// @ts-ignore - kokoro-js types may not be fully compatible
-import { KokoroTTS, TextSplitterStream } from 'kokoro-js';
+import { Worker } from 'worker_threads';
 import { Logger } from '@src/logger';
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
+import { emitTTSAudio } from '../sockets';
 
 export interface TTSConfig {
     voice: string;
@@ -19,10 +20,18 @@ export interface TTSChunk {
     index: number;
 }
 
+interface PendingRequest {
+    id: string;
+    resolve: (buffer: Buffer | null) => void;
+    reject: (error: Error) => void;
+    timeout: NodeJS.Timeout;
+}
+
 export class TTSService {
     private static instance: TTSService;
-    private tts: KokoroTTS | null = null;
+    private worker: Worker | null = null;
     private isInitialized = false;
+    private isWorkerReady = false;
     private config: TTSConfig = {
         voice: 'af_sarah', // Will be loaded from assistant.json
         enabled: true,
@@ -30,10 +39,9 @@ export class TTSService {
         dtype: 'q8', // Good balance of quality and performance
         device: 'cpu'
     };
-    private concurrentGenerations = 0;
-    private maxConcurrentGenerations = 2; // Reduced limit for faster processing
-    private generationQueue: Array<() => Promise<void>> = [];
-    private isProcessingQueue = false;
+    private pendingRequests = new Map<string, PendingRequest>();
+    private asyncRequests = new Map<string, {index: number, sessionId: string, text: string}>();
+    private requestTimeout = 30000; // 30 second timeout for TTS requests
 
     private constructor() {}
 
@@ -72,7 +80,7 @@ export class TTSService {
     }
 
     /**
-     * Initialize the TTS service with the Kokoro model
+     * Initialize the TTS service with Worker Thread
      */
     public async initialize(): Promise<void> {
         if (this.isInitialized) {
@@ -83,225 +91,247 @@ export class TTSService {
             // Load configuration from assistant.json
             await this.loadConfigFromAssistant();
             
-            Logger.INFO(`Initializing TTS service with Kokoro model (voice: ${this.config.voice})...`);
+            Logger.INFO(`Initializing TTS service with Worker Thread (voice: ${this.config.voice})...`);
             
-            this.tts = await KokoroTTS.from_pretrained(this.config.model_id, {
-                dtype: this.config.dtype,
-                device: this.config.device,
+            // Create worker thread for TTS processing
+            const workerPath = path.join(__dirname, '../workers/tts.worker.ts');
+            this.worker = new Worker(workerPath, {
+                execArgv: ['-r', 'ts-node/register', '-r', 'tsconfig-paths/register']
             });
 
+            // Set up worker message handling
+            this.setupWorkerMessageHandling();
+
+            // Wait for worker to be ready
+            await this.waitForWorkerReady();
+
+            // Initialize the worker with our config
+            await this.initializeWorker();
+
             this.isInitialized = true;
-            Logger.INFO('TTS service initialized successfully');
+            Logger.INFO('TTS service with Worker Thread initialized successfully');
         } catch (error) {
             Logger.ERROR(`Failed to initialize TTS service: ${error}`);
+            if (this.worker) {
+                this.worker.terminate();
+                this.worker = null;
+            }
             throw error;
         }
     }
 
     /**
-     * Generate TTS audio for a given text
+     * Setup worker message handling
      */
-    public async generateAudio(text: string): Promise<Buffer | null> {
-        if (!this.isInitialized || !this.tts || !this.config.enabled) {
-            Logger.DEBUG('TTS not ready: initialized=' + this.isInitialized + ', tts=' + !!this.tts + ', enabled=' + this.config.enabled);
-            return null;
-        }
-        
-        // Check concurrency limit - if busy, queue for later
-        if (this.concurrentGenerations >= this.maxConcurrentGenerations) {
-            Logger.DEBUG(`TTS: Queueing generation, busy (${this.concurrentGenerations}/${this.maxConcurrentGenerations})`);
-            return new Promise((resolve) => {
-                this.generationQueue.push(async () => {
-                    const result = await this.generateAudioInternal(text);
-                    resolve(result);
-                });
-                this.processQueue();
-            });
-        }
+    private setupWorkerMessageHandling(): void {
+        if (!this.worker) return;
 
-        return this.generateAudioInternal(text);
-    }
-    
-    private async processQueue(): Promise<void> {
-        if (this.isProcessingQueue || this.generationQueue.length === 0) {
-            return;
-        }
-        
-        this.isProcessingQueue = true;
-        
-        while (this.generationQueue.length > 0 && this.concurrentGenerations < this.maxConcurrentGenerations) {
-            const generator = this.generationQueue.shift()!;
-            // Process in background
-            generator().catch(error => {
-                Logger.ERROR(`Queue processing error: ${error}`);
-            });
-        }
-        
-        this.isProcessingQueue = false;
-    }
-    
-    private async generateAudioInternal(text: string): Promise<Buffer | null> {
-        // Track concurrent generation
-        this.concurrentGenerations++;
-        Logger.DEBUG(`TTS: Starting generation (${this.concurrentGenerations}/${this.maxConcurrentGenerations} active)`);
-        
-        try {
-            // Clean the text for TTS - remove roleplay markers and excessive whitespace
-            const cleanText = text
-                .replace(/\*[^*]*\*/g, '') // Remove text between asterisks (roleplay actions)
-                .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-                .trim();
-            
-            if (!cleanText) {
-                Logger.DEBUG('TTS: No speakable text after cleaning');
-                this.concurrentGenerations--;
-                return null;
+        this.worker.on('message', (message) => {
+            if (message.type === 'ready') {
+                this.isWorkerReady = true;
+                Logger.DEBUG('TTS Worker is ready');
+            } else if (message.type === 'initialized') {
+                Logger.DEBUG(`TTS Worker initialized: ${message.success}`);
+            } else if (message.type === 'audio') {
+                this.handleAudioResponse(message.data);
+            } else if (message.type === 'error') {
+                Logger.ERROR(`TTS Worker error: ${message.error}`);
             }
-            
-            Logger.DEBUG(`TTS: Original text: "${text}"`);
-            Logger.DEBUG(`TTS: Cleaned text: "${cleanText}"`);
-            
-            const audio = await this.tts.generate(cleanText, {
-                voice: this.config.voice,
-            });
+        });
 
-            Logger.DEBUG(`TTS: Generated audio (${typeof audio})`);
+        this.worker.on('error', (error) => {
+            const errorMessage = error instanceof Error ? error.message : 
+                                typeof error === 'string' ? error : 
+                                JSON.stringify(error, null, 2);
+            Logger.ERROR(`TTS Worker error: ${errorMessage}`);
+        });
 
-            // Extract PCM audio data and create a proper WAV file
-            let pcmData: Float32Array | null = null;
-            let sampleRate = 24000; // Default sample rate for Kokoro
-
-            if (audio.audio) {
-                pcmData = audio.audio;
-                sampleRate = audio.sampling_rate || 24000;
-                Logger.DEBUG(`TTS: Using audio.audio, ${pcmData ? pcmData.length : 0} samples @ ${sampleRate}Hz`);
-            } else if (audio.data) {
-                pcmData = audio.data;
-                sampleRate = audio.sampling_rate || 24000;
-                Logger.DEBUG(`TTS: Using audio.data, ${pcmData ? pcmData.length : 0} samples @ ${sampleRate}Hz`);
-            } else {
-                Logger.WARN(`TTS: No audio data found in response`);
-                return null;
+        this.worker.on('exit', (code) => {
+            if (code !== 0) {
+                Logger.ERROR(`TTS Worker stopped with exit code ${code}`);
             }
-
-            if (!pcmData || pcmData.length === 0) {
-                Logger.WARN(`TTS: Empty audio data`);
-                return null;
-            }
-
-            // Convert Float32Array PCM to 16-bit PCM and create WAV file
-            const audioBuffer = this.createWavFile(pcmData, sampleRate);
-
-
-            return audioBuffer;
-        } catch (error) {
-            Logger.ERROR(`Failed to generate TTS audio: ${error}`);
-            return null;
-        } finally {
-            this.concurrentGenerations--;
-            Logger.DEBUG(`TTS: Finished generation (${this.concurrentGenerations}/${this.maxConcurrentGenerations} active)`);
-            
-            // Process any queued generations
-            this.processQueue();
-        }
+            this.isWorkerReady = false;
+        });
     }
 
     /**
-     * Generate TTS audio with no voice parameter (use kokoro default)
+     * Wait for worker to be ready
      */
-    public async generateAudioNoVoice(text: string): Promise<Buffer | null> {
-        if (!this.isInitialized || !this.tts || !this.config.enabled) {
-            Logger.DEBUG('TTS not ready: initialized=' + this.isInitialized + ', tts=' + !!this.tts + ', enabled=' + this.config.enabled);
-            return null;
-        }
-
-        try {
-            const cleanText = text
-                .replace(/\*[^*]*\*/g, '') // Remove text between asterisks (roleplay actions)
-                .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-                .trim();
-            
-            if (!cleanText) {
-                Logger.DEBUG('TTS: No speakable text after cleaning');
-                return null;
-            }
-            
-            Logger.DEBUG(`TTS (no voice): Original text: "${text}"`);
-            Logger.DEBUG(`TTS (no voice): Cleaned text: "${cleanText}"`);
-            
-            // Generate audio without voice parameter
-            const audio = await this.tts.generate(cleanText);
-
-            Logger.DEBUG(`TTS (no voice): Generated audio object type: ${typeof audio}`);
-            Logger.DEBUG(`TTS (no voice): Audio properties: ${JSON.stringify(Object.keys(audio))}`);
-
-            let audioBuffer: Buffer | null = null;
-
-            if (audio.data) {
-                audioBuffer = Buffer.from(audio.data);
-                Logger.DEBUG(`TTS (no voice): Using audio.data, buffer size: ${audioBuffer.length}`);
-            } else if (audio.audio) {
-                audioBuffer = Buffer.from(audio.audio);
-                Logger.DEBUG(`TTS (no voice): Using audio.audio, buffer size: ${audioBuffer.length}`);
-            } else {
-                Logger.WARN(`TTS (no voice): Unknown audio format`);
-                return null;
+    private waitForWorkerReady(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (this.isWorkerReady) {
+                resolve();
+                return;
             }
 
-            return audioBuffer;
-        } catch (error) {
-            Logger.ERROR(`Failed to generate TTS audio (no voice): ${error}`);
-            return null;
-        }
+            const timeout = setTimeout(() => {
+                reject(new Error('TTS Worker did not become ready in time'));
+            }, 10000);
+
+            const checkReady = () => {
+                if (this.isWorkerReady) {
+                    clearTimeout(timeout);
+                    resolve();
+                } else {
+                    setTimeout(checkReady, 100);
+                }
+            };
+
+            checkReady();
+        });
     }
 
     /**
-     * Stream TTS audio generation for real-time text processing
+     * Initialize the worker with config
      */
-    public async* streamAudio(textStream: AsyncIterable<string>): AsyncGenerator<TTSChunk> {
-        if (!this.isInitialized || !this.tts || !this.config.enabled) {
-            return;
-        }
+    private async initializeWorker(): Promise<void> {
+        if (!this.worker) throw new Error('Worker not available');
 
-        try {
-            const splitter = new TextSplitterStream();
-            const stream = this.tts.stream(splitter);
-            
-            let chunkIndex = 0;
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error('Worker initialization timeout'));
+            }, 30000);
 
-            // Feed text to the splitter in a separate promise
-            const textProcessor = (async () => {
-                for await (const textChunk of textStream) {
-                    // Split text into words for better streaming
-                    const tokens = textChunk.match(/\s*\S+/g) || [];
-                    for (const token of tokens) {
-                        splitter.push(token);
-                        // Small delay to allow for better streaming experience
-                        await new Promise(resolve => setTimeout(resolve, 10));
+            const messageHandler = (message: any) => {
+                if (message.type === 'initialized') {
+                    clearTimeout(timeout);
+                    this.worker!.off('message', messageHandler);
+                    if (message.success) {
+                        resolve();
+                    } else {
+                        reject(new Error('Worker initialization failed'));
                     }
                 }
-                splitter.close();
-            })();
+            };
 
-            // Start text processing
-            textProcessor.catch(error => {
-                Logger.ERROR(`Error in text processing: ${error}`);
+            this.worker!.on('message', messageHandler);
+            this.worker!.postMessage({
+                type: 'initialize',
+                config: this.config
             });
+        });
+    }
 
-            // Yield audio chunks as they become available
-            for await (const { text, phonemes, audio } of stream) {
-                yield {
-                    text,
-                    phonemes,
-                    audio: audio.data,
-                    index: chunkIndex++
-                };
+    /**
+     * Handle audio response from worker
+     */
+    private handleAudioResponse(response: any): void {
+        // Check if this is an async request
+        const asyncRequest = this.asyncRequests.get(response.id);
+        if (asyncRequest) {
+            this.asyncRequests.delete(response.id);
+            
+            if (response.success && response.audioBuffer) {
+                const audioBuffer = Buffer.from(response.audioBuffer);
+                Logger.INFO(`TTS: ✅ Async generated chunk ${asyncRequest.index} (${audioBuffer.length} bytes)`);
+                emitTTSAudio(asyncRequest.sessionId, {
+                    text: asyncRequest.text,
+                    audio: audioBuffer,
+                    index: asyncRequest.index
+                });
+            } else {
+                Logger.WARN(`TTS: ❌ Async generation failed for chunk ${asyncRequest.index}: ${response.error || 'Unknown error'}`);
             }
+            return;
+        }
 
-        } catch (error) {
-            Logger.ERROR(`Failed to stream TTS audio: ${error}`);
+        // Handle regular synchronous requests
+        const pendingRequest = this.pendingRequests.get(response.id);
+        if (!pendingRequest) {
+            Logger.WARN(`Received audio response for unknown request: ${response.id}`);
+            return;
+        }
+
+        clearTimeout(pendingRequest.timeout);
+        this.pendingRequests.delete(response.id);
+
+        if (response.success && response.audioBuffer) {
+            pendingRequest.resolve(Buffer.from(response.audioBuffer));
+        } else {
+            pendingRequest.resolve(null);
+            if (response.error) {
+                Logger.ERROR(`TTS generation failed: ${response.error}`);
+            }
         }
     }
+
+    /**
+     * Generate TTS audio using Worker Thread - completely non-blocking
+     */
+    public async generateAudio(text: string): Promise<Buffer | null> {
+        if (!this.isInitialized || !this.worker || !this.config.enabled) {
+            Logger.DEBUG('TTS not ready: initialized=' + this.isInitialized + ', worker=' + !!this.worker + ', enabled=' + this.config.enabled);
+            return null;
+        }
+
+        const requestId = randomUUID();
+        Logger.DEBUG(`TTS: Sending request ${requestId} to worker`);
+
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                this.pendingRequests.delete(requestId);
+                Logger.WARN(`TTS request ${requestId} timed out`);
+                resolve(null);
+            }, this.requestTimeout);
+
+            this.pendingRequests.set(requestId, {
+                id: requestId,
+                resolve,
+                reject,
+                timeout
+            });
+
+            this.worker!.postMessage({
+                type: 'generate',
+                data: {
+                    id: requestId,
+                    text: text,
+                    config: this.config
+                }
+            });
+        });
+    }
+
+    /**
+     * Fire-and-forget TTS generation - doesn't block the caller
+     * Handles audio emission internally when ready
+     */
+    public generateAudioAsync(text: string, index: number, sessionId: string): void {
+        if (!this.isInitialized || !this.worker || !this.config.enabled) {
+            Logger.DEBUG('TTS not ready for async generation');
+            return;
+        }
+
+        const requestId = randomUUID();
+        Logger.DEBUG(`TTS: Fire-and-forget request ${requestId} dispatched to worker`);
+
+        // Store async request info for response handling
+        this.asyncRequests.set(requestId, {
+            index: index,
+            sessionId: sessionId,
+            text: text
+        });
+
+        // Send request to worker - no Promise returned, no blocking
+        this.worker.postMessage({
+            type: 'generate',
+            data: {
+                id: requestId,
+                text: text,
+                config: this.config
+            }
+        });
+
+        // Clean up async request after timeout to prevent memory leaks
+        setTimeout(() => {
+            if (this.asyncRequests.has(requestId)) {
+                Logger.WARN(`TTS: Async request ${requestId} timed out`);
+                this.asyncRequests.delete(requestId);
+            }
+        }, this.requestTimeout);
+    }
+
+
 
     /**
      * Get available voices
@@ -345,54 +375,9 @@ export class TTSService {
      * Check if TTS is ready
      */
     public isReady(): boolean {
-        return this.isInitialized && this.tts !== null && this.config.enabled;
+        return this.isInitialized && this.worker !== null && this.isWorkerReady && this.config.enabled;
     }
 
-    /**
-     * Create a WAV file from Float32Array PCM data
-     */
-    private createWavFile(pcmData: Float32Array, sampleRate: number): Buffer {
-        // Convert Float32Array to 16-bit PCM
-        const pcm16 = new Int16Array(pcmData.length);
-        for (let i = 0; i < pcmData.length; i++) {
-            // Clamp to [-1, 1] and convert to 16-bit
-            const sample = Math.max(-1, Math.min(1, pcmData[i]));
-            pcm16[i] = Math.round(sample * 32767);
-        }
-
-        const pcmBuffer = Buffer.from(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength);
-        const wavHeader = this.createWavHeader(pcmBuffer.length, sampleRate);
-        
-        return Buffer.concat([wavHeader, pcmBuffer]);
-    }
-
-    /**
-     * Create WAV file header
-     */
-    private createWavHeader(dataLength: number, sampleRate: number): Buffer {
-        const header = Buffer.alloc(44);
-        
-        // RIFF header
-        header.write('RIFF', 0);
-        header.writeUInt32LE(36 + dataLength, 4);
-        header.write('WAVE', 8);
-        
-        // fmt chunk
-        header.write('fmt ', 12);
-        header.writeUInt32LE(16, 16); // chunk size
-        header.writeUInt16LE(1, 20); // audio format (PCM)
-        header.writeUInt16LE(1, 22); // num channels (mono)
-        header.writeUInt32LE(sampleRate, 24); // sample rate
-        header.writeUInt32LE(sampleRate * 2, 28); // byte rate (sample rate * channels * bytes per sample)
-        header.writeUInt16LE(2, 32); // block align (channels * bytes per sample)
-        header.writeUInt16LE(16, 34); // bits per sample
-        
-        // data chunk
-        header.write('data', 36);
-        header.writeUInt32LE(dataLength, 40);
-        
-        return header;
-    }
 
     /**
      * Save audio buffer to file (for debugging/testing)

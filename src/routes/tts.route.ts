@@ -88,7 +88,7 @@ router.post('/test-no-voice', async (req, res) => {
         }
 
         // Generate audio with no voice parameter (let kokoro use default)
-        const audioBuffer = await ttsService.generateAudioNoVoice(text);
+        const audioBuffer = await ttsService.generateAudio(text);
         
         if (!audioBuffer) {
             return res.status(500).json({ error: 'Failed to generate audio' });
