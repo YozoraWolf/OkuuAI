@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { getOkuuPfp, uploadOkuuPfp, deleteOkuuPfp, getSystemPrompt, UpdateSystemPrompt, UpdateGlobalMemory, FetchGlobalMemory, CheckOkuuAIStatus, UpdateThink, FetchThink, getDownloadedModels, setOkuuModel, getOkuuModel } from 'src/services/config.service';
+import { getOkuuPfp, uploadOkuuPfp, deleteOkuuPfp, getSystemPrompt, UpdateSystemPrompt, UpdateGlobalMemory, FetchGlobalMemory, CheckOkuuAIStatus, UpdateThink, FetchThink, getDownloadedModels, setOkuuModel, getOkuuModel, getCustomEndpoint, setCustomEndpoint, validateCustomEndpointAPI } from 'src/services/config.service';
 
 export const useConfigStore = defineStore('config', {
     state: () => ({
@@ -13,6 +13,12 @@ export const useConfigStore = defineStore('config', {
 
         modelList: [] as any[],
         currentModel: '',
+
+        customEndpoint: {
+            use_custom_endpoint: false,
+            custom_endpoint_url: '',
+            custom_endpoint_api_key: ''
+        },
 
         configLoading: false,
     }),
@@ -201,6 +207,55 @@ export const useConfigStore = defineStore('config', {
             } catch (error) {
                 console.error('Failed to fetch Okuu model:', error);
                 return null;
+            }
+        },
+
+        // Custom Endpoint related
+
+        // fetch custom endpoint settings
+        async fetchCustomEndpoint() {
+            try {
+                const response = await getCustomEndpoint();
+                this.customEndpoint = {
+                    use_custom_endpoint: response.use_custom_endpoint,
+                    custom_endpoint_url: response.custom_endpoint_url,
+                    custom_endpoint_api_key: response.custom_endpoint_api_key
+                };
+                return response;
+            } catch (error) {
+                console.error('Failed to fetch custom endpoint settings:', error);
+                return {
+                    use_custom_endpoint: false,
+                    custom_endpoint_url: '',
+                    custom_endpoint_api_key: ''
+                };
+            }
+        },
+
+        // update custom endpoint settings
+        async updateCustomEndpoint(settings: { use_custom_endpoint?: boolean; custom_endpoint_url?: string; custom_endpoint_api_key?: string }) {
+            try {
+                const response = await setCustomEndpoint(settings);
+                this.customEndpoint = {
+                    use_custom_endpoint: response.use_custom_endpoint,
+                    custom_endpoint_url: response.custom_endpoint_url,
+                    custom_endpoint_api_key: response.custom_endpoint_api_key
+                };
+                return response;
+            } catch (error) {
+                console.error('Failed to update custom endpoint settings:', error);
+                throw error;
+            }
+        },
+
+        // validate custom endpoint
+        async validateCustomEndpoint(endpoint_url: string, api_key?: string) {
+            try {
+                const response = await validateCustomEndpointAPI(endpoint_url, api_key);
+                return response;
+            } catch (error) {
+                console.error('Failed to validate custom endpoint:', error);
+                throw error;
             }
         }
     },

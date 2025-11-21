@@ -34,6 +34,11 @@ export class Core {
     // global memory: a toggle to allow okuu to search only session-specific memory or global memory
     static global_memory: boolean = false;
 
+    // custom endpoint settings
+    static use_custom_endpoint: boolean = false;
+    static custom_endpoint_url: string = '';
+    static custom_endpoint_api_key: string = '';
+
     static chat_settings: any = {
         prefix: '\x1b[32mOkuu:\x1b[0m'
     };

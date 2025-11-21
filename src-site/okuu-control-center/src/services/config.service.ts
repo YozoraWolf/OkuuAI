@@ -111,4 +111,24 @@ export const CheckOkuuAIStatus = async () => {
     const apiUrl = await getApiUrl();
     const response = await axios.get(`${apiUrl}/status`, { headers: getAuthHeaders() });
     return response;
-}
+};
+
+// Custom Endpoint related
+
+export const getCustomEndpoint = async () => {
+    const apiUrl = await getApiUrl();
+    const response = await axios.get(`${apiUrl}/config/okuu/custom-endpoint`, { headers: getAuthHeaders() });
+    return response.data;
+};
+
+export const setCustomEndpoint = async (settings: { use_custom_endpoint?: boolean; custom_endpoint_url?: string; custom_endpoint_api_key?: string }) => {
+    const apiUrl = await getApiUrl();
+    const response = await axios.post(`${apiUrl}/config/okuu/custom-endpoint`, settings, { headers: getAuthHeaders() });
+    return response.data;
+};
+
+export const validateCustomEndpointAPI = async (endpoint_url: string, api_key?: string) => {
+    const apiUrl = await getApiUrl();
+    const response = await axios.post(`${apiUrl}/config/okuu/custom-endpoint/validate`, { endpoint_url, api_key }, { headers: getAuthHeaders() });
+    return response.data;
+};
