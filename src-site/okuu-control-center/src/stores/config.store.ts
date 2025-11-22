@@ -12,6 +12,7 @@ export const useConfigStore = defineStore('config', {
         showThinkingInChat: true,
 
         modelList: [] as any[],
+        ollamaModelList: [] as any[], // Store original Ollama models
         currentModel: '',
 
         customEndpoint: {
@@ -173,7 +174,10 @@ export const useConfigStore = defineStore('config', {
         async fetchAllDownloadedModels() {
             try {
                 const response = await getDownloadedModels();
-                this.modelList = response.models;
+                this.ollamaModelList = response.models; // Store Ollama models
+                if (!this.customEndpoint.use_custom_endpoint) {
+                    this.modelList = response.models;
+                }
                 return response.models;
             } catch (error) {
                 console.error('Failed to fetch downloaded models:', error);
@@ -221,6 +225,10 @@ export const useConfigStore = defineStore('config', {
                     custom_endpoint_url: response.custom_endpoint_url,
                     custom_endpoint_api_key: response.custom_endpoint_api_key
                 };
+                
+                // Switch model list based on loaded state
+                await this.switchModelList(response.use_custom_endpoint);
+                
                 return response;
             } catch (error) {
                 console.error('Failed to fetch custom endpoint settings:', error);
@@ -241,6 +249,10 @@ export const useConfigStore = defineStore('config', {
                     custom_endpoint_url: response.custom_endpoint_url,
                     custom_endpoint_api_key: response.custom_endpoint_api_key
                 };
+                
+                // Switch model list based on custom endpoint state
+                await this.switchModelList(response.use_custom_endpoint);
+                
                 return response;
             } catch (error) {
                 console.error('Failed to update custom endpoint settings:', error);
@@ -256,6 +268,54 @@ export const useConfigStore = defineStore('config', {
             } catch (error) {
                 console.error('Failed to validate custom endpoint:', error);
                 throw error;
+            }
+        },
+
+        // fetch models from custom endpoint and update model list
+        async fetchCustomEndpointModels() {
+            if (!this.customEndpoint.use_custom_endpoint || !this.customEndpoint.custom_endpoint_url) {
+                // Restore Ollama models if custom endpoint is disabled
+                this.modelList = [...this.ollamaModelList];
+                return;
+            }
+
+            try {
+                const response = await validateCustomEndpointAPI(
+                    this.customEndpoint.custom_endpoint_url,
+                    this.customEndpoint.custom_endpoint_api_key
+                );
+
+                if (response.valid && response.models && response.models.length > 0) {
+                    // Transform models to match our format
+                    this.modelList = response.models.map((model: any) => ({
+                        name: model.id || model.name || model,
+                        size: model.size || 0,
+                        modified_at: model.created || model.modified_at || new Date().toISOString()
+                    }));
+                    
+                    // Set current model to first available if current one doesn't exist
+                    const modelExists = this.modelList.some(m => m.name === this.currentModel);
+                    if (!modelExists && this.modelList.length > 0) {
+                        this.currentModel = this.modelList[0].name;
+                        await setOkuuModel(this.currentModel);
+                    }
+                } else {
+                    console.warn('No models found from custom endpoint');
+                    // Keep current model list
+                }
+            } catch (error) {
+                console.error('Failed to fetch models from custom endpoint:', error);
+                // Keep current model list on error
+            }
+        },
+
+        // Switch between Ollama and custom endpoint models
+        async switchModelList(useCustomEndpoint: boolean) {
+            if (useCustomEndpoint) {
+                await this.fetchCustomEndpointModels();
+            } else {
+                // Restore Ollama models
+                this.modelList = [...this.ollamaModelList];
             }
         }
     },

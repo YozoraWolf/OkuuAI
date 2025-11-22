@@ -5,6 +5,18 @@
             Use your own OpenAI-compatible endpoint instead of Ollama. Embeddings will still use Ollama's nomic-embed-text.
         </p>
         
+        <q-banner v-if="localUseCustomEndpoint" class="bg-info text-white q-mb-md">
+            <template v-slot:avatar>
+                <q-icon name="info" />
+            </template>
+            When using a custom endpoint, the model list will be fetched from your endpoint. 
+            The current model "{{ getShortModelName(currentModel) }}" will be sent to your endpoint.
+            <div v-if="modelList.length > 0" class="q-mt-sm">
+                <strong>Available models:</strong> {{ modelList.slice(0, 5).map(m => getShortModelName(m.name)).join(', ') }}
+                <span v-if="modelList.length > 5">... ({{ modelList.length }} total)</span>
+            </div>
+        </q-banner>
+        
         <div class="q-gutter-md">
             <!-- Enable Custom Endpoint Toggle -->
             <q-toggle 
@@ -85,12 +97,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useConfigStore } from 'src/stores/config.store';
 import { useQuasar } from 'quasar';
+import { storeToRefs } from 'pinia';
 
 const configStore = useConfigStore();
 const $q = useQuasar();
+
+const { currentModel, modelList } = storeToRefs(configStore);
+
+// Helper to shorten model names
+const getShortModelName = (name: string) => {
+    if (!name) return '';
+    const parts = name.split('/');
+    return parts[parts.length - 1];
+};
 
 const localUseCustomEndpoint = ref(false);
 const localEndpointUrl = ref('');
@@ -182,6 +204,8 @@ const loadSettings = async () => {
         if (settings.custom_endpoint_api_key) {
             localEndpointApiKey.value = ''; // Clear field, user needs to re-enter
         }
+        // Fetch current model to display in info banner
+        await configStore.getOkuuModel();
     } catch (error) {
         console.error('Failed to load custom endpoint settings:', error);
     }
