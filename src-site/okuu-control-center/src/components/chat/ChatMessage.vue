@@ -14,10 +14,13 @@
                     <span class="user row">{{ message.user }}</span>
                     <span class="timestamp row">{{ formattedTimestamp }}</span>
                 </div>
-                <div class="flex self-end" v-if="deleteBtn && showDeleteBtn">
-                    <q-btn flat dense icon="mdi-trash-can" class="" color="red-5" @click="deleteMessage">
-                    </q-btn>
-                </div>
+                <MessageActions 
+                    :visible="deleteBtn && showDeleteBtn" 
+                    :can-delete="true"
+                    :can-edit="false" 
+                    @delete="deleteMessage"
+                    @edit="editMessage"
+                />
             </div>
             <div class="flex column">
                 <div class="message-body q-mt-xs">
@@ -61,6 +64,7 @@ import { useQuasar } from 'quasar';
 import { useSessionStore, Message } from 'src/stores/session.store';
 import { useConfigStore } from 'src/stores/config.store';
 import PreviewImage from 'src/components/chat/PreviewImage.vue';
+import MessageActions from 'src/components/chat/MessageActions.vue';
 import { generateComponents } from 'src/utils/txt_format_utils';
 
 import dayjs from 'dayjs';
@@ -128,6 +132,11 @@ const deleteMessage = () => {
         await sessionStore.deleteChatMessage(memoryKey, props.message.sessionId);
         $q.loading.hide();
     });
+}
+
+const editMessage = () => {
+    console.log('Edit message clicked');
+    // TODO: Implement edit message logic
 }
 
 const openPreview = () => {

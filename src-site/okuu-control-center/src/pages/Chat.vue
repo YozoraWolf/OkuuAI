@@ -40,102 +40,21 @@
                 <div v-if="isLoadingResponse || isStreaming">
                     <q-spinner-dots color="primary" size="md" class="q-mx-md" />
                 </div>
-                <div class="chat-input text-white q-pa-md" v-if="selectedSession">
-                    <q-input type="textarea" autogrow :disable="!selectedSession || (!isLoadingResponse && configLoading)"
-                        v-model="newMessage" placeholder="Type a message" @keyup.enter="onEnter" @keyup.shift.enter.stop
-                        :readonly="isLoadingResponse || isStreaming"
-                        class="q-pb-md">
-                        <template v-slot:append>
-                            <q-btn v-if="isGenerating" 
-                                flat round icon="stop"
-                                color="red" 
-                                @click="stopGeneration" />
-                            <q-btn v-else
-                                :disable="sendBtnActive || isLoadingResponse" 
-                                :loading="isLoadingResponse && !isGenerating"
-                                flat round icon="send"
-                                :color="`${(!sendBtnActive && !isLoadingResponse) ? 'primary' : 'gray-9'}`" 
-                                @click="sendMessage" />
-                        </template>
-                    </q-input>
-                    <div class="sub-actions row">
-                        <div class="col-7 flex items-center">
-                            <q-chip class="q-mx-sm" size="md" color="primary" :outline="!configStore.toggleThinking"
-                                clickable @click="toggleThinkingFunc">
-                                <q-icon name="mdi-brain" size="sm" class="q-mr-sm"></q-icon>
-                                <div class="text-weight-bold">Think</div>
-                            </q-chip>
-                            <q-chip class="q-mx-sm" size="md" color="primary" :outline="!stream"
-                                clickable @click="toggleStreaming">
-                                <q-icon name="mdi-arrow-right" size="xs" class="q-mr-sm"></q-icon>
-                                <div class="text-weight-bold">Stream</div>
-                            </q-chip>
-                            <q-chip class="q-mx-sm" size="md" 
-                                :color="toolsStore.isToolsEnabled ? 'secondary' : 'grey-6'" 
-                                :outline="!toolsStore.isToolsEnabled"
-                                clickable @click="openToolsConfig"
-                                @contextmenu.prevent="quickToggleTools">
-                                <q-icon :name="toolsStore.isToolsEnabled ? 'build' : 'build_circle'" size="sm" class="q-mr-sm"></q-icon>
-                                <div class="text-weight-bold">Tools {{ toolsStore.isToolsEnabled ? `(${toolsStore.enabledToolsCount})` : '' }}</div>
-                                <q-tooltip class="text-body2">
-                                    <div>Left click: Configure tools</div>
-                                    <div>Right click: Quick toggle on/off</div>
-                                    <div v-if="toolsStore.isAutoDetectEnabled" class="q-mt-xs text-green">✨ Smart Detection Active</div>
-                                </q-tooltip>
-                            </q-chip>
-                            <q-select v-model="currentModel" :options="modelList"
-                                option-value="name" option-label="name" emit-value
-                                class="q-mx-sm" dense outlined
-                                v-on:update:modelValue="configStore.setOkuuModel"
-                                >
-                                <template v-slot:prepend>
-                                    <q-icon name="mdi-head-snowflake" />
-                                </template>
-                            </q-select>
-                        </div>
-                    </div>
-                    <div class="sub-menu row">
-                        <div class="status-bar col-7">
-                            <q-icon :name="statusIcon" class="q-mr-sm" :color="statusColor" />
-                            <span>{{ statusMessage }}</span>
-                            <q-btn v-if="status === Status.DISCONNECTED" flat round icon="refresh" color="primary"
-                                @click="retryConnection">
-                            </q-btn>
-                        </div>
-                        <div class="tools-status col-2 flex items-center">
-                            <div v-if="toolsStore.isToolsEnabled" class="flex items-center">
-                                <q-icon name="build" color="secondary" size="xs" class="q-mr-xs" />
-                                <span class="text-caption text-secondary">
-                                    {{ toolsStore.enabledToolsCount }}/4 tools
-                                    <q-tooltip class="text-body2">
-                                        <div>Active Tools:</div>
-                                        <div v-if="toolsStore.config.web_search">🌐 Web Search</div>
-                                        <div v-if="toolsStore.config.calculations">🔢 Calculator</div>
-                                        <div v-if="toolsStore.config.memory_search">🧠 Memory Search</div>
-                                        <div v-if="toolsStore.config.time_info">⏰ Time & Date</div>
-                                        <div v-if="toolsStore.isAutoDetectEnabled" class="q-mt-xs text-green">✨ Smart Detection ON</div>
-                                    </q-tooltip>
-                                </span>
-                            </div>
-                            <div v-else class="flex items-center">
-                                <q-icon name="build_circle" color="grey-6" size="xs" class="q-mr-xs" />
-                                <span class="text-caption text-grey-6">Tools disabled</span>
-                            </div>
-                        </div>
-                        <div class="col-2">
-                            <q-file :disable="sendBtnActive" v-model="attachment"
-                                accept=".txt, .pdf, .doc, .docx, .csv, .json">
-                                <template v-slot:prepend>
-                                    <q-icon name="attach_file" />
-                                    <q-icon v-if="attachment" name="close" @click="removeAttachment" />
-                                </template>
-                            </q-file>
-                        </div>
-                        <div class="config col-1 flex justify-end">
-                            <q-btn flat round icon="settings" @click="showConfigModal" />
-                        </div>
-                    </div>
-                </div>
+                <ChatInput
+                    v-if="selectedSession"
+                    :loading="isLoadingResponse"
+                    :generating="isGenerating"
+                    :disable-input="!selectedSession || (!isLoadingResponse && configLoading)"
+                    :status="status"
+                    :status-message="statusMessage"
+                    :status-icon="statusIcon"
+                    :status-color="statusColor"
+                    @send="sendMessage"
+                    @stop="stopGeneration"
+                    @retry="retryConnection"
+                    @open-config="showConfigModal"
+                    @open-tools-config="openToolsConfig"
+                />
             </div>
         </q-page-container>
 
@@ -149,6 +68,7 @@ import { ref, nextTick, onMounted, computed, onBeforeUnmount, watch } from 'vue'
 import { useSessionStore } from 'src/stores/session.store';
 import { useQuasar } from 'quasar';
 import ChatMessage from 'src/components/chat/ChatMessage.vue';
+import ChatInput from 'src/components/chat/ChatInput.vue';
 import { SocketioService, Status } from 'src/services/socketio.service';
 import { Socket } from 'socket.io-client';
 import { truncate } from 'src/utils/okuuai_utils';
@@ -162,7 +82,6 @@ import { storeToRefs } from 'pinia';
 
 const drawer = ref(true);
 const mini = ref(true);
-const newMessage = ref('');
 
 // Use storeToRefs for all store properties we want to remain reactive
 const sessionStore = useSessionStore();
@@ -197,7 +116,7 @@ const statusIcon = ref('cloud_off');
 const statusColor = ref('red');
 const statusMessage = ref('Disconnected');
 
-const attachment = ref<File | null>(null);
+
 
 const hoverTimer = ref<number | null>(null);
 
@@ -228,20 +147,6 @@ const showConfigModal = () => {
 
 const openToolsConfig = () => {
     showToolsConfigModal.value = true;
-};
-
-const quickToggleTools = async () => {
-    const newState = !toolsStore.isToolsEnabled;
-    const success = await toolsStore.updateConfig({ enabled: newState });
-    if (success) {
-        $q.notify({
-            message: `Tools ${newState ? 'enabled' : 'disabled'}`,
-            color: newState ? 'green' : 'orange',
-            position: 'bottom',
-            timeout: 2000,
-            icon: newState ? 'build' : 'build_circle'
-        });
-    }
 };
 
 onMounted(async () => {
@@ -317,12 +222,12 @@ const addNewSession = async () => {
     router.replace({ path: `/chat/${sessionId}` });
 };
 
-const sendMessage = async () => {
-    if (selectedSession.value && newMessage.value.trim()) {
+const sendMessage = async (messageText: string, file: File | null) => {
+    if (selectedSession.value && messageText.trim()) {
         const message = {
             timestamp: Date.now(),
             user: 'wolf',
-            message: newMessage.value,
+            message: messageText,
             sessionId: selectedSession.value.sessionId,
             memoryKey: '',
             stream: stream.value,
@@ -330,20 +235,18 @@ const sendMessage = async () => {
             done: false,
         };
         socket.value?.emit('chat', message);
-        newMessage.value = '';
         isLoadingResponse.value = true;
         scrollToBottom();
+
+        if (file) {
+            console.log('sending attachment');
+            await sessionStore.sendAttachment(file, message);
+        }
 
         // After sending the message if theres 30 seconds of inactivity, renable the send button
         inputTimeout.value = setTimeout(() => {
             isLoadingResponse.value = false;
         }, 30000);
-
-        if (attachment.value) {
-            console.log('sending attachment');
-            await sessionStore.sendAttachment(attachment.value, message);
-            removeAttachment();
-        }
     }
 };
 
@@ -356,10 +259,7 @@ const stopGeneration = () => {
     }
 };
 
-const removeAttachment = () => {
-    console.log('remove attachment');
-    attachment.value = null;
-};
+
 
 const retryConnection = () => {
     socketIO.value?.retryConnection();
@@ -375,6 +275,8 @@ const scrollToBottom = () => {
 const renableInput = () => {
     clearTimeout(inputTimeout.value);
 };
+
+
 
 const removeSession = async (sessionId: string) => {
     $q.dialog({
@@ -394,36 +296,11 @@ const removeSession = async (sessionId: string) => {
     });
 };
 
-const toggleThinkingFunc = async () => {
-    configStore.toggleThinking = !toggleThinking.value;
-    await configStore.updateToggleThinking(toggleThinking.value);
-    $q.notify({
-        message: `Thinking mode is now ${toggleThinking.value ? 'enabled' : 'disabled'}.`,
-        color: toggleThinking.value ? 'green' : 'red',
-        position: 'bottom',
-        timeout: 2000,
-    });
-};
 
-const toggleStreaming = () => {
-    configStore.stream = !stream.value;
-    $q.notify({
-        message: `Streaming is now ${stream.value ? 'enabled' : 'disabled'}.`,
-        color: stream.value ? 'green' : 'red',
-        position: 'bottom',
-        timeout: 2000,
-    });
-};
 
 // computed
 
-const sendBtnActive = computed(() => {
-    return !selectedSession.value || !newMessage.value.trim();
-});
 
-const sendBtnLoading = computed(() => {
-    return isLoadingResponse.value ||  configLoading.value;
-});
 
 const status = computed(() => socketIO.value?.getStatus());
 
@@ -499,14 +376,7 @@ watch(() => status.value, (status) => {
 });
 
 // Replace sendMessage on enter with this handler
-const onEnter = (e: KeyboardEvent) => {
-    if (e.shiftKey) {
-        // Let Quasar handle new line (default behavior)
-        return;
-    }
-    e.preventDefault();
-    sendMessage();
-};
+
 
 </script>
 
@@ -523,32 +393,9 @@ const onEnter = (e: KeyboardEvent) => {
     overflow-y: auto;
 }
 
-.chat-input {
-    flex-shrink: 0;
-    z-index: 1;
-    background-color: #222;
-    border-top: gray 1px solid;
-}
-
-.status-bar {
-    display: flex;
-    align-items: center;
-    margin-top: 10px;
-    color: gray;
-}
-
-.status-bar q-icon {
-    margin-right: 5px;
-}
-
 .q-item--active {
     background-color: var(--q-primary) !important;
 }
 
-.tools-status {
-    .text-caption {
-        font-size: 0.75rem;
-        font-weight: 500;
-    }
-}
+
 </style>
