@@ -48,6 +48,22 @@
                     </template>
                 </q-img>
             </div>
+            <div v-if="message.metadata?.web_search?.sources && message.metadata.web_search.sources.length > 0" class="q-mt-sm row q-gutter-xs">
+                <q-chip
+                    v-for="(source, idx) in message.metadata.web_search.sources"
+                    :key="idx"
+                    clickable
+                    @click="openSource(source.url)"
+                    color="primary"
+                    text-color="white"
+                    icon="link"
+                    size="sm"
+                    class="cursor-pointer"
+                >
+                    {{ source.title }}
+                    <q-tooltip>{{ source.url }}</q-tooltip>
+                </q-chip>
+            </div>
             
         </div>
         <!-- TODO: Work on this -->
@@ -137,6 +153,10 @@ const openPreview = () => {
 
 const closePreview = () => {
     previewVisible.value = false;
+}
+
+const openSource = (url: string) => {
+    window.open(url, '_blank');
 }
 
 onMounted(async () => {

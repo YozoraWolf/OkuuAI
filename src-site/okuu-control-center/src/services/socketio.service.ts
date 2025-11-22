@@ -33,7 +33,7 @@ export class SocketioService {
             // Remove protocol from URL
             url = url.replace(/^https?:\/\//, '');
 
-            this.socket = io(`${process.env.LOCAL ? 'ws' : 'wss' }://${url}`, {
+            this.socket = io(`${process.env.LOCAL ? 'ws' : 'wss'}://${url}`, {
                 transports: ['websocket'],
                 timeout: 30000,
                 reconnectionAttempts: 3,
@@ -42,11 +42,11 @@ export class SocketioService {
 
             this.socket.connect();
 
-            console.log('Socket initialized with URL:', `${process.env.LOCAL ? 'ws' : 'wss' }://${url}`);
+            console.log('Socket initialized with URL:', `${process.env.LOCAL ? 'ws' : 'wss'}://${url}`);
             this.sessionId = sessionId;
-            
+
             console.log('Socket initialized:', this.sessionId);
-            this.socket.emit("joinChat", sessionId );
+            this.socket.emit("joinChat", sessionId);
 
             this.setupEventHandlers();
 
@@ -75,13 +75,13 @@ export class SocketioService {
 
             const configStore = useConfigStore();
             message.avatar = configStore.okuuPfp;
-            
+
             // For streaming messages
             if (message.stream) {
                 const hasExisting = this.sessionStore.hasMessageInSession(message.memoryKey);
-                console.log('🔵 Stream message check:', { 
+                console.log('🔵 Stream message check:', {
                     hasExisting,
-                    memoryKey: message.memoryKey 
+                    memoryKey: message.memoryKey
                 });
 
                 // For the first chunk
@@ -106,9 +106,10 @@ export class SocketioService {
                     done: message.done
                 });
                 this.sessionStore.updateMessageInSession(
-                    message.memoryKey, 
-                    message.message || '', 
-                    message.done
+                    message.memoryKey,
+                    message.message || '',
+                    message.done,
+                    message.metadata
                 );
             } else {
                 // Non-streaming messages

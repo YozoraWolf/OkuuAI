@@ -64,6 +64,7 @@ export const defaultAssistantConfig = {
     name: defaultConfigAI.ai_name,
     system_prompt: defaultConfigAI.system,
     model: defaultConfigAI.model_name,
+    tool_llm: "qwen2.5:3b",
     template: ""
 };
 
@@ -398,7 +399,7 @@ const switchModel = async () => {
 
     Logger.INFO(`✅ Model updated to ${selectedModel}`);
 }
-    
+
 
 // Assistant Configuration
 if (require.main === module) {
@@ -412,6 +413,6 @@ if (arg === 'OVERRIDE') {
     initConfig(); // this will first check if there's an existing .env file, if not, it will start the interactive configuration
 }
 
-if(arg === 'MODEL_OR')  {
+if (arg === 'MODEL_OR') {
     switchModel();
 }

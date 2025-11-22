@@ -156,7 +156,7 @@ export const getAllSessions = async (): Promise<Array<SessionData>> => {
   for (const [index, sessionId] of Array.from(uniqueSessionIds).entries()) {
     try {
       let msg = await getLastMsgFromSession(sessionId);
-      sessionData.push({index, lastMessage: msg, sessionId }); // Display who said the message
+      sessionData.push({ index, lastMessage: msg, sessionId }); // Display who said the message
     } catch (error) {
       Logger.ERROR(`Error processing session ${sessionId}: ${error}`);
       sessionData.push({ index, lastMessage: null, sessionId });
@@ -267,14 +267,22 @@ export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: num
 
     for (const key of sessionKeys) {
       const sessionData = await redisClientMemory.hGetAll(key);
-      const sessData: ChatMessage = { 
+      const sessData: ChatMessage = {
         sessionId: sessionData['sessionId'],
         user: sessionData['user'],
         message: sessionData['message'],
         timestamp: parseInt(sessionData['timestamp']),
         attachment: sessionData['attachment'],
         file: sessionData['file']
-       };
+      };
+
+      if (sessionData['metadata']) {
+        try {
+          sessData.metadata = JSON.parse(sessionData['metadata']);
+        } catch (e) {
+          Logger.WARN(`Failed to parse metadata for key ${key}: ${e}`);
+        }
+      }
       // Directly add sessionData to the array
       allMessagesWithTimestamps.push(sessData);
     }
@@ -321,6 +329,14 @@ const getLastMsgFromSession = async (sessionId: string): Promise<ChatMessage | n
     message: latestMsg['message'],
     timestamp: parseInt(latestMsg['timestamp']),
   };
+
+  if (latestMsg['metadata']) {
+    try {
+      msg.metadata = JSON.parse(latestMsg['metadata']);
+    } catch (e) {
+      Logger.WARN(`Failed to parse metadata for latest msg in session ${sessionId}: ${e}`);
+    }
+  }
 
   return msg;
 };
