@@ -4,6 +4,8 @@ import { searchMemoryWithEmbedding } from '@src/langchain/redis';
 import { Core } from '../core';
 import { RedisClientType } from 'redis';
 import { tavily } from '@tavily/core';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface Source {
     title: string;
@@ -655,38 +657,30 @@ ${weatherDescription} **${temperature}°C** (feels like ${feelsLike}°C)
             Logger.DEBUG(`[ToolCheck] Injected context into prompt: "${promptUserMessage}"`);
         }
 
-        // Use Qwen2.5-3B for fast, intelligent tool detection
-        const toolAnalysisPrompt = `You are a tool selection agent. Determine if the user message requires a tool.
+        // Load tool analysis prompt from file
+        const promptPath = path.join(__dirname, '../prompts/tool_agent.txt');
+        let toolAnalysisPrompt = '';
 
-Available tools:
-${this.getEnabledToolsForPrompt()}
+        try {
+            toolAnalysisPrompt = fs.readFileSync(promptPath, 'utf-8');
 
-${context}Current User message: "${promptUserMessage}"
+            // Replace template variables
+            toolAnalysisPrompt = toolAnalysisPrompt
+                .replace('{{TOOLS_LIST}}', this.getEnabledToolsForPrompt())
+                .replace('{{CONTEXT}}', context)
+                .replace('{{USER_MESSAGE}}', promptUserMessage);
 
-Rules:
-- Respond ONLY with JSON.
-- JSON structure: {"reasoning": "string", "tool": "string" | null, "parameters": object}
-- "reasoning": Explain WHY you chose the tool or null. Mention the context you used.
-- CONTEXT IS KING. Look at the "(in response to...)" part of the message.
-- If the assistant offered to search for X, and user says "yes", return {"tool": "web_search", "parameters": {"query": "X"}}.
-- If the user asks about a specific entity (person, place, thing, game character) that is NOT clearly defined in the conversation history above, you MUST use "web_search".
-- Do NOT assume you know the answer. If it's not in the history, SEARCH.
-- If no tool is needed, return {"tool": null}.
-- IMPORTANT: Weather questions ALWAYS need web_search.
-- For weather queries, extract the location and add it to the query parameter.
-- Current information (news, weather, prices) requires web_search.
-- Math operations require calculator.
-- Time/date questions require get_time_info.
-
-Examples:
-- "Who is Aino?" -> {"reasoning": "User asked about specific character Aino, not in history", "tool": "web_search", "parameters": {"query": "who is Aino Genshin Impact"}}
-- "What time is it?" -> {"reasoning": "User asked for time", "tool": "get_time_info", "parameters": {}}
-- "Weather in London" -> {"reasoning": "User asked for weather in London", "tool": "web_search", "parameters": {"query": "current weather London", "location": "London"}}
-- "Calculate 5 + 10" -> {"reasoning": "Math operation", "tool": "calculator", "parameters": {"expression": "5 + 10"}}
-- "Hello" -> {"reasoning": "Greeting, no tool needed", "tool": null}
-- "Yes please (in response to Assistant: 'Would you like to know their skills?')" -> {"reasoning": "User agreed to search for skills", "tool": "web_search", "parameters": {"query": "character skills"}}
+        } catch (error) {
+            Logger.ERROR(`Failed to load tool agent prompt from ${promptPath}: ${error}`);
+            // Fallback to basic prompt if file loading fails
+            toolAnalysisPrompt = `You are a tool selection agent. Analyze the user message and respond with JSON indicating which tool to use, if any.
+            
+Available tools: ${this.getEnabledToolsForPrompt()}
+${context}
+User message: "${promptUserMessage}"
 
 Response:`;
+        }
 
         Logger.DEBUG(`[ToolCheck] Prompt:\n${toolAnalysisPrompt}`);
 
@@ -704,6 +698,19 @@ Response:`;
 
             try {
                 const result = JSON.parse(analysisResult);
+
+                // Validate that we have a proper query parameter for web_search
+                if (result.tool === 'web_search' && result.parameters) {
+                    const query = result.parameters.query;
+
+                    // Check if query is invalid (undefined, malformed, or just brackets/symbols)
+                    if (!query || typeof query !== 'string' || query.trim().length === 0 || /^[\[\]:\s]+$/.test(query)) {
+                        Logger.WARN(`[ToolCheck] Invalid query detected: "${query}". LM failed to extract proper topic.`);
+                        // Don't use tool if we can't get a valid query - let normal flow handle it
+                        return null;
+                    }
+                }
+
                 if (result.tool && this.tools.has(result.tool)) {
                     Logger.INFO(`[ToolCheck] SUCCESS: Qwen2.5 selected tool '${result.tool}' with params: ${JSON.stringify(result.parameters)}`);
                     Logger.DEBUG(`[ToolCheck] Reasoning: ${result.reasoning}`);

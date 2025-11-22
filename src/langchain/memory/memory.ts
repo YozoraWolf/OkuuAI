@@ -273,7 +273,8 @@ export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: num
         message: sessionData['message'],
         timestamp: parseInt(sessionData['timestamp']),
         attachment: sessionData['attachment'],
-        file: sessionData['file']
+        file: sessionData['file'],
+        done: true  // Messages loaded from Redis are complete
       };
 
       if (sessionData['metadata']) {
