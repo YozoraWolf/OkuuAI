@@ -33,6 +33,7 @@ export interface ChatMessage {
         weather?: any;
         [key: string]: any;
     };
+    memoryUser?: string;
 }
 
 export const langMappings: { [key: string]: string } = {
@@ -116,6 +117,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             timestamp: Date.now(),
             sessionId: msg.sessionId || SESSION_ID || '',
             stream: msg.stream || false,
+            memoryUser: msg.memoryUser || 'okuu',
         };
 
         // Step 1: Save user input in memory

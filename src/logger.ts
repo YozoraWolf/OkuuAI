@@ -67,7 +67,7 @@ export class Logger {
         const message = `${logPrefix} ${level.toUpperCase()} Rate limit exceeded for IP: ${req.ip}`;
         Logger.appendToLogFile(message);
     }
-    
+
     private static initializeLogFile() {
         if (!fs.existsSync(path.dirname(Logger.logFilePath))) {
             Logger.INFO('Creating logs directory...');

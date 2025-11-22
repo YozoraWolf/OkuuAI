@@ -96,7 +96,8 @@ export class DiscordManager {
                 message: message.content.replace(/<@!?[0-9]+>/g, '').trim(), // Remove mention
                 timestamp: Date.now(),
                 lang: 'en-US', // Default, could detect
-                stream: false // Discord doesn't support streaming well in this context yet
+                stream: false, // Discord doesn't support streaming well in this context yet
+                memoryUser: message.author.username,
             };
 
             // Send to Okuu
