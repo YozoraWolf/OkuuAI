@@ -1,6 +1,6 @@
 <template>
     <q-layout view="hHh Lpr lFf" class="full-height">
-        <q-drawer side="right" bordered v-model="drawer" :mini="mini" class="border-left" @mouseenter="startHoverTimer"
+        <q-drawer side="right" bordered v-model="drawer" :mini="mini" mini-to-overlay :width="300" class="border-left chat-drawer" @mouseenter="startHoverTimer"
             @mouseleave="stopHoverTimer">
             <q-list>
                 <q-item class="flex flex-center" clickable @click="addNewSession">
@@ -20,6 +20,10 @@
             </q-list>
 
         </q-drawer>
+
+        <transition name="backdrop-fade">
+          <div v-if="!mini" class="drawer-backdrop" @click="stopHoverTimer"></div>
+        </transition>
 
         <q-page-container class="q-pa-none window-height">
             <div class="chat-container full-width window-height">
@@ -396,6 +400,5 @@ watch(() => status.value, (status) => {
 .q-item--active {
     background-color: var(--q-primary) !important;
 }
-
 
 </style>

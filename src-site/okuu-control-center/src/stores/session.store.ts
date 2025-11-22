@@ -13,6 +13,11 @@ export interface Message {
     done: boolean;
     attachment?: string;
     file?: string;
+    metadata?: {
+        web_search?: { sources: { title: string; url: string }[] };
+        weather?: any;
+        [key: string]: any;
+    };
 }
 
 export interface Session {
@@ -66,7 +71,7 @@ export const useSessionStore = defineStore('session', {
         },
         async fetchSessionMessages(sessionId: string) {
             const { data, status } = await getSessionMessages(sessionId);
-            if(status !== 200) {
+            if (status !== 200) {
                 console.error('Failed to fetch messages for session', sessionId);
                 return;
             }
@@ -89,7 +94,7 @@ export const useSessionStore = defineStore('session', {
                 return;
             }
             const newSession = data;
-            newSession.lastMessage = data.messages[data.messages.length - 1]  || '';
+            newSession.lastMessage = data.messages[data.messages.length - 1] || '';
             this.sessions.push(newSession);
             this.orderSessions();
             return data.sessionId;
@@ -146,23 +151,24 @@ export const useSessionStore = defineStore('session', {
             const newMessage = { ...message };
             session.messages = [...session.messages, newMessage];
             session.lastMessage = newMessage;
-            
-            if(message.stream) {
+
+            if (message.stream) {
                 console.log('🟢 Setting streaming state true');
                 this.isStreaming = true;
             }
-            
+
             this.orderSessions();
             console.log('🟢 Current messages count:', session.messages.length);
         },
 
-        updateMessageInSession(memoryKey: string, newMessage: string, finishStreaming: boolean = true) {
-            console.log('🟡 Updating message:', { 
+        updateMessageInSession(memoryKey: string, newMessage: string, finishStreaming: boolean = true, sources?: any) {
+            console.log('🟡 Updating message:', {
                 memoryKey,
                 messageLength: newMessage?.length || 0,
-                finishStreaming 
+                finishStreaming,
+                metadataPresent: !!sources
             });
-            
+
             const session = this.sessions.find((session: Session) => session.sessionId === this.currentSessionId);
             if (!session) {
                 console.warn('🔴 No session found for update:', this.currentSessionId);
@@ -201,21 +207,22 @@ export const useSessionStore = defineStore('session', {
                 ...(oldMessage.avatar ? { avatar: oldMessage.avatar } : {}),
                 ...(oldMessage.thinking ? { thinking: oldMessage.thinking } : {}),
                 ...(oldMessage.attachment ? { attachment: oldMessage.attachment } : {}),
-                ...(oldMessage.file ? { file: oldMessage.file } : {})
+                ...(oldMessage.file ? { file: oldMessage.file } : {}),
+                ...(sources ? { metadata: sources } : (oldMessage.metadata ? { metadata: oldMessage.metadata } : {}))
             };
-            
+
             // Create new array to force reactivity
             const newMessages = [...session.messages];
             newMessages[messageIndex] = updatedMessage;
             session.messages = newMessages;
-            
+
             if (messageIndex === session.messages.length - 1) {
                 session.lastMessage = { ...updatedMessage };
             }
-            
+
             // Keep streaming true until explicitly finished
             this.isStreaming = !finishStreaming;
-            
+
             console.log('🟡 Updated message result:', {
                 messageLength: updatedMessage.message?.length || 0,
                 isDone: updatedMessage.done,

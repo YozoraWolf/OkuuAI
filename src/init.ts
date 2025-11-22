@@ -46,76 +46,79 @@ const promptForConfig = async () => {
     }
 };
 
-export const init = async () => 
+export const init = async () =>
     new Promise<void>(async (resolve) => {
 
-    console.log(centeredLogoTxt);
+        console.log(centeredLogoTxt);
 
-    Logger.INFO("Checking envs...");
-    if (!fs.existsSync('.env') || !fs.existsSync('assistant.json')) {
-        await promptForConfig();
-        loadEnv();
-        Logger.INFO("Env files created successfully!");
-        Logger.INFO("Restart the application to apply the changes.");
-        return;
-    }
+        Logger.INFO("Checking envs...");
+        if (!fs.existsSync('.env') || !fs.existsSync('assistant.json')) {
+            await promptForConfig();
+            loadEnv();
+            Logger.INFO("Env files created successfully!");
+            Logger.INFO("Restart the application to apply the changes.");
+            return;
+        }
 
-    // Load assistant configuration
-    const assistantConfig = loadAssistantConfig();
-    Object.assign(Core, {
-        ai_name: assistantConfig.name ?? Core.ai_name,
-        model_name: assistantConfig.model ?? Core.model_name,
-        template: assistantConfig.template ?? Core.template,
-        global_memory: assistantConfig.global_memory ?? Core.global_memory,
+        // Load assistant configuration
+        const assistantConfig = loadAssistantConfig();
+        Object.assign(Core, {
+            ai_name: assistantConfig.name ?? Core.ai_name,
+            model_name: assistantConfig.model ?? Core.model_name,
+            tool_model_name: assistantConfig.tool_llm ?? Core.tool_model_name,
+            template: assistantConfig.template ?? Core.template,
+            global_memory: assistantConfig.global_memory ?? Core.global_memory,
+        });
+        Object.assign(Core.model_settings, {
+            system: assistantConfig.system_prompt ?? Core.model_settings.system,
+            think: assistantConfig.think ?? Core.model_settings.think,
+        });
+
+        Logger.DEBUG(`Assistant: ${Core.ai_name}`);
+        Logger.DEBUG(`Model: ${Core.model_name}`);
+        Logger.DEBUG(`Tool Model: ${Core.tool_model_name}`);
+        Logger.DEBUG(`System Prompt: ${Core.model_settings.system}`);
+
+        // check if the ollama service is on, if not, start it
+        //await checkOllamaService();
+        await startAndMonitorContainers();
+
+        // start ollama instance
+        await initOllamaInstance();
+
+        // run model
+        await runModel(Core.model_name);
+        await runModel("nomic-embed-text");
+        await runModel(Core.tool_model_name);
+
+        await initRedis();
+
+        // check if model is available in ollama
+        //await checkModelAvailability();
+
+        // initialize tray icon
+        //await initTray();
+
+        // initialize chromadb
+        //await initDockerChromaDB();
+
+        // initialize sqlite3 (future implementation prep)
+        await initUsersDB();
+
+        // get latest history
+        const sessionId = SESSION_SETTINGS.sessionId;
+
+        Logger.DEBUG(`Session Settings: ${JSON.stringify(SESSION_SETTINGS)}`);
+
+        // initialize chat session
+        Core.chat_session = await startSession(sessionId);
+
+
+        //Logger.DEBUG(`Latest history: ${await getLatestHistory()}`);
+        // set status to active
+        Core.status = Status.ACTIVE;
+
+        Logger.INFO(`${ConsoleColor.FgGreen}Initialization complete`);
+
+        resolve();
     });
-    Object.assign(Core.model_settings, {
-        system: assistantConfig.system_prompt ?? Core.model_settings.system,
-        think: assistantConfig.think ?? Core.model_settings.think,
-    });
-
-    Logger.DEBUG(`Assistant: ${Core.ai_name}`);
-    Logger.DEBUG(`Model: ${Core.model_name}`);
-    Logger.DEBUG(`System Prompt: ${Core.model_settings.system}`);
-  
-    // check if the ollama service is on, if not, start it
-    //await checkOllamaService();
-    await startAndMonitorContainers();
-
-    // start ollama instance
-    await initOllamaInstance();
-    
-    // run model
-    await runModel(Core.model_name);
-    await runModel("nomic-embed-text");
-
-    await initRedis();
-
-    // check if model is available in ollama
-    //await checkModelAvailability();
-
-    // initialize tray icon
-    //await initTray();
-
-    // initialize chromadb
-    //await initDockerChromaDB();
-
-    // initialize sqlite3 (future implementation prep)
-    await initUsersDB();
-
-    // get latest history
-    const sessionId = SESSION_SETTINGS.sessionId;
-
-    Logger.DEBUG(`Session Settings: ${JSON.stringify(SESSION_SETTINGS)}`);
-
-    // initialize chat session
-    Core.chat_session = await startSession(sessionId);
-
-
-    //Logger.DEBUG(`Latest history: ${await getLatestHistory()}`);
-    // set status to active
-    Core.status = Status.ACTIVE;
-
-    Logger.INFO(`${ConsoleColor.FgGreen}Initialization complete`);
-
-    resolve();
-});
