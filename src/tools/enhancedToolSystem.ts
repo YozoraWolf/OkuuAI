@@ -1,4 +1,5 @@
 import { Logger } from '@src/logger';
+import { danbooruTool } from './danbooru';
 import { loadAssistantConfig } from '@src/o_utils';
 import { searchMemoryWithEmbedding } from '@src/langchain/redis';
 import { Core } from '@src/core';
@@ -140,6 +141,9 @@ export class EnhancedToolSystem {
 
         // Initialize MCP servers
         this.initializeMCPServers();
+
+        // Register Danbooru tool
+        this.registerTool(danbooruTool);
     }
 
     registerTool(tool: Tool) {
@@ -211,26 +215,26 @@ export class EnhancedToolSystem {
                 // For now, using default location (Tokyo)
                 return await this.getWeatherInfo();
             }
-            
-            
+
+
             // For general queries, use DuckDuckGo
             const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(params.query)}&format=json&no_html=1`);
             const data = await response.json();
-            
+
             let results = [];
-            
+
             if (data.Answer) {
                 results.push(`**Direct Answer**: ${data.Answer}`);
             }
-            
+
             if (data.Abstract) {
                 results.push(`**Summary**: ${data.Abstract}`);
             }
-            
+
             if (data.Definition) {
                 results.push(`**Definition**: ${data.Definition}`);
             }
-            
+
             if (data.RelatedTopics && data.RelatedTopics.length > 0) {
                 const topics = data.RelatedTopics.slice(0, Math.min(params.max_results || 2, 2));
                 const topicTexts = topics
@@ -240,7 +244,7 @@ export class EnhancedToolSystem {
                     results.push(`**Additional Information**:\n${topicTexts.join('\n')}`);
                 }
             }
-            
+
             // If no results from DuckDuckGo, provide a helpful response
             if (results.length === 0) {
                 return `I searched for "${params.query}" but couldn't find specific information from web sources at the moment. You might want to try:
@@ -251,9 +255,9 @@ export class EnhancedToolSystem {
 
 *The web search service may be temporarily limited.*`;
             }
-            
+
             return results.join('\n\n');
-            
+
         } catch (error) {
             Logger.ERROR(`Web search error: ${error}`);
             return `I encountered an issue while searching for "${params.query}". The search service might be temporarily unavailable. Please try again later or rephrase your query.`;
@@ -276,27 +280,27 @@ export class EnhancedToolSystem {
             // Default to Tokyo coordinates if not specified
             // Using Open-Meteo API - free, no API key required
             const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m&timezone=auto`;
-            
+
             const response = await fetch(url);
             const data = await response.json();
-            
+
             if (!data.current) {
                 return 'Unable to fetch weather information at the moment. Please try again later.';
             }
-            
+
             const current = data.current;
             const timezone = data.timezone || 'Unknown';
-            
+
             // Map weather codes to descriptions
             const weatherDescriptions: { [key: number]: string } = {
                 0: '☀️ Clear sky',
-                1: '🌤️ Mainly clear', 
+                1: '🌤️ Mainly clear',
                 2: '⛅ Partly cloudy',
                 3: '☁️ Overcast',
                 45: '🌫️ Foggy',
                 48: '🌫️ Depositing rime fog',
                 51: '🌦️ Light drizzle',
-                53: '🌦️ Moderate drizzle', 
+                53: '🌦️ Moderate drizzle',
                 55: '🌧️ Dense drizzle',
                 61: '🌦️ Slight rain',
                 63: '🌧️ Moderate rain',
@@ -311,7 +315,7 @@ export class EnhancedToolSystem {
                 96: '⛈️ Thunderstorm with slight hail',
                 99: '⛈️ Thunderstorm with heavy hail'
             };
-            
+
             const weatherDescription = weatherDescriptions[current.weather_code] || '🌤️ Variable conditions';
             const temperature = Math.round(current.temperature_2m);
             const feelsLike = Math.round(current.apparent_temperature);
@@ -320,23 +324,23 @@ export class EnhancedToolSystem {
             const windDirection = current.wind_direction_10m;
             const pressure = Math.round(current.pressure_msl);
             const cloudCover = current.cloud_cover;
-            
+
             // Convert wind direction to compass
             const getWindDirection = (degrees: number) => {
                 const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
                 return directions[Math.round(degrees / 22.5) % 16];
             };
-            
+
             const currentTime = new Date().toLocaleString('en-US', {
                 weekday: 'long',
                 year: 'numeric',
-                month: 'long', 
+                month: 'long',
                 day: 'numeric',
                 hour: '2-digit',
                 minute: '2-digit',
                 timeZone: timezone
             });
-            
+
             return `**Current Weather** (${currentTime}):
 
 ${weatherDescription} **${temperature}°C** (feels like ${feelsLike}°C)
@@ -350,7 +354,7 @@ ${weatherDescription} **${temperature}°C** (feels like ${feelsLike}°C)
 ⏰ **Timezone**: ${timezone}
 
 *Real-time data from Open-Meteo.com - Open-source weather API*`;
-            
+
         } catch (error) {
             Logger.ERROR(`Weather API error: ${error}`);
             return 'Unable to fetch current weather information. The weather service might be temporarily unavailable.';
@@ -360,19 +364,19 @@ ${weatherDescription} **${temperature}°C** (feels like ${feelsLike}°C)
     private async getTimeInfo(params: { format?: string }): Promise<string> {
         try {
             const now = new Date();
-            const timeStr = now.toLocaleTimeString('en-US', { 
-                hour: '2-digit', 
-                minute: '2-digit', 
-                second: '2-digit' 
+            const timeStr = now.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
             });
-            const dateStr = now.toLocaleDateString('en-US', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
+            const dateStr = now.toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
             });
             const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            
+
             return `⏰ **Current Time**: ${timeStr}
 📅 **Current Date**: ${dateStr}
 🌍 **Timezone**: ${timezone}
@@ -386,28 +390,23 @@ ${weatherDescription} **${temperature}°C** (feels like ${feelsLike}°C)
     private async searchMemory(params: { query: string; session_specific?: boolean }): Promise<string> {
         try {
             // Handle session-specific vs global search safely
-            let sessionId = -1; // Default to global search (all sessions)
-            
+            let sessionId = "-1"; // Default to global search (all sessions)
+
             if (params.session_specific) {
                 // If session-specific search is requested, try to get current session ID
                 if (Core.chat_session && (Core.chat_session as any).sessionId) {
-                    const parsedId = parseInt((Core.chat_session as any).sessionId);
-                    if (!isNaN(parsedId)) {
-                        sessionId = parsedId;
-                    } else {
-                        Logger.WARN('Invalid session ID format, falling back to global search');
-                    }
+                    sessionId = (Core.chat_session as any).sessionId;
                 } else {
                     Logger.WARN('Session-specific search requested but no active session, using global search');
                 }
             }
-            
+
             const memories = await searchMemoryWithEmbedding(params.query, sessionId, 5);
-            
+
             if (memories.length === 0) {
                 return 'No relevant memories found.';
             }
-            
+
             return memories.map((mem: any) => `${mem.user}: ${mem.message}`).join('\n');
         } catch (error) {
             return `Error searching memory: ${error}`;
@@ -419,7 +418,7 @@ ${weatherDescription} **${temperature}°C** (feels like ${feelsLike}°C)
         // First try exact format: TOOL_CALL: tool_name({"param": "value"})
         const exactRegex = /TOOL_CALL:\s*(\w+)\s*\((.+)\)/s;
         const exactMatch = text.match(exactRegex);
-        
+
         if (exactMatch) {
             try {
                 const name = exactMatch[1];
@@ -429,11 +428,11 @@ ${weatherDescription} **${temperature}°C** (feels like ${feelsLike}°C)
                 Logger.WARN(`Failed to parse exact tool call: ${error}`);
             }
         }
-        
+
         // If no exact match found, the AI didn't use the proper format
         Logger.DEBUG('No exact tool call format found in AI response');
         return null;
-        
+
         return null;
     }
 
@@ -493,7 +492,7 @@ Analyze:`;
                 try {
                     const toolName = toolMatch[1];
                     let parameters = {};
-                    
+
                     // Try to parse parameters if they exist
                     if (paramsMatch) {
                         try {
@@ -503,7 +502,7 @@ Analyze:`;
                             parameters = {};
                         }
                     }
-                    
+
                     // Validate the tool exists
                     if (this.tools.has(toolName)) {
                         Logger.INFO(`LLM detected tool usage: ${toolName} with params: ${JSON.stringify(parameters)}`);
@@ -552,7 +551,7 @@ Analyze:`;
     updateConfig(newConfig: Partial<ToolConfig>) {
         this.config = { ...this.config, ...newConfig };
         Logger.INFO(`Tool configuration updated: ${JSON.stringify(newConfig)}`);
-        
+
         // Reload tools with new configuration
         this.tools.clear();
         this.registerCoreTools();
@@ -562,7 +561,7 @@ Analyze:`;
         return { ...this.config };
     }
 
-    listAvailableTools(): Array<{name: string, description: string, category: string, enabled: boolean}> {
+    listAvailableTools(): Array<{ name: string, description: string, category: string, enabled: boolean }> {
         return Array.from(this.tools.values()).map(tool => ({
             name: tool.name,
             description: tool.description,

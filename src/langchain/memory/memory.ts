@@ -63,7 +63,11 @@ const getSessionsCount = async (): Promise<number> => {
   sessionKeys = sessionKeys.filter(key => !key.includes("file"));
   const uniqueSessionIds = new Set(sessionKeys.map(key => key.split(':')[1]));
   // get the highest index
-  const newSessionId = uniqueSessionIds.size > 0 ? Math.max(...Array.from(uniqueSessionIds).map(id => parseInt(id))) : 0;
+  const numericIds = Array.from(uniqueSessionIds)
+    .map(id => parseInt(id))
+    .filter(id => !isNaN(id));
+
+  const newSessionId = numericIds.length > 0 ? Math.max(...numericIds) : 0;
   Logger.INFO(`New Session ID: ${newSessionId}`);
   return newSessionId;
 };
@@ -156,7 +160,7 @@ export const getAllSessions = async (): Promise<Array<SessionData>> => {
   for (const [index, sessionId] of Array.from(uniqueSessionIds).entries()) {
     try {
       let msg = await getLastMsgFromSession(sessionId);
-      sessionData.push({index, lastMessage: msg, sessionId }); // Display who said the message
+      sessionData.push({ index, lastMessage: msg, sessionId }); // Display who said the message
     } catch (error) {
       Logger.ERROR(`Error processing session ${sessionId}: ${error}`);
       sessionData.push({ index, lastMessage: null, sessionId });
@@ -267,14 +271,14 @@ export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: num
 
     for (const key of sessionKeys) {
       const sessionData = await redisClientMemory.hGetAll(key);
-      const sessData: ChatMessage = { 
+      const sessData: ChatMessage = {
         sessionId: sessionData['sessionId'],
         user: sessionData['user'],
         message: sessionData['message'],
         timestamp: parseInt(sessionData['timestamp']),
         attachment: sessionData['attachment'],
         file: sessionData['file']
-       };
+      };
       // Directly add sessionData to the array
       allMessagesWithTimestamps.push(sessData);
     }

@@ -20,10 +20,22 @@ export let io: Server;
 (async () => {
     await init();
 
+    // Initialize Discord
+    if (process.env.DISCORD_TOKEN) {
+        try {
+            const { discordManager } = await import('./sns/discord');
+            await discordManager.login(process.env.DISCORD_TOKEN);
+        } catch (error) {
+            Logger.ERROR(`Failed to initialize Discord: ${error}`);
+        }
+    } else {
+        Logger.WARN('No DISCORD_TOKEN found, skipping Discord initialization.');
+    }
+
     const app: Application = express();
     const port = process.env.PORT || 3000;
     const server = http.createServer(app); // Create HTTP server
-    
+
     // Websockets
     io = setupSockets(server);
 

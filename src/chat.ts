@@ -4,12 +4,12 @@ import { Logger } from './logger';
 import { getLatestMsgsFromSession, SESSION_ID } from './langchain/memory/memory';
 import { franc } from 'franc-ce';
 import { Ollama } from 'ollama';
-import { 
-    isQuestion, 
-    saveMemoryWithEmbedding, 
-    searchMemoryWithEmbedding, 
-    updateAttachmentForMemory, 
-    updateMemory 
+import {
+    isQuestion,
+    saveMemoryWithEmbedding,
+    searchMemoryWithEmbedding,
+    updateAttachmentForMemory,
+    updateMemory
 } from './langchain/redis';
 import { loadFileContentFromStorage } from './langchain/memory/storage';
 import { enhancedToolSystem } from './tools/enhancedToolSystem';
@@ -28,6 +28,7 @@ export interface ChatMessage {
     memoryKey?: string;
     file?: string;
     attachment?: string;
+    memoryUser?: string;
 }
 
 export const langMappings: { [key: string]: string } = {
@@ -51,7 +52,7 @@ const MAX_HISTORY_CHARS = 4000; // Ollama: use char proxy instead of tokens
 async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, toolsWereUsed: boolean = false) {
     // 1. Retrieve top-k relevant memories
     const memoryQuery = msg.message || '';
-    let memories = await searchMemoryWithEmbedding(memoryQuery, Number(msg.sessionId));
+    let memories = await searchMemoryWithEmbedding(memoryQuery, msg.sessionId);
     if (memories && memories.length > MAX_RELEVANT_MEMORIES) {
         memories = memories.slice(0, MAX_RELEVANT_MEMORIES);
     }
@@ -113,7 +114,8 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
         // Step 1: Save user input in memory
         const messageType = isQuestion(msg.message as string) ? 'question' : 'statement';
-        const memory = await saveMemoryWithEmbedding(msg.sessionId, msg.message as string, "user", messageType);
+        const memoryUser = msg.memoryUser || 'user';
+        const memory = await saveMemoryWithEmbedding(msg.sessionId, msg.message as string, memoryUser, messageType);
         Logger.DEBUG(`Saved memory: ${memory.memoryKey}`);
 
         // Step 2: Update attachment in memory if file exists
@@ -166,7 +168,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         if (msg.stream) {
             const timestamp = Date.now();
             const streamMemoryKey = `okuuMemory:${msg.sessionId}:${timestamp}`;
-            
+
             reply.done = false;
             reply.lang = langMappings[franc(msg.message || '')] || 'en-US';
             reply.sessionId = msg.sessionId;
@@ -181,7 +183,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             try {
                 // Notify that AI generation is starting (not just processing)
                 io.to(msg.sessionId).emit('generationStarted');
-                
+
                 const stream = await Core.ollama_instance.generate({
                     prompt,
                     model: Core.model_name,
@@ -221,7 +223,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
             // Tools are handled proactively before AI response generation
             // No need for post-response tool parsing
-            
+
             // Finalize AI reply
             reply.done = true;
             reply.message = aiReply || '...';
@@ -231,9 +233,9 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 try {
                     const messageTypeAI = isQuestion(aiReply) ? 'question' : 'statement';
                     await saveMemoryWithEmbedding(
-                        reply.sessionId, 
-                        aiReply, 
-                        "okuu", 
+                        reply.sessionId,
+                        aiReply,
+                        msg.memoryUser || "okuu",
                         messageTypeAI,
                         '', // thinking
                         reply.memoryKey // use our pre-generated key
@@ -260,13 +262,13 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
         // Tools are handled proactively before AI response generation
         reply.message = resp.response;
-        
+
         reply.done = true;
         reply.lang = langMappings[franc(msg.message || '')] || 'en-US';
         reply.thinking = resp.thinking || '';
 
         const messageTypeAI = isQuestion(reply.message) ? 'question' : 'statement';
-        const aiMemory = await saveMemoryWithEmbedding(reply.sessionId, reply.message, "okuu", messageTypeAI, reply.thinking);
+        const aiMemory = await saveMemoryWithEmbedding(reply.sessionId, reply.message, msg.memoryUser || "okuu", messageTypeAI, reply.thinking);
         reply.memoryKey = aiMemory.memoryKey;
         reply.timestamp = aiMemory.timestamp;
 

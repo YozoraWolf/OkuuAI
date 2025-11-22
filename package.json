@@ -3,17 +3,18 @@
   "version": "0.0.1",
   "description": "Okuu AI",
   "exports": "./index.js",
+  "type": "module",
   "scripts": {
-    "start-tunnel": "./setup_ngrok.sh && ts-node ./src/index.ts",
-    "start-tunnel-win": "call setup_ngrok.bat && ts-node ./src/index.ts",
-    "start": "ts-node ./src/index.ts",
+  "start-tunnel": "./setup_ngrok.sh && node --loader ts-node/esm --experimental-specifier-resolution=node -r tsconfig-paths/register ./src/index.ts",
+  "start-tunnel-win": "call setup_ngrok.bat && node --loader ts-node/esm --experimental-specifier-resolution=node -r tsconfig-paths/register ./src/index.ts",
+  "start": "node --loader ts-node/esm --experimental-specifier-resolution=node -r tsconfig-paths/register ./src/index.ts",
     "sync-ngrok": "ts-node ./sync-ngrok.ts",
     "nodemon": "nodemon --no-stdin",
     "build": "sucrase ./src -d ./dist --transforms typescript,imports",
     "vite:run": "vite",
     "vite:build": "vite build",
     "eslint": "eslint ./src",
-    "config": "ts-node ./src/config.ts"
+  "config": "node --loader ts-node/esm --experimental-specifier-resolution=node -r tsconfig-paths/register ./src/config.ts"
   },
   "keywords": [
     "okuu",
@@ -40,6 +41,7 @@
     "express-fileupload": "^1.5.1",
     "express-rate-limit": "^7.5.0",
     "franc-ce": "^0.1.3",
+    "kokoro-js": "^1.2.1",
     "langchain": "^0.1.36",
     "mammoth": "^1.9.0",
     "ollama": "^0.5.16",

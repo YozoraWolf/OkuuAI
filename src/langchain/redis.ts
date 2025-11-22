@@ -27,8 +27,16 @@ async function createMemoryIndex() {
 
     // Check for dimension mismatch or other issues
     const embeddingAttr = indexInfo['attributes']?.find(attr => attr.name === 'embedding');
+    const sessionIdAttr = indexInfo['attributes']?.find(attr => attr.name === 'sessionId');
+
     if (embeddingAttr && Number(embeddingAttr.dim) !== 768) {
       Logger.WARN('Dimension mismatch detected. Dropping and recreating index...');
+      await redisClientMemory.ft.dropIndex('idx:memories');
+      throw new Error('Index dropped for re-creation.');
+    }
+
+    if (sessionIdAttr && sessionIdAttr.type !== 'TAG') {
+      Logger.WARN('SessionId type mismatch (expected TAG). Dropping and recreating index...');
       await redisClientMemory.ft.dropIndex('idx:memories');
       throw new Error('Index dropped for re-creation.');
     }
@@ -47,7 +55,7 @@ async function createMemoryIndex() {
             timestamp: { type: SchemaFieldTypes.NUMERIC },
             user: { type: SchemaFieldTypes.TEXT },
             memoryKey: { type: SchemaFieldTypes.TEXT },
-            sessionId: { type: SchemaFieldTypes.NUMERIC, SORTABLE: true },
+            sessionId: { type: SchemaFieldTypes.TAG, SORTABLE: true },
             type: { type: SchemaFieldTypes.TAG },
             recall_count: { type: SchemaFieldTypes.NUMERIC, SORTABLE: true },
             __vector_score: { type: SchemaFieldTypes.NUMERIC, SORTABLE: true },
@@ -75,10 +83,10 @@ async function createMemoryIndex() {
 }
 
 export async function saveMemoryWithEmbedding(
-  sessionId: string, 
-  message: string, 
-  user: string, 
-  type: string = 'statement', 
+  sessionId: string,
+  message: string,
+  user: string,
+  type: string = 'statement',
   thinking: string = '',
   existingMemoryKey?: string
 ) {
@@ -103,7 +111,7 @@ export async function saveMemoryWithEmbedding(
       thinking,
       timestamp: timestamp,
       memoryKey,
-      sessionId: sessionId ? Number(sessionId) : -1,
+      sessionId: sessionId || "-1",
       type,
       user,
       recall_count: 0,
@@ -152,7 +160,7 @@ async function updateRecallCount(memories: any[]) {
   }
 }
 
-export async function searchMemoryWithEmbedding(query: string, sessionId: number = -1, topK: number = 5) {
+export async function searchMemoryWithEmbedding(query: string, sessionId: string = "-1", topK: number = 5) {
   try {
     // Generate query embedding
     const queryEmbeddingResponse = await Core.ollama_instance.embed({ input: query, model: "nomic-embed-text" });
@@ -164,11 +172,11 @@ export async function searchMemoryWithEmbedding(query: string, sessionId: number
     // Ensure correct embedding format (raw binary)
     const blobEmbedding = Buffer.from(new Float32Array(queryEmbedding).buffer)
 
-    Logger.DEBUG(`Searching memory: ${sessionId === -1 ? 'all sessions' : `session ${sessionId}`}`);
+    Logger.DEBUG(`Searching memory: ${sessionId === "-1" ? 'all sessions' : `session ${sessionId}`}`);
 
-    const search_query = sessionId !== -1 && !Core.global_memory
-      ? `(@sessionId:[${sessionId} ${sessionId}] -@type:question)`
-      : `(-@type:question)`;
+    const search_query = sessionId !== "-1" && !Core.global_memory
+      ? `(@sessionId:{${sessionId}} -@type:{question})`
+      : `(-@type:{question})`;
 
     Logger.DEBUG(`Search query: ${search_query}`);
 
