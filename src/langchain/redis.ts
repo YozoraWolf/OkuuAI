@@ -88,7 +88,8 @@ export async function saveMemoryWithEmbedding(
   user: string,
   type: string = 'statement',
   thinking: string = '',
-  existingMemoryKey?: string
+  existingMemoryKey?: string,
+  metadata?: any
 ) {
   try {
     // Generate embedding for the statement (e.g., "I live in Tokyo")
@@ -106,7 +107,7 @@ export async function saveMemoryWithEmbedding(
     const timestamp = Date.now();
     const memoryKey = existingMemoryKey || `okuuMemory:${sessionId}:${timestamp}`;
     // Save the answer or relevant statement (not the question)
-    await redisClientMemory.hSet(memoryKey, {
+    const data: any = {
       message,
       thinking,
       timestamp: timestamp,
@@ -116,7 +117,13 @@ export async function saveMemoryWithEmbedding(
       user,
       recall_count: 0,
       embedding: Buffer.from(new Float32Array(embedding).buffer)
-    });
+    };
+
+    if (metadata) {
+      data.metadata = JSON.stringify(metadata);
+    }
+
+    await redisClientMemory.hSet(memoryKey, data);
 
     //Logger.DEBUG('Memory with embedding saved. Key: ' + memoryKey);
     return {
@@ -178,7 +185,7 @@ export async function searchMemoryWithEmbedding(query: string, sessionId: string
       ? `(@sessionId:{${sessionId}} -@type:{question})`
       : `(-@type:{question})`;
 
-    Logger.DEBUG(`Search query: ${search_query}`);
+    //Logger.DEBUG(`Search query: ${search_query}`);
 
     const result = await redisClientMemory.ft.search(
       'idx:memories',
@@ -281,7 +288,15 @@ export async function updateMemory(message: ChatMessage) {
     // update memory
     if (memoryKey) {
       const existingMemory = await redisClientMemory.hGetAll(memoryKey);
-      const { done, stream, ...updatedMemory } = { ...existingMemory, ...message };
+      const { done, stream, metadata, ...otherFields } = { ...existingMemory, ...message };
+
+      const updatedMemory: any = { ...otherFields };
+
+      // Serialize metadata if present
+      if (metadata) {
+        updatedMemory.metadata = typeof metadata === 'string' ? metadata : JSON.stringify(metadata);
+      }
+
       await redisClientMemory.hSet(memoryKey, updatedMemory);
       return true;
     } else {

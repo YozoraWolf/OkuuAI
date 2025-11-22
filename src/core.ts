@@ -15,6 +15,7 @@ export class Core {
 
     static ai_name: string = 'OkuuAI';
     static model_name: string = 'llama3';
+    static tool_model_name: string = 'qwen2.5:3b';
     static ollama_instance: Ollama;
     static defaultTemplate: string = `{{ if .System }}<|start_header_id|>system<|end_header_id|>
     
@@ -25,7 +26,7 @@ export class Core {
     {{ if not (or (contains .Response "#!IDK") (contains .Response "#!WEBSEARCH")) }}
     {{ .Response }}
     {{ end }}<|eot_id|>`;
-    
+
     static template: string = Core.defaultTemplate;
 
     static model_org_name: string = `${process.env.MODEL_URL?.match(/\/([^/]+)\.gguf/)?.[1]}.gguf`;
@@ -38,7 +39,7 @@ export class Core {
         prefix: '\x1b[32mOkuu:\x1b[0m'
     };
 
-    static model_settings: any = { 
+    static model_settings: any = {
         temperature: .3,
         //numCtx: 4096,
         topK: 10,
@@ -61,12 +62,12 @@ export class Core {
 
 
 
-// TODO: test a bit more
-static modelfile: string = `FROM ${Core.model_path}${Core.model_org_name}
+    // TODO: test a bit more
+    static modelfile: string = `FROM ${Core.model_path}${Core.model_org_name}
 ${Object.entries(Core.model_settings)
-    .filter(([key]) => key !== 'system')
-    .map(([key, value]) => `PARAMETER ${key} ${value}`)
-    .join('\n')}
+            .filter(([key]) => key !== 'system')
+            .map(([key, value]) => `PARAMETER ${key} ${value}`)
+            .join('\n')}
 SYSTEM ${Core.model_settings['system']}
 TEMPLATE """${Core.template}"""
 PARAMETER num_keep 24

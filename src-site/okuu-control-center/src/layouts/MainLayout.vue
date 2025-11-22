@@ -1,13 +1,17 @@
 <template>
   <q-layout view="lHh Lpr lFf">
-    <q-drawer v-model="drawer" show-if-above bordered :mini="toggleMini" @mouseenter="toggleMini = false"
-      @mouseleave="toggleMini = true" class="drawer-transition full-width">
+    <q-drawer v-model="drawer" show-if-above bordered :mini="toggleMini" mini-to-overlay @mouseenter="toggleMini = false"
+      @mouseleave="toggleMini = true" :width="250" class="drawer-transition full-width">
       <q-list class="full-width">
         <template v-for="(link, index) in pageList" :key="index">
             <EssentialLink v-bind="link" class="full-width" />
         </template>
       </q-list>
     </q-drawer>
+
+    <transition name="backdrop-fade">
+      <div v-if="!toggleMini" class="drawer-backdrop" @click="toggleMini = true"></div>
+    </transition>
 
     <q-page-container  ref="routerCont" class="q-pa-none">
       <router-view />
@@ -74,12 +78,33 @@ onMounted(async () => {
 
 <style lang="scss" scoped>
 .drawer-transition {
-  transition: width 0.3s;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .router-cont {
   transform-origin: top left;
   width: 100%;
   height: 100%;
+}
+
+.drawer-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  pointer-events: all;
+}
+
+.backdrop-fade-enter-active,
+.backdrop-fade-leave-active {
+  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.backdrop-fade-enter-from,
+.backdrop-fade-leave-to {
+  opacity: 0;
 }
 </style>

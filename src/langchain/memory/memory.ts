@@ -277,8 +277,17 @@ export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: num
         message: sessionData['message'],
         timestamp: parseInt(sessionData['timestamp']),
         attachment: sessionData['attachment'],
-        file: sessionData['file']
+        file: sessionData['file'],
+        done: true  // Messages loaded from Redis are complete
       };
+
+      if (sessionData['metadata']) {
+        try {
+          sessData.metadata = JSON.parse(sessionData['metadata']);
+        } catch (e) {
+          Logger.WARN(`Failed to parse metadata for key ${key}: ${e}`);
+        }
+      }
       // Directly add sessionData to the array
       allMessagesWithTimestamps.push(sessData);
     }
@@ -325,6 +334,14 @@ const getLastMsgFromSession = async (sessionId: string): Promise<ChatMessage | n
     message: latestMsg['message'],
     timestamp: parseInt(latestMsg['timestamp']),
   };
+
+  if (latestMsg['metadata']) {
+    try {
+      msg.metadata = JSON.parse(latestMsg['metadata']);
+    } catch (e) {
+      Logger.WARN(`Failed to parse metadata for latest msg in session ${sessionId}: ${e}`);
+    }
+  }
 
   return msg;
 };

@@ -28,7 +28,11 @@ export interface ChatMessage {
     memoryKey?: string;
     file?: string;
     attachment?: string;
-    memoryUser?: string;
+    metadata?: {
+        web_search?: { sources: { title: string; url: string }[] };
+        weather?: any;
+        [key: string]: any;
+    };
 }
 
 export const langMappings: { [key: string]: string } = {
@@ -67,11 +71,13 @@ async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, tools
     }
 
     // 3. Include tools only if we didn't already use tools proactively
+    // AND if auto-detect is NOT enabled (if it is, we trust the proactive check and don't show tools to the main model)
     let toolsSection = '';
-    if (includeTools && enhancedToolSystem.getConfig().enabled && !toolsWereUsed) {
+    const toolsConfig = enhancedToolSystem.getConfig();
+    if (includeTools && toolsConfig.enabled && !toolsWereUsed && !toolsConfig.auto_detect) {
         toolsSection = enhancedToolSystem.getEnabledToolsForPrompt();
         if (toolsSection) {
-            Logger.DEBUG(`Tools included in prompt`);
+            Logger.DEBUG(`Tools included in prompt (Auto-detect disabled)`);
         }
     }
 
@@ -136,13 +142,18 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
         // Step 3: Check if user message needs tools proactively
         let toolResult = '';
+        let toolMetadata: any = {};
         let toolWasUsed = false;
         if (enhancedToolSystem.getConfig().enabled) {
-            const proactiveToolCall = await enhancedToolSystem.detectProactiveToolUsage(msg.message || '');
+            // Get recent history for context
+            const recentHistory = await getLatestMsgsFromSession(msg.sessionId, 5);
+            const proactiveToolCall = await enhancedToolSystem.detectProactiveToolUsage(msg.message || '', recentHistory.messages);
             if (proactiveToolCall) {
                 Logger.INFO(`Proactive tool call detected: ${proactiveToolCall.name}`);
                 try {
-                    toolResult = await enhancedToolSystem.executeTool(proactiveToolCall);
+                    const result = await enhancedToolSystem.executeTool(proactiveToolCall);
+                    toolResult = result.output;
+                    toolMetadata = result.metadata;
                     toolWasUsed = true;
                     Logger.INFO(`Proactive tool executed successfully: ${toolResult.substring(0, 100)}...`);
                 } catch (toolError) {
@@ -157,7 +168,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         let prompt = await buildPrompt(msg, true, toolWasUsed);
         if (toolWasUsed && toolResult) {
             // When we used tools proactively, give AI the results without showing tool instructions
-            prompt += `\n\nRelevant Information: ${toolResult}\n\nUser: ${msg.message}\n\nPlease respond naturally using this information.\n\nOkuu:`;
+            prompt += `\n\nRelevant Information: ${toolResult}\n\nUser: ${msg.message}\n\nPlease respond naturally using this information. Do not hallucinate. Only use the provided information.\n\nOkuu:`;
         }
         Logger.DEBUG(`Prompt built:\n${prompt}`);
 
@@ -174,6 +185,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             reply.sessionId = msg.sessionId;
             reply.timestamp = timestamp;
             reply.memoryKey = streamMemoryKey;
+            reply.metadata = toolMetadata; // Add metadata to the initial reply object
 
             // Let client know AI reply started with the memoryKey
             io.to(msg.sessionId).emit('chat', reply);
@@ -230,6 +242,56 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
             // Save AI reply in memory only if there's actual content
             if (aiReply && aiReply.trim().length > 0) {
+                // Check for reactive tool call (fallback if proactive failed)
+                const reactiveToolCall = enhancedToolSystem.parsePotentialToolCall(aiReply);
+                if (reactiveToolCall) {
+                    Logger.INFO(`Reactive tool call detected: ${reactiveToolCall.name}`);
+
+                    // Notify user we are executing the tool
+                    reply.message = `${aiReply}\n\n*Executing tool: ${reactiveToolCall.name}...*`;
+                    io.to(msg.sessionId).emit('chat', reply);
+
+                    try {
+                        const toolResult = await enhancedToolSystem.executeTool(reactiveToolCall);
+                        const toolOutput = toolResult.output;
+                        const toolMetadata = toolResult.metadata;
+
+                        Logger.INFO(`Reactive tool executed: ${toolOutput.substring(0, 50)}...`);
+
+                        // Generate final response with tool result
+                        const followUpPrompt = `${prompt}\n${aiReply}\n\nTool Result: ${toolOutput}\n\nUser: Please use this information to answer my request. Do not hallucinate. Only use the provided information.\n\nOkuu:`;
+
+                        let finalReply = '';
+                        io.to(msg.sessionId).emit('generationStarted');
+
+                        const followUpStream = await Core.ollama_instance.generate({
+                            prompt: followUpPrompt,
+                            model: Core.model_name,
+                            stream: true,
+                            system: Core.model_settings.system,
+                            think: Core.model_settings.think,
+                        });
+
+                        for await (const part of followUpStream) {
+                            if (Core.shouldStopGeneration) break;
+                            finalReply += part.response;
+                            // Emit with metadata if available
+                            reply.message = finalReply;
+                            reply.metadata = toolMetadata; // Add metadata to the reply object
+                            io.to(msg.sessionId).emit('chat', reply);
+                        }
+
+                        aiReply = finalReply; // Update aiReply for memory saving
+
+                    } catch (error) {
+                        Logger.ERROR(`Reactive tool execution failed: ${error}`);
+                        reply.message += `\n\n*Error executing tool.*`;
+                        io.to(msg.sessionId).emit('chat', reply);
+                    } finally {
+                        io.to(msg.sessionId).emit('generationEnded');
+                    }
+                }
+
                 try {
                     const messageTypeAI = isQuestion(aiReply) ? 'question' : 'statement';
                     await saveMemoryWithEmbedding(
@@ -262,6 +324,27 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
         // Tools are handled proactively before AI response generation
         reply.message = resp.response;
+
+        // Check for reactive tool call in non-stream mode
+        const reactiveToolCall = enhancedToolSystem.parsePotentialToolCall(reply.message);
+        if (reactiveToolCall) {
+            Logger.INFO(`Reactive tool call detected (non-stream): ${reactiveToolCall.name}`);
+            try {
+                const toolResult = await enhancedToolSystem.executeTool(reactiveToolCall);
+                const followUpPrompt = `${prompt}\n${reply.message}\n\nTool Result: ${toolResult}\n\nUser: Please use this information to answer my request.\n\nOkuu:`;
+
+                const followUpResp = await Core.ollama_instance.generate({
+                    prompt: followUpPrompt,
+                    model: Core.model_name,
+                    stream: false,
+                    system: Core.model_settings.system,
+                });
+
+                reply.message = followUpResp.response;
+            } catch (error) {
+                Logger.ERROR(`Reactive tool execution failed: ${error}`);
+            }
+        }
 
         reply.done = true;
         reply.lang = langMappings[franc(msg.message || '')] || 'en-US';

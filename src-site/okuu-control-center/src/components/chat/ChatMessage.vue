@@ -51,6 +51,22 @@
                     </template>
                 </q-img>
             </div>
+            <div v-if="message.done && message.metadata?.web_search?.sources && message.metadata.web_search.sources.length > 0" class="q-mt-sm row q-gutter-xs">
+                <q-chip
+                    v-for="(source, idx) in message.metadata.web_search.sources"
+                    :key="idx"
+                    clickable
+                    @click="openSource(source.url)"
+                    color="teal-7"
+                    text-color="white"
+                    icon="link"
+                    size="sm"
+                    class="cursor-pointer source-chip"
+                >
+                    {{ source.title }}
+                    <q-tooltip>{{ source.url }}</q-tooltip>
+                </q-chip>
+            </div>
             
         </div>
         <!-- TODO: Work on this -->
@@ -148,8 +164,22 @@ const closePreview = () => {
     previewVisible.value = false;
 }
 
+const openSource = (url: string) => {
+    window.open(url, '_blank');
+}
+
 onMounted(async () => {
     okuu_pfp.value = configStore.okuuPfp;
+    
+    // Debug: Log message data to check done flag and metadata
+    if (props.message.metadata?.web_search?.sources) {
+        console.log('Message with sources:', {
+            user: props.message.user,
+            done: props.message.done,
+            sourcesCount: props.message.metadata.web_search.sources.length,
+            sources: props.message.metadata.web_search.sources
+        });
+    }
 });
 
 </script>
@@ -186,5 +216,14 @@ onMounted(async () => {
 .attachment-image {
     max-width: 20%;
     max-height: 200px;
+}
+
+.source-chip {
+    transition: all 0.2s ease;
+}
+
+.source-chip:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 </style>
