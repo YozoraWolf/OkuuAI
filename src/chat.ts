@@ -13,6 +13,7 @@ import {
 } from './langchain/redis';
 import { loadFileContentFromStorage } from './langchain/memory/storage';
 import { enhancedToolSystem } from './tools/enhancedToolSystem';
+import { generateWithCustomEndpoint, OpenAIMessage } from './services/openai-compatible.service';
 
 export interface ChatMessage {
     id?: number;
@@ -182,27 +183,57 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 // Notify that AI generation is starting (not just processing)
                 io.to(msg.sessionId).emit('generationStarted');
                 
-                const stream = await Core.ollama_instance.generate({
-                    prompt,
-                    model: Core.model_name,
-                    stream: true,
-                    system: Core.model_settings.system,
-                    think: Core.model_settings.think,
-                    images: sentImage,
-                });
-
-                for await (const part of stream) {
-                    // Check if generation should be stopped (additional safety check)
-                    if (Core.shouldStopGeneration) {
-                        Logger.INFO('Generation stopped via flag during streaming');
-                        aiReply += ' ...';
-                        break;
+                if (Core.use_custom_endpoint && Core.custom_endpoint_url) {
+                    // Use custom OpenAI-compatible endpoint
+                    Logger.INFO('Using custom endpoint for generation');
+                    
+                    const messages: OpenAIMessage[] = [
+                        { role: 'system', content: Core.model_settings.system },
+                        { role: 'user', content: prompt }
+                    ];
+                    
+                    const stream = generateWithCustomEndpoint(
+                        messages,
+                        Core.model_name,
+                        Core.model_settings.temperature
+                    );
+                    
+                    for await (const part of stream) {
+                        if (Core.shouldStopGeneration) {
+                            Logger.INFO('Generation stopped via flag during streaming');
+                            aiReply += ' ...';
+                            break;
+                        }
+                        aiReply += part;
+                        reply.message = aiReply;
+                        reply.done = false;
+                        io.to(msg.sessionId).emit('chat', reply);
+                        if (callback) callback(part);
                     }
-                    aiReply += part.response;
-                    reply.message = aiReply;
-                    reply.done = false;
-                    io.to(msg.sessionId).emit('chat', reply);
-                    if (callback) callback(part.response);
+                } else {
+                    // Use Ollama (default)
+                    const stream = await Core.ollama_instance.generate({
+                        prompt,
+                        model: Core.model_name,
+                        stream: true,
+                        system: Core.model_settings.system,
+                        think: Core.model_settings.think,
+                        images: sentImage,
+                    });
+
+                    for await (const part of stream) {
+                        // Check if generation should be stopped (additional safety check)
+                        if (Core.shouldStopGeneration) {
+                            Logger.INFO('Generation stopped via flag during streaming');
+                            aiReply += ' ...';
+                            break;
+                        }
+                        aiReply += part.response;
+                        reply.message = aiReply;
+                        reply.done = false;
+                        io.to(msg.sessionId).emit('chat', reply);
+                        if (callback) callback(part.response);
+                    }
                 }
             } catch (error: any) {
                 if (error.name === 'AbortError') {

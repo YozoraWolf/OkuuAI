@@ -84,13 +84,27 @@
                                 </q-tooltip>
                             </q-chip>
                             <q-select v-model="currentModel" :options="modelList"
-                                option-value="name" option-label="name" emit-value
+                                option-value="name" 
+                                :option-label="(item) => item && item.name ? getShortModelName(item.name) : ''"
+                                emit-value
+                                map-options
+                                :disable="hasNoModels || isUsingCustomEndpoint"
                                 class="q-mx-sm" dense outlined
                                 v-on:update:modelValue="configStore.setOkuuModel"
                                 >
                                 <template v-slot:prepend>
                                     <q-icon name="mdi-head-snowflake" />
                                 </template>
+                                <template v-slot:selected>
+                                    <span v-if="hasNoModels">No models available</span>
+                                    <span v-else>{{ getShortModelName(currentModel) }}</span>
+                                </template>
+                                <template v-slot:hint v-if="hasNoModels">
+                                    <span class="text-caption text-negative">No models found</span>
+                                </template>
+                                <q-tooltip v-if="hasNoModels" class="bg-negative text-body1">
+                                    No models available. Check your endpoint configuration in Settings.
+                                </q-tooltip>
                             </q-select>
                         </div>
                     </div>
@@ -176,8 +190,19 @@ const selectedSessionId = ref<string | undefined>(undefined);
 const chatMessagesRef = ref();
 
 // Config store refs
-const { stream, okuuPfp, toggleThinking, currentModel, modelList, configLoading } = storeToRefs(configStore);
+const { stream, okuuPfp, toggleThinking, currentModel, modelList, configLoading, customEndpoint } = storeToRefs(configStore);
 const okuu_pfp = computed(() => okuuPfp.value);
+const isUsingCustomEndpoint = computed(() => customEndpoint.value.use_custom_endpoint);
+const hasNoModels = computed(() => !modelList.value || modelList.value.length === 0);
+
+// Helper function to shorten model names (remove registry/path prefixes)
+const getShortModelName = (name: string): string => {
+    if (!name) return '';
+    // Remove registry prefix (e.g., "registry.ollama.ai/library/llama3" -> "llama3")
+    // Also handles "library/model:tag" -> "model:tag"
+    const parts = name.split('/');
+    return parts[parts.length - 1] || '';
+};
 
 // Auth store refs
 const { apiKey } = storeToRefs(authStore);
@@ -261,6 +286,8 @@ onMounted(async () => {
     await configStore.fetchAllDownloadedModels();
     // fetch current model
     await configStore.getOkuuModel();
+    // fetch custom endpoint settings
+    await configStore.fetchCustomEndpoint();
     // fetch tools configuration
     await toolsStore.fetchToolsConfig();
     await toolsStore.fetchAvailableTools();

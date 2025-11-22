@@ -12,6 +12,7 @@
             </div>
             <Zoom/>
             <GlobalToggles />
+            <CustomEndpointSettings />
         </div>
         <ImageSelectorModal :showModal="showOkuuPfpModal" @close="toggleOkuuPfpSelector" @save="fetchCurrentOkuuPfp" />
     </div>
@@ -20,6 +21,7 @@
 <script setup lang="ts">
 import ImageSelectorModal from 'src/components/settings/ImageSelectorModal.vue';
 import Zoom from 'src/components/settings/Zoom.vue';
+import CustomEndpointSettings from 'src/components/settings/CustomEndpointSettings.vue';
 import { ref, onMounted } from 'vue';
 import { useConfigStore } from 'src/stores/config.store';
 import { useQuasar } from 'quasar';

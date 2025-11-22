@@ -67,6 +67,9 @@ export const init = async () =>
         model_name: assistantConfig.model ?? Core.model_name,
         template: assistantConfig.template ?? Core.template,
         global_memory: assistantConfig.global_memory ?? Core.global_memory,
+        use_custom_endpoint: assistantConfig.use_custom_endpoint ?? Core.use_custom_endpoint,
+        custom_endpoint_url: assistantConfig.custom_endpoint_url ?? Core.custom_endpoint_url,
+        custom_endpoint_api_key: assistantConfig.custom_endpoint_api_key ?? Core.custom_endpoint_api_key,
     });
     Object.assign(Core.model_settings, {
         system: assistantConfig.system_prompt ?? Core.model_settings.system,

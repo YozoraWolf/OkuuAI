@@ -138,3 +138,88 @@ export const setOkuuThink = (req: Request, res: Response) => {
     Logger.INFO(`✅ (API) Think setting set to: ${think}`);
     res.status(200).send({ think: Core.model_settings.think });
 };
+
+// Custom Endpoint Related
+
+export const getCustomEndpoint = (req: Request, res: Response) => {
+    res.status(200).send({ 
+        use_custom_endpoint: Core.use_custom_endpoint,
+        custom_endpoint_url: Core.custom_endpoint_url,
+        custom_endpoint_api_key: Core.custom_endpoint_api_key ? '***' : '' // Hide API key
+    });
+};
+
+export const setCustomEndpoint = (req: Request, res: Response) => {
+    const { use_custom_endpoint, custom_endpoint_url, custom_endpoint_api_key } = req.body;
+    
+    if(use_custom_endpoint !== undefined) {
+        Core.use_custom_endpoint = use_custom_endpoint;
+        updateAssistantConfigJSON({ use_custom_endpoint });
+    }
+    
+    if(custom_endpoint_url !== undefined) {
+        Core.custom_endpoint_url = custom_endpoint_url;
+        updateAssistantConfigJSON({ custom_endpoint_url });
+    }
+    
+    if(custom_endpoint_api_key !== undefined) {
+        Core.custom_endpoint_api_key = custom_endpoint_api_key;
+        updateAssistantConfigJSON({ custom_endpoint_api_key });
+    }
+    
+    Logger.INFO(`✅ (API) Custom Endpoint: ${use_custom_endpoint ? 'Enabled' : 'Disabled'}`);
+    Logger.INFO(`✅ (API) Custom Endpoint URL: ${custom_endpoint_url || 'Not set'}`);
+    
+    res.status(200).send({ 
+        use_custom_endpoint: Core.use_custom_endpoint,
+        custom_endpoint_url: Core.custom_endpoint_url,
+        custom_endpoint_api_key: Core.custom_endpoint_api_key ? '***' : ''
+    });
+};
+
+export const validateCustomEndpoint = async (req: Request, res: Response) => {
+    const { endpoint_url, api_key } = req.body;
+    
+    if(!endpoint_url) {
+        return res.status(400).send({ valid: false, message: 'Endpoint URL is required.' });
+    }
+    
+    try {
+        // Test the endpoint with a simple request
+        const testUrl = `${endpoint_url}/v1/models`;
+        const headers: any = {
+            'Content-Type': 'application/json',
+        };
+        
+        if(api_key) {
+            headers['Authorization'] = `Bearer ${api_key}`;
+        }
+        
+        const response = await fetch(testUrl, {
+            method: 'GET',
+            headers,
+        });
+        
+        if(response.ok) {
+            const data = await response.json();
+            Logger.INFO(`✅ Custom Endpoint validated successfully`);
+            res.status(200).send({ 
+                valid: true, 
+                message: 'Endpoint validated successfully',
+                models: data.data || data.models || []
+            });
+        } else {
+            Logger.WARN(`Custom Endpoint validation failed: ${response.status} ${response.statusText}`);
+            res.status(200).send({ 
+                valid: false, 
+                message: `Endpoint returned ${response.status}: ${response.statusText}`
+            });
+        }
+    } catch (error: any) {
+        Logger.ERROR(`Error validating custom endpoint: ${error.message}`);
+        res.status(200).send({ 
+            valid: false, 
+            message: `Connection failed: ${error.message}`
+        });
+    }
+};
