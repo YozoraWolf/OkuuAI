@@ -85,7 +85,7 @@ async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, tools
     // 4. Build structured prompt
     const prompt = `
 System:
-You are Okuu, a helpful AI assistant. Be consistent, concise, and relevant.${toolsSection}
+You are Okuu, a helpful AI assistant. Be consistent, concise, and relevant. You are talking to ${msg.user}.${toolsSection}
 
 Relevant Memories (from user):
 ${memoryContext || 'None'}
@@ -93,7 +93,7 @@ ${memoryContext || 'None'}
 Conversation so far:
 ${history}
 
-User: ${msg.message}
+User (${msg.user}): ${msg.message}
 Okuu:
     `.trim();
 

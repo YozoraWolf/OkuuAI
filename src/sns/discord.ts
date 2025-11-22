@@ -92,12 +92,12 @@ export class DiscordManager {
             // Prepare ChatMessage
             const chatMsg: ChatMessage = {
                 sessionId: `discord-${message.channel.id}`, // Use channel ID as session ID for continuity in channel
-                user: message.author.username,
+                user: message.member?.displayName ?? message.author.username,
                 message: message.content.replace(/<@!?[0-9]+>/g, '').trim(), // Remove mention
                 timestamp: Date.now(),
                 lang: 'en-US', // Default, could detect
                 stream: false, // Discord doesn't support streaming well in this context yet
-                memoryUser: message.author.username,
+                memoryUser: message.member?.displayName ?? message.author.username,
             };
 
             // Send to Okuu
