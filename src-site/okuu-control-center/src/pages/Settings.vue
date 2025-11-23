@@ -1,10 +1,11 @@
 <template>
     <div class="q-mx-lg">
         <h1 class="q-ma-none q-py-md">Settings</h1>
-        <div v-if="currentOkuuPfp" class="q-my-lg">
+        <div class="q-my-lg">
             <div class="avatar-cont row flex-center" style="width: 250px;" >
-                <q-avatar size="200px" round>
-                    <q-img :src="currentOkuuPfp" />
+                <q-avatar size="200px" round color="grey-3">
+                    <q-img v-if="currentOkuuPfp" :src="currentOkuuPfp" />
+                    <q-icon v-else name="person" size="100px" color="grey-7" />
                 </q-avatar>
 
                 <q-btn label="Set Okuu Pfp" icon="image" size="lg" class="q-mt-md q-mx-md" color="primary"
