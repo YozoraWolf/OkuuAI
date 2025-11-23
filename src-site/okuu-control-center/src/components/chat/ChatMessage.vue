@@ -26,18 +26,17 @@
                         <span v-else-if="part.type === 'nl'" class="newline"><br></span>
                     </template>
                 </div>
-                <q-img v-if="message.attachment && isAttachmentImage"
-                    :src="`data:image/png;base64,${message.attachment}`" loading="lazy"
+                <q-img v-if="message.attachment && isAttachmentImage" :src="attachmentSrc" loading="lazy"
                     class="attachment-image q-mt-sm q-ml-sm cursor-pointer non-selectable"
-                    @click="openPreview(`data:image/png;base64,${message.attachment}`, 'image')">
+                    @click="openPreview(attachmentSrc, 'image')">
                     <template v-slot:loading>
                         <q-spinner size="50px" color="primary" />
                     </template>
                 </q-img>
-                <video v-else-if="message.attachment && isAttachmentVideo" controls
+                <video v-else-if="message.attachment && isAttachmentVideo" controls :key="message.file || 'video'"
                     class="attachment-image q-mt-sm q-ml-sm cursor-pointer non-selectable"
-                    @click="openPreview(`data:video/mp4;base64,${message.attachment}`, 'video')">
-                    <source :src="`data:video/mp4;base64,${message.attachment}`" type="video/mp4">
+                    @click="openPreview(attachmentSrc, 'video')">
+                    <source :src="attachmentSrc" :type="getMimeType(message.file)">
                     Your browser does not support the video tag.
                 </video>
             </div>
@@ -74,11 +73,16 @@
                 class="q-mt-sm row q-col-gutter-sm">
                 <div v-for="(image, idx) in message.metadata.danbooru_images" :key="idx"
                     class="col-4 col-sm-3 col-md-2 relative-position">
-                    <q-img :src="image.url" loading="lazy" class="rounded-borders cursor-pointer shadow-2 full-width"
-                        :ratio="1" style="object-fit: cover;"
-                        @click="openPreview(image.url, 'image', { source: image.source, danbooru: image.source, ...image })">
+                    <q-img :src="getThumbnail(image)" loading="lazy"
+                        class="rounded-borders cursor-pointer shadow-2 full-width" :ratio="1" style="object-fit: cover;"
+                        @click="openPreview(image.url, isVideo(image.url) ? 'video' : 'image', { source: image.source, danbooru: image.source, ...image })">
                         <template v-slot:loading>
                             <q-spinner size="30px" color="primary" />
+                        </template>
+                        <template v-slot:error>
+                            <div class="absolute-full flex flex-center bg-grey-3 text-grey-6">
+                                <q-icon :name="isVideo(image.url) ? 'movie' : 'broken_image'" size="24px" />
+                            </div>
                         </template>
                     </q-img>
                     <div class="absolute-bottom-right q-pa-xs">
@@ -159,6 +163,40 @@ const isAttachmentImage = computed(() => {
 const isAttachmentVideo = computed(() => {
     const ext = props.message.file?.split('.').pop()?.toLowerCase();
     return videoExts.includes(ext || '');
+});
+
+const isVideo = (url: string) => {
+    const ext = url.split('.').pop()?.toLowerCase();
+    return videoExts.includes(ext || '');
+};
+
+const getThumbnail = (image: any) => {
+    if (image.preview_url) return image.preview_url;
+    if (isVideo(image.url)) return ''; // Return empty to trigger error slot for videos without preview
+    return image.url;
+};
+
+const getMimeType = (filename: string | undefined) => {
+    if (!filename) return 'video/mp4';
+    const ext = filename.split('.').pop()?.toLowerCase();
+    switch (ext) {
+        case 'mp4': return 'video/mp4';
+        case 'webm': return 'video/webm';
+        case 'ogg': return 'video/ogg';
+        case 'mov': return 'video/mp4'; // Browsers often handle H.264 .mov as mp4
+        default: return 'video/mp4';
+    }
+};
+
+const attachmentSrc = computed(() => {
+    if (!props.message.attachment) return '';
+    if (isAttachmentImage.value) {
+        return `data:image/png;base64,${props.message.attachment}`;
+    } else if (isAttachmentVideo.value) {
+        const mime = getMimeType(props.message.file);
+        return `data:${mime};base64,${props.message.attachment}`;
+    }
+    return '';
 });
 
 const deleteMessage = () => {

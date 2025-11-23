@@ -2,7 +2,7 @@
     <q-dialog v-model="dialog" maximized transition-show="fade" transition-hide="fade" @hide="closeDialog">
         <div class="media-viewer-container bg-black text-white relative-position flex flex-center full-width full-height"
             @click.self="closeDialog">
-            
+
             <!-- Close Button -->
             <q-btn icon="close" flat round dense class="absolute-top-right q-ma-md z-max" @click="closeDialog" />
 
@@ -16,7 +16,7 @@
                 <!-- Video Player -->
                 <div v-else-if="type === 'video'" class="flex flex-center">
                     <video controls autoplay class="media-element" style="max-height: 90vh; max-width: 90vw;">
-                        <source :src="src" type="video/mp4">
+                        <source :src="src">
                         Your browser does not support the video tag.
                     </video>
                 </div>
@@ -27,12 +27,14 @@
                 <q-btn v-if="metadata" round color="dark" text-color="white" icon="info" @click="showMetadata = true">
                     <q-tooltip>Metadata</q-tooltip>
                 </q-btn>
-                
-                <q-btn v-if="sourceUrl" round color="dark" text-color="white" icon="open_in_new" @click="openUrl(sourceUrl)">
+
+                <q-btn v-if="sourceUrl" round color="dark" text-color="white" icon="open_in_new"
+                    @click="openUrl(sourceUrl)">
                     <q-tooltip>Open Source</q-tooltip>
                 </q-btn>
 
-                <q-btn v-if="danbooruUrl" round color="dark" text-color="white" icon="link" @click="openUrl(danbooruUrl)">
+                <q-btn v-if="danbooruUrl" round color="dark" text-color="white" icon="link"
+                    @click="openUrl(danbooruUrl)">
                     <q-tooltip>Open Danbooru</q-tooltip>
                 </q-btn>
 
@@ -73,6 +75,7 @@
 <script setup lang="ts">
 import { watch, ref, onMounted, onUnmounted, computed, nextTick } from 'vue';
 import { useQuasar } from 'quasar';
+import axios from 'axios';
 import Panzoom from '@panzoom/panzoom';
 
 const $q = useQuasar();
@@ -122,15 +125,15 @@ const initPanzoom = () => {
         if (panzoomInstance) {
             panzoomInstance.destroy();
         }
-        
+
         const elem = canvasElement.value.querySelector('img');
         if (elem) {
-             panzoomInstance = Panzoom(elem as HTMLElement, {
+            panzoomInstance = Panzoom(elem as HTMLElement, {
                 maxScale: 5,
                 minScale: 0.5,
                 contain: 'outside',
-             });
-             elem.parentElement?.addEventListener('wheel', panzoomInstance.zoomWithWheel);
+            });
+            elem.parentElement?.addEventListener('wheel', panzoomInstance.zoomWithWheel);
         }
     }
 };
@@ -145,50 +148,72 @@ const openUrl = (url: string) => {
 };
 
 const downloadMedia = async () => {
-    const dismiss = $q.notify({
-        type: 'ongoing',
+    const notif = $q.notify({
+        group: false, // required to be updatable
+        timeout: 0,
+        spinner: true,
         message: 'Downloading media...',
+        caption: '0%',
         position: 'top',
+        badgeStyle: 'display: none' // Hide the update badge counter
     });
 
     try {
-        const response = await fetch(props.src);
-        const blob = await response.blob();
+        let lastPercent = 0;
+        const response = await axios.get(props.src, {
+            responseType: 'blob',
+            onDownloadProgress: (progressEvent) => {
+                if (progressEvent.total) {
+                    const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                    // Only update notification every 10% or when complete
+                    if (percentCompleted - lastPercent >= 10 || percentCompleted === 100) {
+                        lastPercent = percentCompleted;
+                        notif({
+                            caption: `${percentCompleted}%`
+                        });
+                    }
+                }
+            }
+        });
+
+        const blob = response.data;
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        
+
         // Try to derive filename from URL or metadata, fallback to default
         let filename = `download.${props.type === 'video' ? 'mp4' : 'png'}`;
         if (props.src.startsWith('http')) {
-             const urlParts = props.src.split('/');
-             const lastPart = urlParts[urlParts.length - 1];
-             if (lastPart && lastPart.includes('.')) {
-                 filename = lastPart.split('?')[0] ?? filename; // Remove query params
-             }
+            const urlParts = props.src.split('/');
+            const lastPart = urlParts[urlParts.length - 1];
+            if (lastPart && lastPart.includes('.')) {
+                filename = lastPart.split('?')[0] ?? filename; // Remove query params
+            }
         }
-        
+
         link.download = filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
-        
-        dismiss();
-        $q.notify({
+
+        notif({
+            icon: 'done',
+            spinner: false,
             type: 'positive',
-            message: 'Download completed',
-            position: 'top',
-            timeout: 2000
+            message: 'Download completed!',
+            caption: '',
+            timeout: 2500
         });
     } catch (error) {
         console.error('Download failed:', error);
-        dismiss();
-        $q.notify({
+        notif({
+            icon: 'warning',
+            spinner: false,
             type: 'negative',
-            message: 'Download failed. Opening in new tab...',
-            position: 'top',
-            timeout: 2000
+            message: 'Download failed',
+            caption: 'Opening in new tab...',
+            timeout: 2500
         });
         // Fallback to opening in new tab if fetch fails (e.g. CORS)
         window.open(props.src, '_blank');
@@ -219,7 +244,7 @@ onUnmounted(() => {
 }
 
 .media-element {
-    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
 }
 
 .z-max {
