@@ -1,29 +1,12 @@
 <template>
     <q-layout view="hHh Lpr lFf" class="full-height">
-        <q-drawer side="right" bordered v-model="drawer" :mini="mini" mini-to-overlay :width="300"
-            class="border-left chat-drawer" @mouseenter="startHoverTimer" @mouseleave="stopHoverTimer">
-            <q-list>
-                <q-item class="flex flex-center" clickable @click="addNewSession">
-                    <q-icon name="add" size="sm" class="q-mx-md" />
-                    <q-item-section>Add New Session</q-item-section>
-                </q-item>
-                <q-item v-for="session in sessions" :key="session.sessionId" class="flex flex-center" clickable
-                    @click="selectSession(session.sessionId)" :active="session.sessionId === selectedSessionId">
-                    <q-icon name="chat" color="white" class="q-mx-md" />
-                    <q-item-section class="text-white">{{ session.sessionId }}: {{ session.lastMessage?.user as string
-                    }}: {{ truncate(session.lastMessage?.message as string, 30)
-                        }}</q-item-section>
-                    <q-btn v-if="!mini" flat round color="white" icon="close"
-                        @click="removeSession(session.sessionId)" />
-                </q-item>
-
-            </q-list>
-
-        </q-drawer>
-
-        <transition name="backdrop-fade">
-            <div v-if="!mini" class="drawer-backdrop" @click="stopHoverTimer"></div>
-        </transition>
+        <SessionsDrawer
+            :sessions="sessions"
+            :selected-session-id="selectedSessionId"
+            @add-session="addNewSession"
+            @select-session="selectSession"
+            @remove-session="removeSession"
+        />
 
         <q-page-container class="q-pa-none window-height">
             <div class="chat-container full-width window-height">
@@ -63,10 +46,10 @@ import { ref, nextTick, onMounted, computed, onBeforeUnmount, watch } from 'vue'
 import { useSessionStore } from 'src/stores/session.store';
 import { useQuasar } from 'quasar';
 import ChatMessage from 'src/components/chat/ChatMessage.vue';
+import SessionsDrawer from 'src/components/chat/SessionsDrawer.vue';
 import ChatInput from 'src/components/chat/ChatInput.vue';
 import { SocketioService, Status } from 'src/services/socketio.service';
 import { Socket } from 'socket.io-client';
-import { truncate } from 'src/utils/okuuai_utils';
 import { useConfigStore } from 'src/stores/config.store';
 import ChatConfigModal from 'src/components/chat/ChatConfigModal.vue';
 import ToolsConfigModal from 'src/components/chat/ToolsConfigModal.vue';
@@ -75,8 +58,7 @@ import { useToolsStore } from 'src/stores/tools.store';
 import { useRouter, useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 
-const drawer = ref(true);
-const mini = ref(true);
+
 
 // Use storeToRefs for all store properties we want to remain reactive
 const sessionStore = useSessionStore();
@@ -113,21 +95,7 @@ const statusMessage = ref('Disconnected');
 
 
 
-const hoverTimer = ref<number | null>(null);
 
-const startHoverTimer = () => {
-    hoverTimer.value = window.setTimeout(() => {
-        mini.value = false;
-    }, 500);
-};
-
-const stopHoverTimer = () => {
-    if (hoverTimer.value) {
-        clearTimeout(hoverTimer.value);
-        hoverTimer.value = null;
-    }
-    mini.value = true;
-};
 
 const showToolsConfigModal = ref(false);
 
@@ -201,7 +169,7 @@ const selectSession = async (sessionId: string) => {
     selectedSessionId.value = sessionId;
 
     scrollToBottom();
-    mini.value = true;
+    scrollToBottom();
     socketIO.value = new SocketioService();
     socket.value = await socketIO.value.initializeSocket(sessionId, sessionStore);
     isLoadingSessionMessages.value = false;

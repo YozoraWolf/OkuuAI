@@ -7,7 +7,7 @@
                     <q-icon name="person" />
                 </div>
             </template>
-            <q-img :src="avatar" />
+            <q-img v-else :src="avatar" />
         </q-avatar>
         <div class="full-width">
             <div class="flex full-width justify-between">
@@ -26,13 +26,19 @@
                         <span v-else-if="part.type === 'nl'" class="newline"><br></span>
                     </template>
                 </div>
-                <q-img v-if="message.attachment && isAttachmentImage"
-                    :src="`data:image/png;base64,${message.attachment}`" loading="lazy"
-                    class="attachment-image q-mt-sm q-ml-sm cursor-pointer non-selectable" @click="openPreview">
+                <q-img v-if="message.attachment && isAttachmentImage" :src="attachmentSrc" loading="lazy"
+                    class="attachment-image q-mt-sm q-ml-sm cursor-pointer non-selectable"
+                    @click="openPreview(attachmentSrc, 'image')">
                     <template v-slot:loading>
                         <q-spinner size="50px" color="primary" />
                     </template>
                 </q-img>
+                <video v-else-if="message.attachment && isAttachmentVideo" controls :key="message.file || 'video'"
+                    class="attachment-image q-mt-sm q-ml-sm cursor-pointer non-selectable"
+                    @click="openPreview(attachmentSrc, 'video')">
+                    <source :src="attachmentSrc" :type="getMimeType(message.file)">
+                    Your browser does not support the video tag.
+                </video>
             </div>
             <div v-if="message.done && message.metadata?.web_search?.sources && message.metadata.web_search.sources.length > 0"
                 class="q-mt-sm row q-gutter-xs">
@@ -46,10 +52,10 @@
 
             <!-- Web Search Images -->
             <div v-if="message.done && message.metadata?.image_urls && message.metadata.image_urls.length > 0"
-                class="q-mt-sm row q-gutter-sm">
-                <div v-for="(url, idx) in message.metadata.image_urls" :key="idx" class="relative-position col-auto">
-                    <q-img :src="url" loading="lazy" class="rounded-borders cursor-pointer shadow-2"
-                        style="height: 150px; width: 150px; object-fit: cover;" @click="openSource(url)">
+                class="q-mt-sm row q-col-gutter-sm">
+                <div v-for="(url, idx) in message.metadata.image_urls" :key="idx" class="col-4 col-sm-3 col-md-2">
+                    <q-img :src="url" loading="lazy" class="rounded-borders cursor-pointer shadow-2 full-width"
+                        :ratio="1" style="object-fit: cover;" @click="openPreview(url, 'image', { source: url })">
                         <template v-slot:loading>
                             <q-spinner size="30px" color="primary" />
                         </template>
@@ -64,23 +70,25 @@
 
             <!-- Danbooru Images -->
             <div v-if="message.done && message.metadata?.danbooru_images && message.metadata.danbooru_images.length > 0"
-                class="q-mt-sm">
+                class="q-mt-sm row q-col-gutter-sm">
                 <div v-for="(image, idx) in message.metadata.danbooru_images" :key="idx"
-                    class="danbooru-image-container q-mb-md">
-                    <q-img :src="image.url" loading="lazy" class="danbooru-image cursor-pointer"
-                        @click="openSource(image.source)">
+                    class="col-4 col-sm-3 col-md-2 relative-position">
+                    <q-img :src="getThumbnail(image)" loading="lazy"
+                        class="rounded-borders cursor-pointer shadow-2 full-width" :ratio="1" style="object-fit: cover;"
+                        @click="openPreview(image.url, isVideo(image.url) ? 'video' : 'image', { source: image.source, danbooru: image.source, ...image })">
                         <template v-slot:loading>
-                            <q-spinner size="50px" color="primary" />
+                            <q-spinner size="30px" color="primary" />
+                        </template>
+                        <template v-slot:error>
+                            <div class="absolute-full flex flex-center bg-grey-3 text-grey-6">
+                                <q-icon :name="isVideo(image.url) ? 'movie' : 'broken_image'" size="24px" />
+                            </div>
                         </template>
                     </q-img>
-                    <div class="q-mt-xs row q-gutter-xs">
-                        <q-chip v-if="image.artist" size="sm" color="purple-7" text-color="white" icon="brush">
-                            {{ image.artist }}
-                        </q-chip>
-                        <q-chip size="sm"
+                    <div class="absolute-bottom-right q-pa-xs">
+                        <q-chip size="xs" dense
                             :color="image.rating === 's' ? 'green-7' : image.rating === 'q' ? 'orange-7' : 'red-7'"
                             text-color="white" :icon="image.rating === 's' ? 'check_circle' : 'warning'">
-                            {{ image.rating === 's' ? 'Safe' : image.rating === 'q' ? 'Questionable' : 'Explicit' }}
                         </q-chip>
                     </div>
                 </div>
@@ -88,7 +96,7 @@
 
         </div>
         <!-- TODO: Work on this -->
-        <PreviewImage :imageSrc="`data:image/png;base64,${message.attachment}` || ''" :visible="previewVisible"
+        <PreviewImage :src="previewSrc" :type="previewType" :visible="previewVisible" :metadata="previewMetadata"
             @close="closePreview" />
     </div>
 </template>
@@ -123,10 +131,15 @@ const props = defineProps({
     deleteBtn: {
         type: Boolean,
         default: false,
+    },
+    avatar: {
+        type: String,
+        default: '',
     }
 });
 
 const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
+const videoExts = ['mp4', 'webm', 'ogg', 'mov'];
 
 const showDeleteBtn = ref(false);
 
@@ -149,6 +162,45 @@ const previewVisible = ref(false);
 const isAttachmentImage = computed(() => {
     const ext = props.message.file?.split('.').pop()?.toLowerCase();
     return imageExts.includes(ext || '');
+});
+
+const isAttachmentVideo = computed(() => {
+    const ext = props.message.file?.split('.').pop()?.toLowerCase();
+    return videoExts.includes(ext || '');
+});
+
+const isVideo = (url: string) => {
+    const ext = url.split('.').pop()?.toLowerCase();
+    return videoExts.includes(ext || '');
+};
+
+const getThumbnail = (image: any) => {
+    if (image.preview_url) return image.preview_url;
+    if (isVideo(image.url)) return ''; // Return empty to trigger error slot for videos without preview
+    return image.url;
+};
+
+const getMimeType = (filename: string | undefined) => {
+    if (!filename) return 'video/mp4';
+    const ext = filename.split('.').pop()?.toLowerCase();
+    switch (ext) {
+        case 'mp4': return 'video/mp4';
+        case 'webm': return 'video/webm';
+        case 'ogg': return 'video/ogg';
+        case 'mov': return 'video/mp4'; // Browsers often handle H.264 .mov as mp4
+        default: return 'video/mp4';
+    }
+};
+
+const attachmentSrc = computed(() => {
+    if (!props.message.attachment) return '';
+    if (isAttachmentImage.value) {
+        return `data:image/png;base64,${props.message.attachment}`;
+    } else if (isAttachmentVideo.value) {
+        const mime = getMimeType(props.message.file);
+        return `data:${mime};base64,${props.message.attachment}`;
+    }
+    return '';
 });
 
 const deleteMessage = () => {
@@ -174,13 +226,21 @@ const editMessage = () => {
     // TODO: Implement edit message logic
 }
 
-const openPreview = () => {
-    console.log('Opening image', previewVisible.value);
+const previewSrc = ref('');
+const previewType = ref('image');
+const previewMetadata = ref<any>(null);
+
+const openPreview = (src: string, type: string = 'image', metadata: any = null) => {
+    previewSrc.value = src;
+    previewType.value = type;
+    previewMetadata.value = metadata;
     previewVisible.value = true;
 }
 
 const closePreview = () => {
     previewVisible.value = false;
+    previewSrc.value = '';
+    previewMetadata.value = null;
 }
 
 const openSource = (url: string) => {
@@ -210,6 +270,13 @@ onMounted(async () => {
     flex-direction: row;
     margin-top: 2%;
     margin-bottom: 2%;
+    transition: background-color 0.3s ease;
+    border-radius: 8px;
+    padding: 8px;
+
+    &:hover {
+        background-color: rgba(255, 255, 255, 0.05);
+    }
 }
 
 .avatar {
