@@ -95,12 +95,12 @@ async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, tools
     let systemPrompt = Core.model_settings.system;
 
     // Replace templates
-    systemPrompt = systemPrompt.replace('{{user}}', msg.user || 'User');
+    systemPrompt = systemPrompt.replace(/{{user}}/g, msg.user || 'User');
 
     if (msg.metadata?.discord_mention) {
-        systemPrompt = systemPrompt.replace('{{mention}}', `When replying, you MUST mention the user using this exact string: ${msg.metadata.discord_mention}`);
+        systemPrompt = systemPrompt.replace(/{{mention}}/g, `When replying, you MUST mention the user using this exact string: ${msg.metadata.discord_mention}`);
     } else {
-        systemPrompt = systemPrompt.replace('{{mention}}', '');
+        systemPrompt = systemPrompt.replace(/{{mention}}/g, '');
     }
 
     const prompt = `
