@@ -177,8 +177,8 @@ export class EnhancedToolSystem {
         // Initialize MCP servers
         this.initializeMCPServers();
 
-        // Danbooru tools - DISABLED for now
-        /*
+
+        // Danbooru tools - RE-ENABLED
         // Register Danbooru tag lookup
         this.registerTool({
             name: "danbooru_tag_lookup",
@@ -200,8 +200,8 @@ export class EnhancedToolSystem {
                 const result = await lookupDanbooruTag(params.tag);
 
                 if (result.exists) {
-                    // Return neutral factual data - let Okuu handle the conversation naturally
-                    return `Danbooru tag found: "${result.tagString}" (${result.count.toLocaleString()} images available). [SYSTEM: You MUST now ask the user if they would like to see images of this character.]`;
+                    // Return neutral factual data
+                    return `Danbooru tag found: "${result.tagString}" (${result.count.toLocaleString()} images available)`;
                 } else {
                     // Tag not found - just state the fact
                     return `Danbooru tag "${params.tag}" not found`;
@@ -209,9 +209,59 @@ export class EnhancedToolSystem {
             }
         });
 
+        // Register Danbooru tag validation tool (smart multi-tag processing)
+        this.registerTool({
+            name: "danbooru_validate_tags",
+            description: "Intelligently validate tags and search Danbooru for images. Deduplicates overlapping tags. Returns images directly. Infer 'limit' from user input (e.g., '5 images' → limit: 5).",
+            category: 'web',
+            enabled: true,
+            parameters: {
+                type: "object",
+                properties: {
+                    input: {
+                        type: "string",
+                        description: "Space-separated tag words to validate (e.g., 'reimu hakurei smiling')"
+                    },
+                    limit: {
+                        type: "number",
+                        description: "Number of images to return (default 5, max 20)",
+                        default: 5
+                    },
+                    random: {
+                        type: "boolean",
+                        description: "If true, get random images (default true)",
+                        default: true
+                    }
+                },
+                required: ["input"]
+            },
+            execute: async (params: { input: string; limit?: number; random?: boolean }) => {
+                const { validateAndCombineTags } = await import('./danbooru');
+                const result = await validateAndCombineTags(params.input, 2);
+
+                if (result.validatedTags.length === 0) {
+                    return `No valid Danbooru tags found in "${params.input}". Consider using web_search instead.`;
+                }
+
+                // Automatically search with validated tags
+                const danbooruSearch = this.tools.get('danbooru_search');
+                if (danbooruSearch) {
+                    const searchResult = await danbooruSearch.execute({
+                        tags: result.tags,
+                        limit: params.limit || 5,
+                        random: params.random !== false
+                    });
+
+                    return searchResult;
+                }
+
+                return `Validated tags: "${result.tags}" but danbooru_search is not available`;
+            }
+        });
+
         // Register Danbooru search tool
         this.registerTool(danbooruTool);
-        */
+
     }
 
     public setConfig(config: ToolConfig) {
@@ -244,7 +294,11 @@ export class EnhancedToolSystem {
                 description: 'Search long-term memory for past conversations. Params: {"query": "search term"}',
                 enabled: this.config.memory_search
             },
-            /* Danbooru tools disabled
+            {
+                name: 'danbooru_validate_tags',
+                description: 'Validate and combine multiple tag words for Danbooru. Deduplicates overlapping tags. Params: {"input": "reimu hakurei smiling", "maxTags": 2}',
+                enabled: true
+            },
             {
                 name: 'danbooru_search',
                 description: 'Search for anime-style images on Danbooru. MAX 2 TAGS ONLY. Params: {"tags": "tag1 tag2", "limit": number, "random": true/false}',
@@ -252,10 +306,9 @@ export class EnhancedToolSystem {
             },
             {
                 name: 'danbooru_tag_lookup',
-                description: 'Check if a Danbooru tag exists and image count. Use BEFORE offering image search. Params: {"tag": "tag_name"}',
+                description: 'Check if a Danbooru tag exists and image count. Use BEFORE danbooru_search. Params: {"tag": "tag_name"}',
                 enabled: true
             }
-            */
         ];
 
         const enabledTools = tools

@@ -35,6 +35,51 @@ export async function lookupDanbooruTag(tag: string): Promise<{ exists: boolean;
     }
 }
 
+/**
+ * Intelligently validate and combine multiple tag words from user input
+ * Example: "reimu hakurei smiling" → "hakurei_reimu smiling"
+ * - Validates each word via autocomplete
+ * - Deduplicates overlapping tags (skip if word is in already-validated tag)
+ * - Returns up to 2 validated tags
+ */
+export async function validateAndCombineTags(input: string, maxTags: number = 2): Promise<{ tags: string; validatedTags: string[] }> {
+    const words = input.trim().toLowerCase().split(/\s+/);
+    const validatedTags: string[] = [];
+
+    Logger.INFO(`Validating tags from input: "${input}"`);
+
+    for (const word of words) {
+        if (validatedTags.length >= maxTags) {
+            Logger.INFO(`Reached max tags limit (${maxTags}), stopping validation`);
+            break;
+        }
+
+        // Check if this word is already contained in any validated tag
+        const isContained = validatedTags.some(tag => tag.includes(word));
+        if (isContained) {
+            Logger.INFO(`Skipping "${word}" - already contained in validated tag`);
+            continue;
+        }
+
+        // Look up this word
+        const result = await lookupDanbooruTag(word);
+        if (result.exists) {
+            validatedTags.push(result.tagString);
+            Logger.INFO(`Validated "${word}" → "${result.tagString}"`);
+        } else {
+            Logger.WARN(`Tag "${word}" not found on Danbooru, skipping`);
+        }
+    }
+
+    const combinedTags = validatedTags.join(' ');
+    Logger.INFO(`Final validated tags: "${combinedTags}"`);
+
+    return {
+        tags: combinedTags,
+        validatedTags
+    };
+}
+
 export const danbooruTool: Tool = {
     name: "danbooru_search",
     description: "Search for anime-style images on Danbooru. IMPORTANT: Maximum 2 tags allowed (free API limit). Prioritize the most specific tags (e.g., character name + '1girl' OR series name + character).",
@@ -68,17 +113,34 @@ export const danbooruTool: Tool = {
                 return `Error: Danbooru's free API allows maximum 2 tags. You provided ${tagArray.length} tags: "${params.tags}". Please use only the 2 most important tags (e.g., character name and "1girl").`;
             }
 
-            const limit = Math.min(params.limit || 1, 5);
+
+            const limit = Math.min(params.limit || 1, 20); // Cap at 20 images max
             const useRandom = params.random || false;
 
-            // For random selection, add random:true to tags or use page parameter
+            // Build base URL
             let url = `https://danbooru.donmai.us/posts.json?tags=${encodeURIComponent(params.tags)}&limit=${limit}`;
 
             if (useRandom) {
-                // Get a random page (Danbooru supports page parameter)
-                // For truly random, we'd need to know total count, but we can approximate
-                const randomPage = Math.floor(Math.random() * 100) + 1; // Random page 1-100
-                url += `&page=${randomPage}`;
+                // Get post count to calculate proper random page
+                try {
+                    const countUrl = `https://danbooru.donmai.us/counts/posts.json?tags=${encodeURIComponent(params.tags)}`;
+                    Logger.INFO(`Getting post count from: ${countUrl}`);
+                    const countResponse = await axios.get(countUrl);
+                    const totalPosts = countResponse.data?.counts?.posts || 0;
+
+                    if (totalPosts > 0) {
+                        const maxPage = Math.ceil(totalPosts / limit);
+                        const randomPage = Math.floor(Math.random() * Math.min(maxPage, 200)) + 1; // Cap at 200 pages for API limit
+                        url += `&page=${randomPage}`;
+                        Logger.INFO(`Total posts: ${totalPosts}, max pages: ${maxPage}, using random page: ${randomPage}`);
+                    } else {
+                        Logger.WARN(`No posts found for count, continuing without random page`);
+                    }
+                } catch (countError: any) {
+                    Logger.WARN(`Failed to get post count, using fallback random page: ${countError.message}`);
+                    const randomPage = Math.floor(Math.random() * 100) + 1;
+                    url += `&page=${randomPage}`;
+                }
             }
 
             Logger.INFO(`Searching Danbooru: ${url}`);
