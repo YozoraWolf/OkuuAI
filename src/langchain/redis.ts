@@ -89,7 +89,8 @@ export async function saveMemoryWithEmbedding(
   type: string = 'statement',
   thinking: string = '',
   existingMemoryKey?: string,
-  metadata?: any
+  metadata?: any,
+  timestamp?: number
 ) {
   try {
     // Generate embedding for the statement (e.g., "I live in Tokyo")
@@ -104,13 +105,13 @@ export async function saveMemoryWithEmbedding(
       throw new Error(`Embedding dimensionality mismatch: Expected 768, got ${embedding.length}`);
     }
 
-    const timestamp = Date.now();
-    const memoryKey = existingMemoryKey || `okuuMemory:${sessionId}:${timestamp}`;
+    const finalTimestamp = timestamp || Date.now();
+    const memoryKey = existingMemoryKey || `okuuMemory:${sessionId}:${finalTimestamp}`;
     // Save the answer or relevant statement (not the question)
     const data: any = {
       message,
       thinking,
-      timestamp: timestamp,
+      timestamp: finalTimestamp,
       memoryKey,
       sessionId: sessionId || "-1",
       type,
@@ -130,7 +131,7 @@ export async function saveMemoryWithEmbedding(
       memoryKey,
       message,
       thinking,
-      timestamp,
+      timestamp: finalTimestamp,
       user,
       sessionId,
       type,

@@ -1,7 +1,7 @@
 <template>
     <q-layout view="hHh Lpr lFf" class="full-height">
-        <q-drawer side="right" bordered v-model="drawer" :mini="mini" mini-to-overlay :width="300" class="border-left chat-drawer" @mouseenter="startHoverTimer"
-            @mouseleave="stopHoverTimer">
+        <q-drawer side="right" bordered v-model="drawer" :mini="mini" mini-to-overlay :width="300"
+            class="border-left chat-drawer" @mouseenter="startHoverTimer" @mouseleave="stopHoverTimer">
             <q-list>
                 <q-item class="flex flex-center" clickable @click="addNewSession">
                     <q-icon name="add" size="sm" class="q-mx-md" />
@@ -11,7 +11,7 @@
                     @click="selectSession(session.sessionId)" :active="session.sessionId === selectedSessionId">
                     <q-icon name="chat" color="white" class="q-mx-md" />
                     <q-item-section class="text-white">{{ session.sessionId }}: {{ session.lastMessage?.user as string
-                        }}: {{ truncate(session.lastMessage?.message as string, 30)
+                    }}: {{ truncate(session.lastMessage?.message as string, 30)
                         }}</q-item-section>
                     <q-btn v-if="!mini" flat round color="white" icon="close"
                         @click="removeSession(session.sessionId)" />
@@ -22,12 +22,13 @@
         </q-drawer>
 
         <transition name="backdrop-fade">
-          <div v-if="!mini" class="drawer-backdrop" @click="stopHoverTimer"></div>
+            <div v-if="!mini" class="drawer-backdrop" @click="stopHoverTimer"></div>
         </transition>
 
         <q-page-container class="q-pa-none window-height">
             <div class="chat-container full-width window-height">
-                <div class="chat-messages q-pa-md" v-if="selectedSession && selectedSession.messages" ref="chatMessagesRef" v-scale>
+                <div class="chat-messages q-pa-md" v-if="selectedSession && selectedSession.messages"
+                    ref="chatMessagesRef" v-scale>
                     <q-inner-loading :showing="isLoadingSessionMessages">
                         <q-spinner color="primary" size="70" />
                     </q-inner-loading>
@@ -44,21 +45,11 @@
                 <div v-if="isLoadingResponse || isStreaming">
                     <q-spinner-dots color="primary" size="md" class="q-mx-md" />
                 </div>
-                <ChatInput
-                    v-if="selectedSession"
-                    :loading="isLoadingResponse"
-                    :generating="isGenerating"
-                    :disable-input="!selectedSession || (!isLoadingResponse && configLoading)"
-                    :status="status"
-                    :status-message="statusMessage"
-                    :status-icon="statusIcon"
-                    :status-color="statusColor"
-                    @send="sendMessage"
-                    @stop="stopGeneration"
-                    @retry="retryConnection"
-                    @open-config="showConfigModal"
-                    @open-tools-config="openToolsConfig"
-                />
+                <ChatInput v-if="selectedSession" :loading="isLoadingResponse" :generating="isGenerating"
+                    :disable-input="!selectedSession || (!isLoadingResponse && configLoading)" :status="status"
+                    :status-message="statusMessage" :status-icon="statusIcon" :status-color="statusColor"
+                    @send="sendMessage" @stop="stopGeneration" @retry="retryConnection" @open-config="showConfigModal"
+                    @open-tools-config="openToolsConfig" />
             </div>
         </q-page-container>
 
@@ -155,7 +146,7 @@ const openToolsConfig = () => {
 
 onMounted(async () => {
     authStore.loadApiKey();
-    if(!apiKey.value) {
+    if (!apiKey.value) {
         router.push('/login');
         return;
     }
@@ -208,13 +199,13 @@ const selectSession = async (sessionId: string) => {
     await sessionStore.fetchSessionMessages(sessionId);
     sessionStore.setCurrentSessionId(sessionId);
     selectedSessionId.value = sessionId;
-    
+
     scrollToBottom();
     mini.value = true;
     socketIO.value = new SocketioService();
     socket.value = await socketIO.value.initializeSocket(sessionId, sessionStore);
     isLoadingSessionMessages.value = false;
-    
+
     if (route.params.id !== sessionId) {
         router.replace({ path: `/chat/${sessionId}` });
     }
@@ -228,16 +219,22 @@ const addNewSession = async () => {
 
 const sendMessage = async (messageText: string, file: File | null) => {
     if (selectedSession.value && messageText.trim()) {
+        const timestamp = Date.now();
         const message = {
-            timestamp: Date.now(),
+            timestamp: timestamp,
             user: 'wolf',
             message: messageText,
             sessionId: selectedSession.value.sessionId,
             memoryKey: '',
             stream: stream.value,
             think: toggleThinking.value,
-            done: false,
+            done: true, // User messages are always done
         };
+
+        // Immediately add user message to UI for instant feedback
+        sessionStore.addMessageToSession(message);
+
+        // Then emit to server
         socket.value?.emit('chat', message);
         isLoadingResponse.value = true;
         scrollToBottom();
@@ -400,5 +397,4 @@ watch(() => status.value, (status) => {
 .q-item--active {
     background-color: var(--q-primary) !important;
 }
-
 </style>

@@ -143,7 +143,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         // Step 1: Save user input in memory
         const messageType = isQuestion(msg.message as string) ? 'question' : 'statement';
         const memoryUser = msg.memoryUser || 'user';
-        const memory = await saveMemoryWithEmbedding(msg.sessionId, msg.message as string, memoryUser, messageType);
+        const memory = await saveMemoryWithEmbedding(msg.sessionId, msg.message as string, memoryUser, messageType, '', undefined, msg.metadata, msg.timestamp);
         Logger.DEBUG(`Saved memory: ${memory.memoryKey}`);
 
         // Step 2: Update attachment in memory if file exists
@@ -189,8 +189,8 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         // Step 4: Build prompt (memories + history + user msg + tool results if any)
         let prompt = await buildPrompt(msg, true, toolWasUsed);
         if (toolWasUsed && toolResult) {
-            // When we used tools proactively, give AI the results without showing tool instructions
-            prompt += `\n\nRelevant Information: ${toolResult}\n\nUser: ${msg.message}\n\nPlease respond naturally using this information. Do not hallucinate. Only use the provided information.\n\nOkuu:`;
+            // Tool results already contain natural language guidance
+            prompt += `\n\n${toolResult}\n\nOkuu:`;
         }
         Logger.DEBUG(`Prompt built:\n${prompt}`);
 

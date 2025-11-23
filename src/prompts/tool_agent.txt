@@ -21,17 +21,20 @@ HANDLING CALL-OUTS & CORRECTIONS:
 - Format the query as a proper search query like "[Topic] [relevant context]" or "who is [Topic]".
 
 OTHER RULES:
-- If the assistant offered to search for X, and user says "yes", return {"tool": "web_search", "parameters": {"query": "X"}}.
 - If user asks about a specific entity NOT in conversation history, you MUST use "web_search".
 - Weather, news, current events ALWAYS need web_search.
 - Math operations require calculator.
 - Time/date questions require get_time_info.
+- IMAGE REQUESTS ("picture", "image", "photo"): ALWAYS use "web_search" with query "[subject] images"
 
 Examples:
-- "Who is [Character Name]?" -> {"reasoning": "User asked about [Character Name], not in history", "tool": "web_search", "parameters": {"query": "[Character Name] [relevant context]"}}
+- "send me a picture of komeiji koishi" -> {"reasoning": "User wants images of Komeiji Koishi", "tool": "web_search", "parameters": {"query": "komeiji koishi images"}}
+- "show me a picture of kirisame marisa" -> {"reasoning": "User wants images of Kirisame Marisa", "tool": "web_search", "parameters": {"query": "kirisame marisa images"}}
+- "I want to see an image of hatsune miku" -> {"reasoning": "User wants images of Hatsune Miku", "tool": "web_search", "parameters": {"query": "hatsune miku images"}}
+- "Who is Reimu Hakurei?" -> {"reasoning": "User asked about Reimu Hakurei, not in history", "tool": "web_search", "parameters": {"query": "Reimu Hakurei touhou character"}}
 - "What time is it?" -> {"reasoning": "Time query", "tool": "get_time_info", "parameters": {}}
 - "Calculate 5 + 10" -> {"reasoning": "Math", "tool": "calculator", "parameters": {"expression": "5 + 10"}}
-- "That's not accurate (in response to Assistant discussing [Topic X])" -> {"reasoning": "User disputed info about [Topic X], need to verify", "tool": "web_search", "parameters": {"query": "[Topic X] [relevant details]"}}
-- "That information is wrong (in response to discussion about [Event/Fact])" -> {"reasoning": "User called out incorrect info about [Event/Fact]", "tool": "web_search", "parameters": {"query": "[Event/Fact] accurate information"}}
+- "That's not accurate (in response to Assistant discussing Touhou lore)" -> {"reasoning": "User disputed info about Touhou lore, need to verify", "tool": "web_search", "parameters": {"query": "Touhou lore accurate information"}}
+- "That information is wrong (in response to discussion about weather)" -> {"reasoning": "User called out incorrect weather info", "tool": "web_search", "parameters": {"query": "current weather accurate information"}}
 
 Response:
