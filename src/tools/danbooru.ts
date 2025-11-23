@@ -160,6 +160,7 @@ export const danbooruTool: Tool = {
                 return {
                     id: post.id,
                     url: post.file_url || post.large_file_url || post.source,
+                    preview_url: post.preview_file_url || post.large_file_url || post.file_url, // Add preview_url
                     rating: post.rating,
                     tags: post.tag_string_character,
                     artist: post.tag_string_artist,

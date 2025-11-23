@@ -9,24 +9,30 @@ let io: Server;
 
 export const setupSockets = (server: HTTPServer) => {
     io = new Server(server, {
+        cors: {
+            origin: "*", // Allow all origins - for production, specify exact origins
+            methods: ["GET", "POST"],
+            credentials: true
+        },
         pingInterval: 10000,
         pingTimeout: 5000,
+        transports: ['websocket', 'polling'] // Enable fallback to polling if websocket fails
     }
     );
 
     io.on('connection', (socket) => {
-        Logger.INFO('A client connected: '+socket.id);
+        Logger.INFO('A client connected: ' + socket.id);
 
         socket.on('joinChat', (sessionId: string) => {
-            Logger.DEBUG('Joining chat: '+sessionId);
+            Logger.DEBUG('Joining chat: ' + sessionId);
             socket.join(sessionId);
         });
 
-                // Handle chat messages
+        // Handle chat messages
         socket.on('chat', async (data: any) => {
             try {
                 if (!data || !data.sessionId || !data.message) {
-                    Logger.ERROR('Invalid chat data received: '+data);
+                    Logger.ERROR('Invalid chat data received: ' + data);
                     socket.emit('error', { message: 'Invalid data format' });
                     return;
                 }
@@ -38,7 +44,7 @@ export const setupSockets = (server: HTTPServer) => {
 
                 //socket.emit('chat', { success: true });
             } catch (err) {
-                Logger.ERROR('Error processing chat message: '+err);
+                Logger.ERROR('Error processing chat message: ' + err);
                 socket.emit('error', { message: 'Internal server error' });
             }
         });
@@ -51,15 +57,15 @@ export const setupSockets = (server: HTTPServer) => {
                     return;
                 }
                 Logger.DEBUG(`Received stop generation signal for session: ${data.sessionId}`);
-                
+
                 // Set flag to prevent generation from starting if it hasn't started yet
                 Core.shouldStopGeneration = true;
-                
+
                 // Use Ollama's built-in abort method to stop all streaming generations
                 Core.ollama_instance.abort();
                 Logger.INFO('Generation aborted successfully');
             } catch (err) {
-                Logger.ERROR('Error processing stop generation signal: '+err);
+                Logger.ERROR('Error processing stop generation signal: ' + err);
             }
         });
 
@@ -73,14 +79,14 @@ export const setupSockets = (server: HTTPServer) => {
                 Logger.DEBUG(`Received stop generation signal for session: ${data.sessionId}`);
                 //socket.emit('chat', { success: true });
             } catch (err) {
-                Logger.ERROR('Error processing chat message: '+err);
+                Logger.ERROR('Error processing chat message: ' + err);
                 socket.emit('error', { message: 'Internal server error' });
             }
         });
 
         // Handle disconnection
         socket.on('disconnect', () => {
-            Logger.INFO('Client disconnected: '+socket.id);
+            Logger.INFO('Client disconnected: ' + socket.id);
         });
     });
 
