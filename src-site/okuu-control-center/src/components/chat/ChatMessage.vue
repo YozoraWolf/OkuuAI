@@ -7,7 +7,7 @@
                     <q-icon name="person" />
                 </div>
             </template>
-            <q-img :src="avatar" />
+            <q-img v-else :src="avatar" />
         </q-avatar>
         <div class="full-width">
             <div class="flex full-width justify-between">
@@ -131,6 +131,10 @@ const props = defineProps({
     deleteBtn: {
         type: Boolean,
         default: false,
+    },
+    avatar: {
+        type: String,
+        default: '',
     }
 });
 
@@ -266,6 +270,13 @@ onMounted(async () => {
     flex-direction: row;
     margin-top: 2%;
     margin-bottom: 2%;
+    transition: background-color 0.3s ease;
+    border-radius: 8px;
+    padding: 8px;
+
+    &:hover {
+        background-color: rgba(255, 255, 255, 0.05);
+    }
 }
 
 .avatar {
