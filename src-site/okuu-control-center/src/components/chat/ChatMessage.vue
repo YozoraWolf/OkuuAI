@@ -1,12 +1,12 @@
 <template>
     <div class="chat-message row no-wrap q-mb-sm full-width" @mouseover="showDeleteBtn = true" @mouseleave="showDeleteBtn = false">
-        <q-avatar :src="avatar" size="32px" round class="avatar flex selft-start" style="z-index: 1;">
+        <q-avatar size="32px" round class="avatar flex selft-start" style="z-index: 1;">
             <template v-if="!avatar">
             <div class="no-avatar flex flex-center" style="width: 32px; height: 32px;">
                 <q-icon name="person" />
             </div>
             </template>
-            <q-img :src="avatar" />
+            <q-img v-else :src="avatar" />
         </q-avatar>
         <div class="full-width">
             <div class="flex full-width justify-between">
@@ -104,17 +104,16 @@ const props = defineProps({
     deleteBtn: {
         type: Boolean,
         default: false,
+    },
+    avatar: {
+        type: String,
+        default: '',
     }
 });
 
 const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
 
 const showDeleteBtn = ref(false);
-
-
-const okuu_pfp = ref();
-
-const avatar: ComputedRef<any> = computed(() => props.message.user.toLocaleLowerCase() === 'okuu' ? okuu_pfp : '');
 
 const formattedTimestamp = computed(() => {
     const userTimezone = localStorage.getItem('userTimezone') || dayjs.tz.guess();
@@ -169,8 +168,6 @@ const openSource = (url: string) => {
 }
 
 onMounted(async () => {
-    okuu_pfp.value = configStore.okuuPfp;
-    
     // Debug: Log message data to check done flag and metadata
     if (props.message.metadata?.web_search?.sources) {
         console.log('Message with sources:', {
