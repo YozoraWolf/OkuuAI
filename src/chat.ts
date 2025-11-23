@@ -65,6 +65,15 @@ async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, tools
 
     // 2. Get recent chat history, clamp by length
     const lastMsgs = await getLatestMsgsFromSession(msg.sessionId, 50);
+
+    // Filter out the current message if it's already in the history (to avoid duplication in prompt)
+    if (lastMsgs.messages.length > 0) {
+        const lastMsg = lastMsgs.messages[lastMsgs.messages.length - 1];
+        if (lastMsg.message === msg.message && (lastMsg.user === msg.user || lastMsg.user === msg.memoryUser)) {
+            lastMsgs.messages.pop();
+        }
+    }
+
     let historyLines = lastMsgs.messages.map((m: any) => `${m.user}: ${m.message}`);
     let history = historyLines.join('\n');
     if (history.length > MAX_HISTORY_CHARS) {
@@ -83,9 +92,20 @@ async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, tools
     }
 
     // 4. Build structured prompt
+    let systemPrompt = Core.model_settings.system;
+
+    // Replace templates
+    systemPrompt = systemPrompt.replace('{{user}}', msg.user || 'User');
+
+    if (msg.metadata?.discord_mention) {
+        systemPrompt = systemPrompt.replace('{{mention}}', `When replying, you MUST mention the user using this exact string: ${msg.metadata.discord_mention}`);
+    } else {
+        systemPrompt = systemPrompt.replace('{{mention}}', '');
+    }
+
     const prompt = `
 System:
-You are Okuu, a helpful AI assistant. Be consistent, concise, and relevant. You are talking to ${msg.user}.${toolsSection}
+${systemPrompt}${toolsSection}
 
 Relevant Memories (from user):
 ${memoryContext || 'None'}

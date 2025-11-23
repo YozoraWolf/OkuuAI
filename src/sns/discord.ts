@@ -98,6 +98,9 @@ export class DiscordManager {
                 lang: 'en-US', // Default, could detect
                 stream: false, // Discord doesn't support streaming well in this context yet
                 memoryUser: message.member?.displayName ?? message.author.username,
+                metadata: {
+                    discord_mention: `<@${message.author.id}>`
+                }
             };
 
             // Send to Okuu
