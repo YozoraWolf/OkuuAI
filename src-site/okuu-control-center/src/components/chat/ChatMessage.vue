@@ -1,10 +1,11 @@
 <template>
-    <div class="chat-message row no-wrap q-mb-sm full-width" @mouseover="showDeleteBtn = true" @mouseleave="showDeleteBtn = false">
+    <div class="chat-message row no-wrap q-mb-sm full-width" @mouseover="showDeleteBtn = true"
+        @mouseleave="showDeleteBtn = false">
         <q-avatar :src="avatar" size="32px" round class="avatar flex selft-start" style="z-index: 1;">
             <template v-if="!avatar">
-            <div class="no-avatar flex flex-center" style="width: 32px; height: 32px;">
-                <q-icon name="person" />
-            </div>
+                <div class="no-avatar flex flex-center" style="width: 32px; height: 32px;">
+                    <q-icon name="person" />
+                </div>
             </template>
             <q-img :src="avatar" />
         </q-avatar>
@@ -14,63 +15,85 @@
                     <span class="user row">{{ message.user }}</span>
                     <span class="timestamp row">{{ formattedTimestamp }}</span>
                 </div>
-                <MessageActions 
-                    :visible="deleteBtn && showDeleteBtn" 
-                    :can-delete="true"
-                    :can-edit="false" 
-                    @delete="deleteMessage"
-                    @edit="editMessage"
-                />
+                <MessageActions :visible="deleteBtn && showDeleteBtn" :can-delete="true" :can-edit="false"
+                    @delete="deleteMessage" @edit="editMessage" />
             </div>
             <div class="flex column">
                 <div class="message-body q-mt-xs">
                     <template v-for="(part, idx) in generateComponents(message.message, message.thinking)" :key="idx">
-                        <component
-                            v-if="part.type === 'component'"
-                            :is="part.component"
-                            v-bind="part.props"
-                        />
-                        <span
-                            v-else-if="part.type === 'html'"
-                            v-html="part.content"
-                        />
-                        <span
-                            v-else-if="part.type === 'nl'"
-                            class="newline"
-                        ><br></span>
+                        <component v-if="part.type === 'component'" :is="part.component" v-bind="part.props" />
+                        <span v-else-if="part.type === 'html'" v-html="part.content" />
+                        <span v-else-if="part.type === 'nl'" class="newline"><br></span>
                     </template>
                 </div>
                 <q-img v-if="message.attachment && isAttachmentImage"
-                    :src="`data:image/png;base64,${message.attachment}`"
-                    loading="lazy"
+                    :src="`data:image/png;base64,${message.attachment}`" loading="lazy"
                     class="attachment-image q-mt-sm q-ml-sm cursor-pointer non-selectable"
-                    @click="openPreview"
-                >
+                    @click="openPreview(`data:image/png;base64,${message.attachment}`, 'image')">
                     <template v-slot:loading>
                         <q-spinner size="50px" color="primary" />
                     </template>
                 </q-img>
+                <video v-else-if="message.attachment && isAttachmentVideo" controls
+                    class="attachment-image q-mt-sm q-ml-sm cursor-pointer non-selectable"
+                    @click="openPreview(`data:video/mp4;base64,${message.attachment}`, 'video')">
+                    <source :src="`data:video/mp4;base64,${message.attachment}`" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
             </div>
-            <div v-if="message.done && message.metadata?.web_search?.sources && message.metadata.web_search.sources.length > 0" class="q-mt-sm row q-gutter-xs">
-                <q-chip
-                    v-for="(source, idx) in message.metadata.web_search.sources"
-                    :key="idx"
-                    clickable
-                    @click="openSource(source.url)"
-                    color="teal-7"
-                    text-color="white"
-                    icon="link"
-                    size="sm"
-                    class="cursor-pointer source-chip"
-                >
+            <div v-if="message.done && message.metadata?.web_search?.sources && message.metadata.web_search.sources.length > 0"
+                class="q-mt-sm row q-gutter-xs">
+                <q-chip v-for="(source, idx) in message.metadata.web_search.sources" :key="idx" clickable
+                    @click="openSource(source.url)" color="teal-7" text-color="white" icon="link" size="sm"
+                    class="cursor-pointer source-chip">
                     {{ source.title }}
                     <q-tooltip>{{ source.url }}</q-tooltip>
                 </q-chip>
             </div>
-            
+
+            <!-- Web Search Images -->
+            <div v-if="message.done && message.metadata?.image_urls && message.metadata.image_urls.length > 0"
+                class="q-mt-sm row q-col-gutter-sm">
+                <div v-for="(url, idx) in message.metadata.image_urls" :key="idx" class="col-4 col-sm-3 col-md-2">
+                    <q-img :src="url" loading="lazy" class="rounded-borders cursor-pointer shadow-2 full-width"
+                        :ratio="1" style="object-fit: cover;" @click="openPreview(url, 'image', { source: url })">
+                        <template v-slot:loading>
+                            <q-spinner size="30px" color="primary" />
+                        </template>
+                        <template v-slot:error>
+                            <div class="absolute-full flex flex-center bg-grey-3 text-grey-6">
+                                <q-icon name="broken_image" size="24px" />
+                            </div>
+                        </template>
+                    </q-img>
+                </div>
+            </div>
+
+            <!-- Danbooru Images -->
+            <div v-if="message.done && message.metadata?.danbooru_images && message.metadata.danbooru_images.length > 0"
+                class="q-mt-sm row q-col-gutter-sm">
+                <div v-for="(image, idx) in message.metadata.danbooru_images" :key="idx"
+                    class="col-4 col-sm-3 col-md-2 relative-position">
+                    <q-img :src="image.url" loading="lazy" class="rounded-borders cursor-pointer shadow-2 full-width"
+                        :ratio="1" style="object-fit: cover;"
+                        @click="openPreview(image.url, 'image', { source: image.source, danbooru: image.source, ...image })">
+                        <template v-slot:loading>
+                            <q-spinner size="30px" color="primary" />
+                        </template>
+                    </q-img>
+                    <div class="absolute-bottom-right q-pa-xs">
+                        <q-chip size="xs" dense
+                            :color="image.rating === 's' ? 'green-7' : image.rating === 'q' ? 'orange-7' : 'red-7'"
+                            text-color="white" :icon="image.rating === 's' ? 'check_circle' : 'warning'">
+                        </q-chip>
+                    </div>
+                </div>
+            </div>
+
         </div>
         <!-- TODO: Work on this -->
-    <PreviewImage :imageSrc="`data:image/png;base64,${message.attachment}` || ''" :visible="previewVisible" @close="closePreview" />
+        <PreviewImage :src="previewSrc" :type="previewType" :visible="previewVisible" :metadata="previewMetadata"
+            @close="closePreview" />
     </div>
 </template>
 
@@ -108,6 +131,7 @@ const props = defineProps({
 });
 
 const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
+const videoExts = ['mp4', 'webm', 'ogg', 'mov'];
 
 const showDeleteBtn = ref(false);
 
@@ -130,6 +154,11 @@ const previewVisible = ref(false);
 const isAttachmentImage = computed(() => {
     const ext = props.message.file?.split('.').pop()?.toLowerCase();
     return imageExts.includes(ext || '');
+});
+
+const isAttachmentVideo = computed(() => {
+    const ext = props.message.file?.split('.').pop()?.toLowerCase();
+    return videoExts.includes(ext || '');
 });
 
 const deleteMessage = () => {
@@ -155,13 +184,21 @@ const editMessage = () => {
     // TODO: Implement edit message logic
 }
 
-const openPreview = () => {
-    console.log('Opening image', previewVisible.value);
+const previewSrc = ref('');
+const previewType = ref('image');
+const previewMetadata = ref<any>(null);
+
+const openPreview = (src: string, type: string = 'image', metadata: any = null) => {
+    previewSrc.value = src;
+    previewType.value = type;
+    previewMetadata.value = metadata;
     previewVisible.value = true;
 }
 
 const closePreview = () => {
     previewVisible.value = false;
+    previewSrc.value = '';
+    previewMetadata.value = null;
 }
 
 const openSource = (url: string) => {
@@ -170,7 +207,7 @@ const openSource = (url: string) => {
 
 onMounted(async () => {
     okuu_pfp.value = configStore.okuuPfp;
-    
+
     // Debug: Log message data to check done flag and metadata
     if (props.message.metadata?.web_search?.sources) {
         console.log('Message with sources:', {
