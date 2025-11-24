@@ -209,10 +209,22 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             reply.memoryKey = streamMemoryKey;
             reply.metadata = toolMetadata; // Add metadata to the initial reply object
 
-            // Let client know AI reply started with the memoryKey
+            // If tool was used, prepend the tool result to the message
+            let aiReply = '';
+            if (toolWasUsed && toolResult) {
+                // Format as quote block
+                const formattedResult = toolResult
+                    .split('\n')
+                    .map(line => line.trim() ? `> ${line}` : '')
+                    .filter(line => line)
+                    .join('\n');
+                aiReply = formattedResult + '\n\n';
+                reply.message = aiReply;
+            }
+
+            // Let client know AI reply started with the memoryKey (and tool result if available)
             io.to(msg.sessionId).emit('chat', reply);
 
-            let aiReply = '';
 
             try {
                 // Notify that AI generation is starting (not just processing)
@@ -345,7 +357,19 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         });
 
         // Tools are handled proactively before AI response generation
-        reply.message = resp.response;
+        // Prepend tool result if tool was used
+        let aiResponseText = resp.response;
+        if (toolWasUsed && toolResult) {
+            // Format as quote block
+            const formattedResult = toolResult
+                .split('\n')
+                .map(line => line.trim() ? `> ${line}` : '')
+                .filter(line => line)
+                .join('\n');
+            aiResponseText = formattedResult + '\n\n' + resp.response;
+        }
+
+        reply.message = aiResponseText;
         reply.metadata = toolMetadata; // Include metadata from proactive tool calls
 
         // Check for reactive tool call in non-stream mode

@@ -407,6 +407,12 @@ export class EnhancedToolSystem {
 
                 const response = await tvly.search(params.query, searchOptions);
 
+                // Debug: Log Tavily response structure
+                Logger.DEBUG(`[WebSearch] Tavily response - hasAnswer: ${!!response.answer}, resultsCount: ${response.results?.length || 0}`);
+                if (response.results && response.results.length > 0) {
+                    Logger.DEBUG(`[WebSearch] First result has content: ${!!response.results[0].content}, content length: ${response.results[0].content?.length || 0}`);
+                }
+
                 const sources: Source[] = [];
                 const imageUrls: string[] = [];
                 let output = '';
@@ -432,21 +438,29 @@ export class EnhancedToolSystem {
                 // Add the AI-generated answer if available
                 if (response.answer && !isImageSearch) {
                     output += `${response.answer}\n\n`;
+                    Logger.DEBUG(`[WebSearch] Using Tavily AI answer`);
                 }
 
                 // Add search results
                 if (response.results && response.results.length > 0) {
-                    if (!isImageSearch || imageUrls.length === 0) {
-                        output += `**Sources:**\n\n`;
+                    // If no AI answer was provided, create a summary from the snippets
+                    if (!response.answer && !isImageSearch) {
+                        Logger.DEBUG(`[WebSearch] No Tavily answer, creating summary from snippets`);
+                        // Combine first few snippets into a summary
+                        response.results.slice(0, 3).forEach((result: any, index: number) => {
+                            if (result.content) {
+                                output += `${result.content} `;
+                            }
+                        });
+                        output = output.trim();
                     }
+
+                    // Store sources in metadata only (they'll appear as chips)
                     response.results.forEach((result: any, index: number) => {
                         sources.push({
                             title: result.title || `Result ${index + 1}`,
                             url: result.url
                         });
-                        if (!isImageSearch || imageUrls.length === 0) {
-                            output += `${index + 1}. **${result.title}**\n   ${result.content}\n   Source: ${result.url}\n\n`;
-                        }
                     });
                 } else if (!response.answer && imageUrls.length === 0) {
                     output = `I searched for "${params.query}" using Tavily but couldn't find any specific results.`;

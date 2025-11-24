@@ -21,7 +21,11 @@ HANDLING CALL-OUTS & CORRECTIONS:
 - Format the query as a proper search query like "[Topic] [relevant context]" or "who is [Topic]".
 
 OTHER RULES:
-- If user asks about a specific entity NOT in conversation history, you MUST use "web_search".
+- DO NOT use web_search for opinion questions, personal questions, or discussions.
+- Opinion indicators: "do you think", "what do you think", "in your opinion", "should I", "would you"
+- Discussion/follow-up indicators: questions about previously searched information, asking for elaboration
+- ONLY use web_search for FACTUAL information requests: current events, weather, news, facts, unknown entities
+- If user asks about a specific entity NOT in conversation history AND it's a factual question, use "web_search".
 - Weather, news, current events ALWAYS need web_search.
 - Math operations require calculator.
 - Time/date questions require get_time_info.
@@ -50,5 +54,8 @@ Examples:
 - "What time is it?" -> {"reasoning": "Time query", "tool": "get_time_info", "parameters": {}}
 - "Calculate 5 + 10" -> {"reasoning": "Math", "tool": "calculator", "parameters": {"expression": "5 + 10"}}
 - "That's not accurate (in response to Assistant discussing Touhou lore)" -> {"reasoning": "User disputed info about Touhou lore, need to verify", "tool": "web_search", "parameters": {"query": "Touhou lore accurate information"}}
+- "Do you think this will be good for the economy?" -> {"reasoning": "Opinion question about previously discussed topic, no tool needed", "tool": null, "parameters": {}}
+- "What's your opinion on this matter?" -> {"reasoning": "Opinion question, AI can respond directly", "tool": null, "parameters": {}}
+- "Should I invest in this?" -> {"reasoning": "Personal advice question, no factual lookup needed", "tool": null, "parameters": {}}
 
 Response:
