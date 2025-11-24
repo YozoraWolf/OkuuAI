@@ -90,6 +90,13 @@ export class DiscordManager {
             channel.sendTyping();
 
             // Prepare ChatMessage
+            const authorId = message.author.id;
+            const discordMention = `<@${authorId}>`;
+
+            Logger.DEBUG(`Discord message from user: ${message.author.username} (${message.author.tag})`);
+            Logger.DEBUG(`Author ID: ${authorId}`);
+            Logger.DEBUG(`Discord mention: ${discordMention}`);
+
             const chatMsg: ChatMessage = {
                 sessionId: `discord-${message.channel.id}`, // Use channel ID as session ID for continuity in channel
                 user: message.member?.displayName ?? message.author.username,
@@ -99,7 +106,7 @@ export class DiscordManager {
                 stream: false, // Discord doesn't support streaming well in this context yet
                 memoryUser: message.member?.displayName ?? message.author.username,
                 metadata: {
-                    discord_mention: `<@${message.author.id}>`
+                    discord_mention: discordMention
                 }
             };
 
@@ -158,7 +165,10 @@ export class DiscordManager {
                 // Reply with message and embeds
                 await message.reply({
                     content: response.message,
-                    embeds: embeds.length > 0 ? embeds : undefined
+                    embeds: embeds.length > 0 ? embeds : undefined,
+                    allowedMentions: {
+                        parse: ['users'],
+                    }
                 });
             } else {
                 await message.reply("I'm having trouble thinking right now.");

@@ -98,6 +98,7 @@ async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, tools
     systemPrompt = systemPrompt.replace(/{{user}}/g, msg.user || 'User');
 
     if (msg.metadata?.discord_mention) {
+        Logger.DEBUG(`Using discord_mention in prompt: ${msg.metadata.discord_mention}`);
         systemPrompt = systemPrompt.replace(/{{mention}}/g, `When replying, you MUST mention the user using this exact string: ${msg.metadata.discord_mention}`);
     } else {
         systemPrompt = systemPrompt.replace(/{{mention}}/g, '');
@@ -166,12 +167,14 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         let toolResult = '';
         let toolMetadata: any = {};
         let toolWasUsed = false;
+        let toolName = '';
         if (enhancedToolSystem.getConfig().enabled) {
             // Get recent history for context
             const recentHistory = await getLatestMsgsFromSession(msg.sessionId, 5);
             const proactiveToolCall = await enhancedToolSystem.detectProactiveToolUsage(msg.message || '', recentHistory.messages);
             if (proactiveToolCall) {
                 Logger.INFO(`Proactive tool call detected: ${proactiveToolCall.name}`);
+                toolName = proactiveToolCall.name;
                 try {
                     const result = await enhancedToolSystem.executeTool(proactiveToolCall);
                     toolResult = result.output;
@@ -212,13 +215,22 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             // If tool was used, prepend the tool result to the message
             let aiReply = '';
             if (toolWasUsed && toolResult) {
-                // Format as quote block
-                const formattedResult = toolResult
-                    .split('\n')
-                    .map(line => line.trim() ? `> ${line}` : '')
-                    .filter(line => line)
-                    .join('\n');
-                aiReply = formattedResult + '\n\n';
+                // Only show output for specific tools
+                if (toolName === 'web_search') {
+                    // Format web_search as quote block
+                    const formattedResult = toolResult
+                        .split('\n')
+                        .map(line => line.trim() ? `> ${line}` : '')
+                        .filter(line => line)
+                        .join('\n');
+                    aiReply = formattedResult + '\n\n';
+                } else if (toolName === 'danbooru_search' || toolName === 'danbooru_validate_tags' || toolName === 'danbooru_tag_lookup') {
+                    // For danbooru tools, don't show text output (images appear via metadata)
+                    aiReply = '';
+                } else {
+                    // For other tools (calculator, etc.), show plain text
+                    aiReply = toolResult + '\n\n';
+                }
                 reply.message = aiReply;
             }
 
@@ -360,13 +372,22 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         // Prepend tool result if tool was used
         let aiResponseText = resp.response;
         if (toolWasUsed && toolResult) {
-            // Format as quote block
-            const formattedResult = toolResult
-                .split('\n')
-                .map(line => line.trim() ? `> ${line}` : '')
-                .filter(line => line)
-                .join('\n');
-            aiResponseText = formattedResult + '\n\n' + resp.response;
+            // Only show output for specific tools
+            if (toolName === 'web_search') {
+                // Format web_search as quote block
+                const formattedResult = toolResult
+                    .split('\n')
+                    .map(line => line.trim() ? `> ${line}` : '')
+                    .filter(line => line)
+                    .join('\n');
+                aiResponseText = formattedResult + '\n\n' + resp.response;
+            } else if (toolName === 'danbooru_search' || toolName === 'danbooru_validate_tags' || toolName === 'danbooru_tag_lookup') {
+                // For danbooru tools, don't show text output (images appear via metadata)
+                aiResponseText = resp.response;
+            } else {
+                // For other tools (calculator, etc.), show plain text
+                aiResponseText = toolResult + '\n\n' + resp.response;
+            }
         }
 
         reply.message = aiResponseText;
