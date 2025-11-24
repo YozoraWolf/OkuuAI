@@ -3,10 +3,12 @@ import { loadAssistantConfig } from '@src/o_utils';
 import { searchMemoryWithEmbedding } from '@src/langchain/redis';
 import { Core } from '../core';
 import { RedisClientType } from 'redis';
-import { tavily } from '@tavily/core';
 import * as fs from 'fs';
 import * as path from 'path';
 import { danbooruTool } from './danbooru';
+
+// Tavily is imported dynamically to prevent crashes if package is not installed
+let tavilyModule: any = null;
 
 export interface Source {
     title: string;
@@ -58,6 +60,7 @@ export interface Tool {
 
 export class EnhancedToolSystem {
     private tools: Map<string, Tool> = new Map();
+    private tavilyAvailable: boolean = false;
     private config: ToolConfig = {
         enabled: false,
         auto_detect: false,
@@ -70,6 +73,7 @@ export class EnhancedToolSystem {
 
     constructor() {
         this.loadConfig();
+        this.initializeTavily();
         this.registerCoreTools();
     }
 
@@ -86,6 +90,19 @@ export class EnhancedToolSystem {
             ...assistantConfig.tools
         };
         Logger.INFO(`Tool system loaded with config: ${JSON.stringify(this.config)}`);
+    }
+
+    private initializeTavily() {
+        try {
+            // Try to dynamically import Tavily
+            tavilyModule = require('@tavily/core');
+            this.tavilyAvailable = true;
+            Logger.INFO('Tavily package loaded successfully');
+        } catch (error) {
+            this.tavilyAvailable = false;
+            Logger.WARN(`Tavily package not available: ${error instanceof Error ? error.message : error}`);
+            Logger.INFO('Web search will use DuckDuckGo fallback');
+        }
     }
 
     public registerTool(tool: Tool) {
@@ -383,11 +400,12 @@ export class EnhancedToolSystem {
         const maxResults = params.max_results || 5;
         const isImageSearch = params.query.toLowerCase().includes('images') || params.query.toLowerCase().includes('picture') || params.query.toLowerCase().includes('photo');
 
-        // Try Tavily first if API key is available
+        // Try Tavily first if both package and API key are available
         const tavilyApiKey = process.env.TAVILY_API_KEY;
-        if (tavilyApiKey) {
+        if (this.tavilyAvailable && tavilyApiKey && tavilyModule) {
             try {
                 Logger.INFO(`Using Tavily for search: "${params.query}"`);
+                const { tavily } = tavilyModule;
                 const tvly = tavily({ apiKey: tavilyApiKey });
 
                 const searchOptions: any = {
@@ -484,7 +502,11 @@ export class EnhancedToolSystem {
                 Logger.WARN(`Tavily search failed, falling back to DuckDuckGo: ${tavilyError}`);
             }
         } else {
-            Logger.INFO('TAVILY_API_KEY not found, using DuckDuckGo');
+            if (!this.tavilyAvailable) {
+                Logger.INFO('Tavily package not available, using DuckDuckGo');
+            } else if (!tavilyApiKey) {
+                Logger.INFO('TAVILY_API_KEY not found, using DuckDuckGo');
+            }
         }
 
         // Fallback to DuckDuckGo HTML scraping
