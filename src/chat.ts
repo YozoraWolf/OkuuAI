@@ -33,6 +33,7 @@ export interface ChatMessage {
         weather?: any;
         [key: string]: any;
     };
+    memoryUser?: string;
 }
 
 export const langMappings: { [key: string]: string } = {
@@ -56,7 +57,7 @@ const MAX_HISTORY_CHARS = 4000; // Ollama: use char proxy instead of tokens
 async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, toolsWereUsed: boolean = false) {
     // 1. Retrieve top-k relevant memories
     const memoryQuery = msg.message || '';
-    let memories = await searchMemoryWithEmbedding(memoryQuery, Number(msg.sessionId));
+    let memories = await searchMemoryWithEmbedding(memoryQuery, msg.sessionId);
     if (memories && memories.length > MAX_RELEVANT_MEMORIES) {
         memories = memories.slice(0, MAX_RELEVANT_MEMORIES);
     }
@@ -64,6 +65,15 @@ async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, tools
 
     // 2. Get recent chat history, clamp by length
     const lastMsgs = await getLatestMsgsFromSession(msg.sessionId, 50);
+
+    // Filter out the current message if it's already in the history (to avoid duplication in prompt)
+    if (lastMsgs.messages.length > 0) {
+        const lastMsg = lastMsgs.messages[lastMsgs.messages.length - 1];
+        if (lastMsg.message === msg.message && (lastMsg.user === msg.user || lastMsg.user === msg.memoryUser)) {
+            lastMsgs.messages.pop();
+        }
+    }
+
     let historyLines = lastMsgs.messages.map((m: any) => `${m.user}: ${m.message}`);
     let history = historyLines.join('\n');
     if (history.length > MAX_HISTORY_CHARS) {
@@ -82,9 +92,21 @@ async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, tools
     }
 
     // 4. Build structured prompt
+    let systemPrompt = Core.model_settings.system;
+
+    // Replace templates
+    systemPrompt = systemPrompt.replace(/{{user}}/g, msg.user || 'User');
+
+    if (msg.metadata?.discord_mention) {
+        Logger.DEBUG(`Using discord_mention in prompt: ${msg.metadata.discord_mention}`);
+        systemPrompt = systemPrompt.replace(/{{mention}}/g, `When replying, you MUST mention the user using this exact string: ${msg.metadata.discord_mention}`);
+    } else {
+        systemPrompt = systemPrompt.replace(/{{mention}}/g, '');
+    }
+
     const prompt = `
 System:
-You are Okuu, a helpful AI assistant. Be consistent, concise, and relevant.${toolsSection}
+${systemPrompt}${toolsSection}
 
 Relevant Memories (from user):
 ${memoryContext || 'None'}
@@ -92,14 +114,14 @@ ${memoryContext || 'None'}
 Conversation so far:
 ${history}
 
-User: ${msg.message}
+User (${msg.user}): ${msg.message}
 Okuu:
     `.trim();
 
     return prompt;
 }
 
-export const sendChat = async (msg: ChatMessage, callback?: (data: string) => void) => {
+export const sendChat = async (msg: ChatMessage, callback?: (data: string) => void): Promise<ChatMessage | null> => {
     try {
         msg = {
             ...msg,
@@ -116,11 +138,13 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             timestamp: Date.now(),
             sessionId: msg.sessionId || SESSION_ID || '',
             stream: msg.stream || false,
+            memoryUser: msg.memoryUser || 'okuu',
         };
 
         // Step 1: Save user input in memory
         const messageType = isQuestion(msg.message as string) ? 'question' : 'statement';
-        const memory = await saveMemoryWithEmbedding(msg.sessionId, msg.message as string, "user", messageType);
+        const memoryUser = msg.memoryUser || 'user';
+        const memory = await saveMemoryWithEmbedding(msg.sessionId, msg.message as string, memoryUser, messageType, '', undefined, msg.metadata, msg.timestamp);
         Logger.DEBUG(`Saved memory: ${memory.memoryKey}`);
 
         // Step 2: Update attachment in memory if file exists
@@ -143,12 +167,14 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         let toolResult = '';
         let toolMetadata: any = {};
         let toolWasUsed = false;
+        let toolName = '';
         if (enhancedToolSystem.getConfig().enabled) {
             // Get recent history for context
             const recentHistory = await getLatestMsgsFromSession(msg.sessionId, 5);
             const proactiveToolCall = await enhancedToolSystem.detectProactiveToolUsage(msg.message || '', recentHistory.messages);
             if (proactiveToolCall) {
                 Logger.INFO(`Proactive tool call detected: ${proactiveToolCall.name}`);
+                toolName = proactiveToolCall.name;
                 try {
                     const result = await enhancedToolSystem.executeTool(proactiveToolCall);
                     toolResult = result.output;
@@ -166,8 +192,8 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         // Step 4: Build prompt (memories + history + user msg + tool results if any)
         let prompt = await buildPrompt(msg, true, toolWasUsed);
         if (toolWasUsed && toolResult) {
-            // When we used tools proactively, give AI the results without showing tool instructions
-            prompt += `\n\nRelevant Information: ${toolResult}\n\nUser: ${msg.message}\n\nPlease respond naturally using this information. Do not hallucinate. Only use the provided information.\n\nOkuu:`;
+            // Tool results already contain natural language guidance
+            prompt += `\n\n${toolResult}\n\nOkuu:`;
         }
         Logger.DEBUG(`Prompt built:\n${prompt}`);
 
@@ -186,10 +212,31 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             reply.memoryKey = streamMemoryKey;
             reply.metadata = toolMetadata; // Add metadata to the initial reply object
 
-            // Let client know AI reply started with the memoryKey
+            // If tool was used, prepend the tool result to the message
+            let aiReply = '';
+            if (toolWasUsed && toolResult) {
+                // Only show output for specific tools
+                if (toolName === 'web_search') {
+                    // Format web_search as quote block
+                    const formattedResult = toolResult
+                        .split('\n')
+                        .map(line => line.trim() ? `> ${line}` : '')
+                        .filter(line => line)
+                        .join('\n');
+                    aiReply = formattedResult + '\n\n';
+                } else if (toolName === 'danbooru_search' || toolName === 'danbooru_validate_tags' || toolName === 'danbooru_tag_lookup') {
+                    // For danbooru tools, don't show text output (images appear via metadata)
+                    aiReply = '';
+                } else {
+                    // For other tools (calculator, etc.), show plain text
+                    aiReply = toolResult + '\n\n';
+                }
+                reply.message = aiReply;
+            }
+
+            // Let client know AI reply started with the memoryKey (and tool result if available)
             io.to(msg.sessionId).emit('chat', reply);
 
-            let aiReply = '';
 
             try {
                 // Notify that AI generation is starting (not just processing)
@@ -296,7 +343,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                     await saveMemoryWithEmbedding(
                         reply.sessionId,
                         aiReply,
-                        "okuu",
+                        msg.memoryUser || "okuu",
                         messageTypeAI,
                         '', // thinking
                         reply.memoryKey // use our pre-generated key
@@ -308,7 +355,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             }
 
             io.to(msg.sessionId).emit('chat', reply);
-            return aiReply;
+            return reply;
         }
 
         // --- NON-STREAM MODE ---
@@ -322,7 +369,29 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         });
 
         // Tools are handled proactively before AI response generation
-        reply.message = resp.response;
+        // Prepend tool result if tool was used
+        let aiResponseText = resp.response;
+        if (toolWasUsed && toolResult) {
+            // Only show output for specific tools
+            if (toolName === 'web_search') {
+                // Format web_search as quote block
+                const formattedResult = toolResult
+                    .split('\n')
+                    .map(line => line.trim() ? `> ${line}` : '')
+                    .filter(line => line)
+                    .join('\n');
+                aiResponseText = formattedResult + '\n\n' + resp.response;
+            } else if (toolName === 'danbooru_search' || toolName === 'danbooru_validate_tags' || toolName === 'danbooru_tag_lookup') {
+                // For danbooru tools, don't show text output (images appear via metadata)
+                aiResponseText = resp.response;
+            } else {
+                // For other tools (calculator, etc.), show plain text
+                aiResponseText = toolResult + '\n\n' + resp.response;
+            }
+        }
+
+        reply.message = aiResponseText;
+        reply.metadata = toolMetadata; // Include metadata from proactive tool calls
 
         // Check for reactive tool call in non-stream mode
         const reactiveToolCall = enhancedToolSystem.parsePotentialToolCall(reply.message);
@@ -330,7 +399,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             Logger.INFO(`Reactive tool call detected (non-stream): ${reactiveToolCall.name}`);
             try {
                 const toolResult = await enhancedToolSystem.executeTool(reactiveToolCall);
-                const followUpPrompt = `${prompt}\n${reply.message}\n\nTool Result: ${toolResult}\n\nUser: Please use this information to answer my request.\n\nOkuu:`;
+                const followUpPrompt = `${prompt}\n${reply.message}\n\nTool Result: ${toolResult.output}\n\nUser: Please use this information to answer my request.\n\nOkuu:`;
 
                 const followUpResp = await Core.ollama_instance.generate({
                     prompt: followUpPrompt,
@@ -340,6 +409,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 });
 
                 reply.message = followUpResp.response;
+                reply.metadata = toolResult.metadata;
             } catch (error) {
                 Logger.ERROR(`Reactive tool execution failed: ${error}`);
             }
@@ -350,14 +420,14 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         reply.thinking = resp.thinking || '';
 
         const messageTypeAI = isQuestion(reply.message) ? 'question' : 'statement';
-        const aiMemory = await saveMemoryWithEmbedding(reply.sessionId, reply.message, "okuu", messageTypeAI, reply.thinking);
+        const aiMemory = await saveMemoryWithEmbedding(reply.sessionId, reply.message, msg.memoryUser || "okuu", messageTypeAI, reply.thinking);
         reply.memoryKey = aiMemory.memoryKey;
         reply.timestamp = aiMemory.timestamp;
 
         io.to(msg.sessionId).emit('chat', reply);
 
         callback && callback(reply.message);
-        return reply.message;
+        return reply;
 
     } catch (error: any) {
         Logger.ERROR(`Error sending chat: ${error.response ? error.response.data : error.message}`);

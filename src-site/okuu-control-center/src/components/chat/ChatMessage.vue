@@ -312,4 +312,19 @@ onMounted(async () => {
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
+
+.danbooru-image-container {
+    max-width: 500px;
+}
+
+.danbooru-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    transition: transform 0.2s ease;
+}
+
+.danbooru-image:hover {
+    transform: scale(1.02);
+}
 </style>

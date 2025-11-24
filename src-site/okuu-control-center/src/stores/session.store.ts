@@ -147,6 +147,14 @@ export const useSessionStore = defineStore('session', {
                 return;
             }
 
+            // Check if message with same timestamp already exists to prevent duplicates
+            // (e.g. when adding locally first then receiving echo from socket)
+            const exists = session.messages.some(m => m.timestamp === message.timestamp);
+            if (exists) {
+                console.log('🟡 Message already exists, skipping add:', message.timestamp);
+                return;
+            }
+
             // Create a new message object to ensure reactivity
             const newMessage = { ...message };
             session.messages = [...session.messages, newMessage];

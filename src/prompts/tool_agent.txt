@@ -21,17 +21,41 @@ HANDLING CALL-OUTS & CORRECTIONS:
 - Format the query as a proper search query like "[Topic] [relevant context]" or "who is [Topic]".
 
 OTHER RULES:
-- If the assistant offered to search for X, and user says "yes", return {"tool": "web_search", "parameters": {"query": "X"}}.
-- If user asks about a specific entity NOT in conversation history, you MUST use "web_search".
+- DO NOT use web_search for opinion questions, personal questions, or discussions.
+- Opinion indicators: "do you think", "what do you think", "in your opinion", "should I", "would you"
+- Discussion/follow-up indicators: questions about previously searched information, asking for elaboration
+- ONLY use web_search for FACTUAL information requests: current events, weather, news, facts, unknown entities
+- If user asks about a specific entity NOT in conversation history AND it's a factual question, use "web_search".
 - Weather, news, current events ALWAYS need web_search.
 - Math operations require calculator.
 - Time/date questions require get_time_info.
+- IMAGE REQUESTS ("picture", "image", "photo", "show me", "send me"):
+  1. Extract SEMANTIC CORE MEANING from user input as tags:
+     - Simplify phrases to their core meaning: "having sex" → "sex", "while smiling" → "smiling"
+     - Include: character names, core descriptors/actions (sex, nude, smiling, swimsuit, sitting, etc.)
+     - Exclude: numbers (extract to limit), request verbs (send, give, show), filler words (of, the, while, having)
+     - Example: "10 images of yoimiya having sex" → input: "yoimiya sex", limit: 10
+     - Example: "5 pictures of reimu while smiling" → input: "reimu smiling", limit: 5
+  2. Use "danbooru_validate_tags" with extracted core tag words (NEVER use danbooru_search directly)
+  3. For follow-up requests ("give me more", "10 more"), extract subject from conversation history and use "danbooru_validate_tags" to re-validate
+  4. This tool will automatically validate and search, returning images directly
+  5. If no tags found, fallback to "web_search"
 
 Examples:
-- "Who is [Character Name]?" -> {"reasoning": "User asked about [Character Name], not in history", "tool": "web_search", "parameters": {"query": "[Character Name] [relevant context]"}}
+- "send me a picture of [character]" -> {"reasoning": "Extract tags: [character]", "tool": "danbooru_validate_tags", "parameters": {"input": "[character]", "limit": 5, "random": true}}
+- "show me [character] [descriptor]" -> {"reasoning": "Extract tags: [character] [descriptor]", "tool": "danbooru_validate_tags", "parameters": {"input": "[character] [descriptor]", "limit": 5, "random": true}}
+- "[number] images of [character] having [action]" -> {"reasoning": "Extract core meaning: [character] [action] (simplify 'having [action]' → '[action]'), limit: [number]", "tool": "danbooru_validate_tags", "parameters": {"input": "[character] [action]", "limit": "[number]", "random": true}}
+- "send [number] images of [character]" -> {"reasoning": "Extract tags: [character], limit: [number]", "tool": "danbooru_validate_tags", "parameters": {"input": "[character]", "limit": "[number]", "random": true}}
+- "give me [number] pictures of [character]" -> {"reasoning": "Extract tags: [character], limit: [number]", "tool": "danbooru_validate_tags", "parameters": {"input": "[character]", "limit": "[number]", "random": true}}
+- "[number] images of [character] while [descriptor]" -> {"reasoning": "Extract core: [character] [descriptor] (simplify 'while [descriptor]' → '[descriptor]'), limit: [number]", "tool": "danbooru_validate_tags", "parameters": {"input": "[character] [descriptor]", "limit": "[number]", "random": true}}
+- (After first request) "give me [number] more" -> {"reasoning": "Follow-up request, extract subject from history: [character] [descriptor], re-validate tags, limit: [number]", "tool": "danbooru_validate_tags", "parameters": {"input": "[character] [descriptor]", "limit": "[number]", "random": true}}
+- (After lookup returns tag NOT found) -> {"reasoning": "Danbooru tag not found, using web search fallback", "tool": "web_search", "parameters": {"query": "[subject name] images"}}
+- "Who is Reimu Hakurei?" -> {"reasoning": "User asked about Reimu Hakurei, not in history", "tool": "web_search", "parameters": {"query": "Reimu Hakurei touhou character"}}
 - "What time is it?" -> {"reasoning": "Time query", "tool": "get_time_info", "parameters": {}}
 - "Calculate 5 + 10" -> {"reasoning": "Math", "tool": "calculator", "parameters": {"expression": "5 + 10"}}
-- "That's not accurate (in response to Assistant discussing [Topic X])" -> {"reasoning": "User disputed info about [Topic X], need to verify", "tool": "web_search", "parameters": {"query": "[Topic X] [relevant details]"}}
-- "That information is wrong (in response to discussion about [Event/Fact])" -> {"reasoning": "User called out incorrect info about [Event/Fact]", "tool": "web_search", "parameters": {"query": "[Event/Fact] accurate information"}}
+- "That's not accurate (in response to Assistant discussing Touhou lore)" -> {"reasoning": "User disputed info about Touhou lore, need to verify", "tool": "web_search", "parameters": {"query": "Touhou lore accurate information"}}
+- "Do you think this will be good for the economy?" -> {"reasoning": "Opinion question about previously discussed topic, no tool needed", "tool": null, "parameters": {}}
+- "What's your opinion on this matter?" -> {"reasoning": "Opinion question, AI can respond directly", "tool": null, "parameters": {}}
+- "Should I invest in this?" -> {"reasoning": "Personal advice question, no factual lookup needed", "tool": null, "parameters": {}}
 
 Response:

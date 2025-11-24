@@ -7,7 +7,6 @@
         "./src/*"
       ]
     },
-    
     /* Projects */
     // "incremental": true,                              /* Save .tsbuildinfo files to allow for incremental compilation of projects. */
     // "composite": true,                                /* Enable constraints that allow a TypeScript project to be used with project references. */
@@ -106,6 +105,10 @@
     "skipLibCheck": true /* Skip type checking all .d.ts files. */
   },
   "ts-node": {
-    "require": ["tsconfig-paths/register"]
+    "require": [
+      "tsconfig-paths/register"
+    ],
+    "esm": true,
+    "experimentalSpecifierResolution": "node"
   }
 }

@@ -64,7 +64,7 @@ export const defaultAssistantConfig = {
     name: defaultConfigAI.ai_name,
     system_prompt: defaultConfigAI.system,
     model: defaultConfigAI.model_name,
-    tool_llm: "qwen2.5:3b",
+    tool_llm: "redule26/huihui_ai_qwen2.5-vl-7b-abliterated",
     template: ""
 };
 

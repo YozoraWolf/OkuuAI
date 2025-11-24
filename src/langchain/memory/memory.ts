@@ -63,7 +63,11 @@ const getSessionsCount = async (): Promise<number> => {
   sessionKeys = sessionKeys.filter(key => !key.includes("file"));
   const uniqueSessionIds = new Set(sessionKeys.map(key => key.split(':')[1]));
   // get the highest index
-  const newSessionId = uniqueSessionIds.size > 0 ? Math.max(...Array.from(uniqueSessionIds).map(id => parseInt(id))) : 0;
+  const numericIds = Array.from(uniqueSessionIds)
+    .map(id => parseInt(id))
+    .filter(id => !isNaN(id));
+
+  const newSessionId = numericIds.length > 0 ? Math.max(...numericIds) : 0;
   Logger.INFO(`New Session ID: ${newSessionId}`);
   return newSessionId;
 };
@@ -141,7 +145,7 @@ export const getAllSessions = async (): Promise<Array<SessionData>> => {
   // Get all session keys in the pattern "okuuMemory:*"
   let sessionKeys = await redisClientMemory.keys('okuuMemory:*');
   // filter out kets that contain "file"
-  sessionKeys = sessionKeys.filter(key => !key.includes("file"));
+  sessionKeys = sessionKeys.filter(key => !key.includes("file") && !key.includes("discord-"));
 
   if (sessionKeys.length === 0) {
     Logger.DEBUG("No session keys found.");

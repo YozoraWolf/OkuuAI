@@ -4,16 +4,16 @@
   "description": "Okuu AI",
   "exports": "./index.js",
   "scripts": {
-    "start-tunnel": "./setup_ngrok.sh && ts-node ./src/index.ts",
-    "start-tunnel-win": "call setup_ngrok.bat && ts-node ./src/index.ts",
-    "start": "ts-node ./src/index.ts",
-    "sync-ngrok": "ts-node ./sync-ngrok.ts",
+    "start-tunnel": "./setup_ngrok.sh && tsx ./src/index.ts",
+    "start-tunnel-win": "call setup_ngrok.bat && tsx ./src/index.ts",
+    "start": "tsx ./src/index.ts",
+    "sync-ngrok": "tsx ./sync-ngrok.ts",
     "nodemon": "nodemon --no-stdin",
     "build": "sucrase ./src -d ./dist --transforms typescript,imports",
     "vite:run": "vite",
     "vite:build": "vite build",
     "eslint": "eslint ./src",
-    "config": "ts-node ./src/config.ts"
+    "config": "tsx ./src/config.ts"
   },
   "keywords": [
     "okuu",
@@ -34,6 +34,7 @@
     "cli-progress": "^3.12.0",
     "cors": "^2.8.5",
     "d3-dsv": "^2.0.0",
+    "discord.js": "^14.25.1",
     "docker-cli-js": "^2.10.0",
     "dotenv": "^16.4.5",
     "eld": "^1.0.1",
@@ -41,6 +42,7 @@
     "express-fileupload": "^1.5.1",
     "express-rate-limit": "^7.5.0",
     "franc-ce": "^0.1.3",
+    "kokoro-js": "^1.2.1",
     "langchain": "^0.1.36",
     "mammoth": "^1.9.0",
     "ollama": "^0.5.16",
@@ -68,6 +70,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "tslib": "^2.6.2",
+    "tsx": "^4.20.6",
     "typescript": "^5.4.5",
     "typescript-eslint": "^7.8.0"
   },
