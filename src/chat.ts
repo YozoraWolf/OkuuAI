@@ -120,7 +120,7 @@ Okuu:
     return prompt;
 }
 
-export const sendChat = async (msg: ChatMessage, callback?: (data: string) => void) => {
+export const sendChat = async (msg: ChatMessage, callback?: (data: string) => void): Promise<ChatMessage | null> => {
     try {
         msg = {
             ...msg,
@@ -331,7 +331,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             }
 
             io.to(msg.sessionId).emit('chat', reply);
-            return aiReply;
+            return reply;
         }
 
         // --- NON-STREAM MODE ---
@@ -346,6 +346,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
         // Tools are handled proactively before AI response generation
         reply.message = resp.response;
+        reply.metadata = toolMetadata; // Include metadata from proactive tool calls
 
         // Check for reactive tool call in non-stream mode
         const reactiveToolCall = enhancedToolSystem.parsePotentialToolCall(reply.message);
@@ -353,7 +354,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             Logger.INFO(`Reactive tool call detected (non-stream): ${reactiveToolCall.name}`);
             try {
                 const toolResult = await enhancedToolSystem.executeTool(reactiveToolCall);
-                const followUpPrompt = `${prompt}\n${reply.message}\n\nTool Result: ${toolResult}\n\nUser: Please use this information to answer my request.\n\nOkuu:`;
+                const followUpPrompt = `${prompt}\n${reply.message}\n\nTool Result: ${toolResult.output}\n\nUser: Please use this information to answer my request.\n\nOkuu:`;
 
                 const followUpResp = await Core.ollama_instance.generate({
                     prompt: followUpPrompt,
@@ -363,6 +364,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 });
 
                 reply.message = followUpResp.response;
+                reply.metadata = toolResult.metadata;
             } catch (error) {
                 Logger.ERROR(`Reactive tool execution failed: ${error}`);
             }
@@ -380,7 +382,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         io.to(msg.sessionId).emit('chat', reply);
 
         callback && callback(reply.message);
-        return reply.message;
+        return reply;
 
     } catch (error: any) {
         Logger.ERROR(`Error sending chat: ${error.response ? error.response.data : error.message}`);

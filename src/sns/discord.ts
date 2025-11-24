@@ -1,5 +1,5 @@
 
-import { Client, GatewayIntentBits, Message, Partials, TextChannel } from 'discord.js';
+import { Client, GatewayIntentBits, Message, Partials, TextChannel, EmbedBuilder } from 'discord.js';
 import { Logger } from '../logger';
 import { sendChat, ChatMessage } from '../chat';
 import { enhancedToolSystem } from '../tools/enhancedToolSystem';
@@ -107,7 +107,59 @@ export class DiscordManager {
             const response = await sendChat(chatMsg);
 
             if (response) {
-                await message.reply(response);
+                const embeds: EmbedBuilder[] = [];
+
+                // Check for Danbooru images
+                if (response.metadata?.danbooru_images) {
+                    const images = response.metadata.danbooru_images;
+                    for (const img of images) {
+                        // Determine color based on rating
+                        let color = 0x00ff00; // Green for Safe
+                        let ratingText = 'Safe';
+                        if (img.rating === 'q') {
+                            color = 0xffaa00; // Orange/Yellow for Questionable
+                            ratingText = 'Questionable';
+                        } else if (img.rating === 'e') {
+                            color = 0xff0000; // Red for Explicit
+                            ratingText = 'Explicit';
+                        }
+
+                        const embed = new EmbedBuilder()
+                            .setColor(color)
+                            .setTitle(`Danbooru Post #${img.id}`)
+                            .setURL(img.source)
+                            .setImage(img.url) // Use full file_url for better quality
+                            .addFields(
+                                { name: '🎨 Artist', value: img.artist || 'Unknown', inline: true },
+                                { name: '⚠️ Rating', value: ratingText, inline: true }
+                            )
+                            .setFooter({ text: `Source: Danbooru` });
+
+                        // Add character tags if available
+                        if (img.tags) {
+                            embed.addFields({ name: '👤 Characters', value: img.tags || 'None', inline: false });
+                        }
+
+                        embeds.push(embed);
+                    }
+                }
+
+                // Check for generic image URLs (e.g. from web search)
+                if (response.metadata?.image_urls) {
+                    const images = response.metadata.image_urls;
+                    for (const url of images) {
+                        const embed = new EmbedBuilder()
+                            .setImage(url)
+                            .setColor(0x5865F2); // Discord blurple
+                        embeds.push(embed);
+                    }
+                }
+
+                // Reply with message and embeds
+                await message.reply({
+                    content: response.message,
+                    embeds: embeds.length > 0 ? embeds : undefined
+                });
             } else {
                 await message.reply("I'm having trouble thinking right now.");
             }
