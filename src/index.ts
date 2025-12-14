@@ -44,8 +44,11 @@ export let io: Server;
         // Middleware to check the API key
         const checkApiKey = (req: Request, res: Response, next: NextFunction) => {
             const apiKey = req.headers['x-api-key'] as string | undefined;
+            const authHeader = req.headers['authorization'] as string | undefined;
 
-            if (apiKey && apiKey === process.env.API_KEY) {
+            const effectiveKey = apiKey || (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : authHeader);
+
+            if (effectiveKey && effectiveKey === process.env.API_KEY) {
                 next(); // API key is valid, proceed
             } else {
                 res.status(401).json({ message: 'Unauthorized' });
