@@ -9,7 +9,7 @@ import dotenv from 'dotenv';
 import { SESSION_SETTINGS, startSession } from './langchain/memory/memory';
 import { initConfig, loadEnv, interactiveConfig, createEnvFile, defaultAssistantConfig } from './config';
 import { initUsersDB } from './services/user.service';
-import { runModel, startAndMonitorContainers } from './compose/containers';
+import { runModel, startAndMonitorContainers, waitForOllama } from './compose/containers';
 import { initRedis } from './langchain/redis';
 import { select } from '@inquirer/prompts';
 import { initOllamaInstance } from './chat';
@@ -81,7 +81,9 @@ export const init = async () =>
 
         // check if the ollama service is on, if not, start it
         //await checkOllamaService();
+        //await checkOllamaService();
         await startAndMonitorContainers();
+        await waitForOllama();
 
         // start ollama instance
         await initOllamaInstance();

@@ -17,10 +17,10 @@ export async function startAndMonitorContainers() {
     // Run `docker-compose up` command
     dockerCompose = spawn('docker', ['compose', 'up', "-d"], { stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (error: any) {
-    if(error.code === 'ENOENT') {
-        Logger.ERROR('Error: Docker is not installed.');
+    if (error.code === 'ENOENT') {
+      Logger.ERROR('Error: Docker is not installed.');
     } else {
-        Logger.ERROR('Error starting containers: '+ error);
+      Logger.ERROR('Error starting containers: ' + error);
     }
     exit(1);
   }
@@ -59,6 +59,20 @@ export async function startAndMonitorContainers() {
   });
 }
 
+export async function waitForOllama(maxRetries = 20, delay = 2000) {
+  const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await ollama.list();
+      return;
+    } catch (error) {
+      Logger.WARN(`Waiting for Ollama to be ready... (${i + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  throw new Error('Ollama failed to start in time.');
+}
+
 export const runModel = async (model_name: string) => {
 
   const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
@@ -72,14 +86,14 @@ export const runModel = async (model_name: string) => {
 
   Logger.INFO(`Pulling model: ${model_name} ...`);
   const ps = await ollama.list();
-  Logger.DEBUG("CURRENT MODELS: "+ JSON.stringify(ps.models, null, 2));
+  Logger.DEBUG("CURRENT MODELS: " + JSON.stringify(ps.models, null, 2));
   const stream = await ollama.pull({ model: model_name, stream: true });
   const bar1 = new cliProgress.SingleBar({
     format: `Progress [${ConsoleColor.FgYellow} {bar} ] ${ConsoleColor.Reset}{percentage}% | ETA: {eta}s`,
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
   });
-  
+
   bar1.start(100, 0); // Assuming 100 as the total progress value
 
   try {
