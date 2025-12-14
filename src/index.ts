@@ -14,6 +14,7 @@ import mainRoutes, { apiLimiter } from './routes/main.route';
 import { Server } from 'socket.io';
 import userRoutes from './routes/user.route';
 import toolsRoutes from './routes/tools.route';
+import embeddingsRoutes from './routes/embeddings.route';
 
 export let io: Server;
 
@@ -76,6 +77,7 @@ export let io: Server;
         app.use('/users', checkApiKey, userRoutes);
         app.use('/config', checkApiKey, configRoutes);
         app.use('/tools', checkApiKey, toolsRoutes);
+        app.use('/embeddings', checkApiKey, embeddingsRoutes);
 
         server.listen(port, async () => {
             Logger.INFO(`Server is running on port ${port} ${/09$/.test(port.toString()) ? '(☢️)' : ''}`);

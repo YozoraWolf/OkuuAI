@@ -89,6 +89,7 @@ export const init = async () =>
         // run model
         await runModel(Core.model_name);
         await runModel("nomic-embed-text");
+        await runModel("embeddinggemma:latest");
         await runModel(Core.tool_model_name);
 
         await initRedis();
