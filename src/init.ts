@@ -9,12 +9,20 @@ import dotenv from 'dotenv';
 import { SESSION_SETTINGS, startSession } from './langchain/memory/memory';
 import { initConfig, loadEnv, interactiveConfig, createEnvFile, defaultAssistantConfig } from './config';
 import { initUsersDB } from './services/user.service';
+import { setupDatabase } from './db/user.db';
+import bcrypt from 'bcrypt';
 import { runModel, startAndMonitorContainers } from './compose/containers';
 import { initRedis } from './langchain/redis';
 import { select } from '@inquirer/prompts';
 import { initOllamaInstance } from './chat';
 
 dotenv.config();
+
+// Enforce presence of JWT_SECRET early to avoid running with a weak fallback
+if (!process.env.JWT_SECRET) {
+    Logger.ERROR('Missing JWT_SECRET environment variable. Set JWT_SECRET in .env or environment.');
+    process.exit(1);
+}
 
 /* const downloadModelFile = async (url: string, path: string) => {
     if (!fs.existsSync(path)) {
@@ -104,6 +112,31 @@ export const init = async () =>
 
         // initialize sqlite3 (future implementation prep)
         await initUsersDB();
+
+        // Ensure auth users DB is initialized and an admin user exists
+        try {
+            const db = await setupDatabase() as any;
+            db.get("SELECT * FROM users WHERE username = ?", ['admin'], async (err: any, row: any) => {
+                if (err) {
+                    Logger.ERROR(`Error checking admin user: ${err}`);
+                    return;
+                }
+                if (!row) {
+                    const hashed = await bcrypt.hash('admin', 10);
+                    db.run("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ['admin', hashed, 'Admin'], (insertErr: any) => {
+                        if (insertErr) {
+                            Logger.ERROR(`Failed to create admin user: ${insertErr}`);
+                        } else {
+                            Logger.INFO('Default admin user created (username: admin, password: admin)');
+                        }
+                    });
+                } else {
+                    Logger.DEBUG('Admin user already exists');
+                }
+            });
+        } catch (err) {
+            Logger.ERROR(`Failed to setup auth DB: ${err}`);
+        }
 
         // get latest history
         const sessionId = SESSION_SETTINGS.sessionId;

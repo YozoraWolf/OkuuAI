@@ -1,29 +1,32 @@
 import { defineStore } from 'pinia';
-import { checkApiKey } from 'src/services/auth.service';
+import { loginWithCredentials, setAuthToken } from 'src/services/auth.service';
 
 export const useAuthStore = defineStore('auth', {
     state: () => ({
-        apiKey: '',
+        token: localStorage.getItem('token') || '',
+        user: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') as string) : null,
     }),
     actions: {
-        async checkApiKey(key: string) {
-            const result = await checkApiKey(key);
-            const isKeyValid = result && result.status === 200;
-            this.apiKey = isKeyValid ? key : '';
-            if(isKeyValid) {
-                localStorage.setItem('apiKey', this.apiKey);
+        async login(username: string, password: string) {
+            const res = await loginWithCredentials(username, password);
+            if (res && res.status === 200 && res.data?.token) {
+                this.token = res.data.token;
+                this.user = res.data.user;
+                localStorage.setItem('user', JSON.stringify(this.user));
+                setAuthToken(this.token);
+                return true;
             }
-            return result;
-        },
-        loadApiKey() {
-            this.apiKey = localStorage.getItem('apiKey') || '';
+            return false;
         },
         logout() {
-            this.apiKey = '';
+            this.token = '';
+            this.user = null;
+            setAuthToken(null);
+            localStorage.removeItem('user');
         }
     },
     getters: {
-        isAuthenticated: (state) => !!state.apiKey,
-        getApiKey: (state) => state.apiKey,
+        isAuthenticated: (state) => !!state.token,
+        getUser: (state) => state.user,
     },
 });

@@ -39,6 +39,8 @@ const doPageRedirect = (path: string) => {
   if(path === '/logout') {
     // Handle logout
     authStore.logout();
+    // After logout, redirect to login page
+    router.push('/login');
     return;
   }
   if (path) {

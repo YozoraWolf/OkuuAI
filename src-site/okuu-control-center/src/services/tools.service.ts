@@ -24,14 +24,11 @@ const getApiUrl = async () => {
     return `${apiUrl}`;
 };
 
-const getAuthHeaders = () => {
-    const authStore = useAuthStore();
-    return {
-        'x-api-key': authStore.apiKey,
-        'Content-Type': 'application/json',
-        "ngrok-skip-browser-warning": "true",
+    const getAuthHeaders = () => {
+        const authStore = useAuthStore();
+        const token = (authStore as any).token || localStorage.getItem('token');
+        return token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': true } : { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': true };
     };
-};
 
 export const getToolsConfig = async () => {
     const apiUrl = await getApiUrl();

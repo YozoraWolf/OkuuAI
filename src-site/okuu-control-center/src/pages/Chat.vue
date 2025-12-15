@@ -76,7 +76,7 @@ const { stream, okuuPfp, toggleThinking, currentModel, modelList, configLoading 
 const okuu_pfp = computed(() => okuuPfp.value);
 
 // Auth store refs
-const { apiKey } = storeToRefs(authStore);
+// Note: authStore provides `isAuthenticated` and token/user state.
 
 const isLoadingResponse = ref(false);
 const isLoadingSessionMessages = ref(false);
@@ -113,8 +113,7 @@ const openToolsConfig = () => {
 };
 
 onMounted(async () => {
-    authStore.loadApiKey();
-    if (!apiKey.value) {
+    if (!authStore.isAuthenticated) {
         router.push('/login');
         return;
     }

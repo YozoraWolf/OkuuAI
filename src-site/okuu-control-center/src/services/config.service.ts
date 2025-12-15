@@ -9,10 +9,8 @@ const getApiUrl = async () => {
 
 const getAuthHeaders = () => {
     const authStore = useAuthStore();
-    return {
-        'x-api-key': authStore.getApiKey,
-        'ngrok-skip-browser-warning': true,
-    };
+    const token = (authStore as any).token || localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': true } : { 'ngrok-skip-browser-warning': true };
 };
 
 export const uploadOkuuPfp = async (file: File) => {

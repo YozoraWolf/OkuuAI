@@ -57,6 +57,7 @@ const pageList: EssentialLinkProps[] = [
     title: 'Logout',
     caption: 'Bye!',
     icon: 'logout',
+    path: '/logout',
     auth: true,
   }
 ];

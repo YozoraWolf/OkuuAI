@@ -1,66 +1,43 @@
-import { Request, Response } from 'express';
-import * as userService from '../services/user.service';
-import { Logger } from '@src/logger';
+import express from 'express';
+import { AuthService } from '../services/auth.service';
 
-export const getAllUsers = async (_: Request, res: Response) => {
-    try {
-        const users = await userService.getAllUsers();
-        res.status(200).json(users);
-    } catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
-    }
-}
+const authService = new AuthService();
 
-export const getUserById = async (req: Request, res: Response) => {
-    try {
-        const userId = Number(req.params.id);
-        const user = await userService.getUserById(userId);
-        if (user) {
-            res.status(200).json(user);
-        } else {
-            res.status(404).json({ message: 'User not found' });
-        }
-    } catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
-    }
-}
+export const userController = express.Router();
 
-export const createUser = async (req: Request, res: Response) => {
-    try {
-        const userData = req.body;
-        const newUser = await userService.createUser(userData);
-        res.status(201).json(newUser);
-    } catch (error: any) {
-        Logger.ERROR(error);
-        res.status(500).json({ message: 'Internal server error' });
+userController.post('/register', async (req, res) => {
+  const { username, password, role } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'username and password are required' });
+  }
+  try {
+    await authService.register(username, password, role);
+    // Auto-login after register
+    const user = await authService.login(username, password);
+    if (!user) {
+      return res.status(500).json({ error: 'Registered but unable to login' });
     }
-};
+    const token = authService.generateToken(user);
+    res.status(201).json({ token, user });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
 
-export const updateUser = async (req: Request, res: Response) => {
-    try {
-        const userId = Number(req.params.id);
-        const updateData = req.body;
-        const updatedUser = await userService.updateUser(userId, updateData);
-        if (updatedUser) {
-            res.status(200).json(updatedUser);
-        } else {
-            res.status(404).json({ message: 'User not found' });
-        }
-    } catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+userController.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'username and password are required' });
+  }
+  try {
+    const user = await authService.login(username, password);
+    if (user) {
+      const token = authService.generateToken(user);
+      res.status(200).json({ token, user });
+    } else {
+      res.status(401).json({ error: 'Invalid username or password' });
     }
-};
-
-export const deleteUser = async (req: Request, res: Response) => {
-    try {
-        const userId = Number(req.params.id);
-        const deleted = await userService.deleteUser(userId);
-        if (deleted) {
-            res.status(204).send();
-        } else {
-            res.status(404).json({ message: 'User not found' });
-        }
-    } catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
-    }
-};
+  } catch (error) {
+    res.status(500).json({ error: 'Error logging in' });
+  }
+});

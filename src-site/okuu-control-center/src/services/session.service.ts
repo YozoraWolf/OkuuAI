@@ -9,11 +9,8 @@ const getApiUrl = async () => {
 
 const getAuthHeaders = () => {
     const authStore = useAuthStore();
-    return {
-        'x-api-key': authStore.apiKey,
-        'Content-Type': 'application/json',
-        "ngrok-skip-browser-warning": true,
-    };
+    const token = (authStore as any).token || localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', "ngrok-skip-browser-warning": true } : { 'Content-Type': 'application/json', "ngrok-skip-browser-warning": true };
 };
 
 export const getAllSessions = async () => {

@@ -1,160 +1,109 @@
 import { Logger } from "@src/logger";
-import sqlite3 from "sqlite3"
+import sqlite3 from "sqlite3";
 import bcrypt from "bcrypt";
-import fs from 'fs';
-import path from "path";
+import { setupDatabase } from "../db/user.db";
 
 interface User {
-    id: number;
-    name: string;
-    email: string;
-    password: string;
+    id?: number;
+    username: string;
+    password?: string;
+    role?: string;
 }
 
-const dbDir = path.resolve(__dirname, '../db');
-const usersDBPath = path.join(dbDir, 'okuu.db');
-let userDB: sqlite3.Database;
+let userDB: sqlite3.Database | null = null;
 
-const createUsersTable = (): Promise<void | Error> => {
-    return new Promise((resolve, reject) => {
-        userDB.run(
-            `CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                email TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL
-            )`,
-            (err: any) => {
-                if (err) {
-                    Logger.ERROR(err);
-                    reject(err);
-                } else {
-                    Logger.INFO("Users table created or already exists.");
-                    resolve();
-                }
-            }
-        );
-    });
+export const initUsersDB = async (): Promise<void> => {
+    Logger.INFO("Initializing Users DB (consolidated)...");
+    try {
+        userDB = await setupDatabase() as unknown as sqlite3.Database;
+        Logger.INFO('Consolidated users DB ready');
+    } catch (err) {
+        Logger.ERROR(`Failed to initialize consolidated users DB: ${err}`);
+        throw err;
+    }
 };
 
-export const initUsersDB = async (): Promise<void | Error> => {
-    Logger.INFO("Initializing Users DB...");
-
-    if (!fs.existsSync(dbDir)) {
-        Logger.INFO("DB directory does not exist. Creating new directory...");
-        fs.mkdirSync(dbDir, { recursive: true });
-    }
-
-    return new Promise((resolve, reject) => {
-        userDB = new sqlite3.Database(usersDBPath,
-            sqlite3.OPEN_CREATE | sqlite3.OPEN_READWRITE,
-            async (err: any) => {
-                if (err) {
-                    Logger.ERROR(err);
-                    reject(err);
-                } else {
-                    Logger.INFO("Users DB initialized.");
-                    try {
-                        await createUsersTable();
-                        resolve();
-                    } catch (error) {
-                        reject(error);
-                    }
-                }
-            });
-    });
+const ensureDB = () => {
+    if (!userDB) throw new Error('Users DB not initialized');
+    return userDB;
 };
 
 export const getAllUsers = async () => {
+    const db = ensureDB();
     return new Promise((resolve, reject) => {
-        userDB.all("SELECT * FROM users", (err, rows) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(rows);
-            }
+        db.all("SELECT id, username, role FROM users", (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows);
         });
     });
-}
+};
 
 export const getUserById = async (id: number) => {
+    const db = ensureDB();
     return new Promise((resolve, reject) => {
-        userDB.get("SELECT * FROM users WHERE id = ?", [id], (err, row) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(row);
-            }
+        db.get("SELECT id, username, role FROM users WHERE id = ?", [id], (err, row) => {
+            if (err) return reject(err);
+            resolve(row);
         });
     });
-}
+};
 
-export const createUser = async (user: User): Promise<User> => {
+export const createUser = async (user: User): Promise<{ id: number; username: string; role: string }> => {
+    const db = ensureDB();
     return new Promise(async (resolve, reject) => {
         try {
-            const hashedPassword = await bcrypt.hash(user.password, 10);
-            userDB.run(
-                "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
-                [user.name, user.email, hashedPassword],
+            const hashed = await bcrypt.hash(user.password || '', 10);
+            db.run(
+                "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                [user.username, hashed, user.role || 'User'],
                 function (err) {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        // Fetch the newly inserted user using the last inserted ID
-                        return userDB.get(
-                            "SELECT * FROM users WHERE id = ?",
-                            [this.lastID],
-                            (err, row: User) => {
-                                if (err) {
-                                    reject(err);
-                                } else {
-                                    resolve(row);
-                                }
-                            }
-                        );
-                    }
+                    if (err) return reject(err);
+                    db.get("SELECT id, username, role FROM users WHERE id = ?", [this.lastID], (err, row) => {
+                        if (err) return reject(err);
+                        resolve(row as { id: number; username: string; role: string });
+                    });
                 }
             );
-        } catch (error) {
-            reject(error);
+        } catch (err) {
+            reject(err);
         }
     });
 };
 
-export const updateUser = async (id: number, user: User): Promise<User> => {
-    return new Promise((resolve, reject) => {
-        userDB.run(
-            "UPDATE users SET name = ?, email = ?, password = ? WHERE id = ?",
-            [user.name, user.email, user.password, id],
-            function (err) {
-                if (err) {
-                    reject(err);
-                } else {
-                    return userDB.get(
-                        "SELECT * FROM users WHERE id = ?",
-                        [id],
-                        (err, row: User) => {
-                            if (err) {
-                                reject(err);
-                            } else {
-                                resolve(row);
-                            }
-                        }
-                    );
-                }
+export const updateUser = async (id: number, user: User): Promise<{ id: number; username: string; role: string }> => {
+    const db = ensureDB();
+    return new Promise(async (resolve, reject) => {
+        try {
+            if (user.password) {
+                const hashed = await bcrypt.hash(user.password, 10);
+                db.run("UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?", [user.username, hashed, user.role || 'User', id], function (err) {
+                    if (err) return reject(err);
+                    db.get("SELECT id, username, role FROM users WHERE id = ?", [id], (err, row) => {
+                        if (err) return reject(err);
+                        resolve(row as { id: number; username: string; role: string });
+                    });
+                });
+            } else {
+                db.run("UPDATE users SET username = ?, role = ? WHERE id = ?", [user.username, user.role || 'User', id], function (err) {
+                    if (err) return reject(err);
+                    db.get("SELECT id, username, role FROM users WHERE id = ?", [id], (err, row) => {
+                        if (err) return reject(err);
+                        resolve(row as { id: number; username: string; role: string });
+                    });
+                });
             }
-        );
+        } catch (err) {
+            reject(err);
+        }
     });
-}
+};
 
 export const deleteUser = async (id: number): Promise<boolean> => {
+    const db = ensureDB();
     return new Promise((resolve, reject) => {
-        userDB.run("DELETE FROM users WHERE id = ?", [id], (err) => {
-            if (err) {
-                reject(false);
-            } else {
-                resolve(true);
-            }
+        db.run("DELETE FROM users WHERE id = ?", [id], (err) => {
+            if (err) return reject(err);
+            resolve(true);
         });
     });
-}
+};
