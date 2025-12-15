@@ -23,14 +23,12 @@ onMounted(async () => {
   // Check if OkuuAI is active
   isOkuuAIActive.value = await configStore.checkOkuuAIStatus();
 
-  authStore.loadApiKey();
-
-  if(authStore.apiKey === '') {
+  // If not authenticated (no token), redirect to login page
+  if (!authStore.isAuthenticated) {
     router.push('/login');
+    return;
   }
 
-
   console.log('%c☢️ Hello, OkuuAI Control Center!', 'font-size: 20px;');
-  authStore.loadApiKey();
 });
 </script>

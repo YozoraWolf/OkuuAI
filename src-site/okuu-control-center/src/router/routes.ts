@@ -10,6 +10,10 @@ const routes: RouteRecordRaw[] = [
     component: () => import('pages/Login.vue')
   },
   {
+    path: '/change-password',
+    component: () => import('pages/ChangePassword.vue')
+  },
+  {
     path: '/settings',
     component: () => import('pages/Settings.vue')
   },
