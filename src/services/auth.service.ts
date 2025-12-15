@@ -45,12 +45,12 @@ export class AuthService {
     });
   }
 
-  async login(username: string, password: string): Promise<{ id: number; username: string; role: string } | null> {
+  async login(username: string, password: string): Promise<{ id: number; username: string; role: string; mustChangePassword: boolean } | null> {
     return new Promise((resolve, reject) => {
       this.db.get(
         'SELECT * FROM users WHERE username = ?',
         [username],
-        async (err, row: User | null) => {
+        async (err, row: any | null) => {
           if (err) {
             return reject(err);
           }
@@ -61,7 +61,38 @@ export class AuthService {
           if (!isMatch) {
             return resolve(null);
           }
-          resolve({ id: row.id, username: row.username, role: row.role });
+          resolve({ 
+            id: row.id, 
+            username: row.username, 
+            role: row.role,
+            mustChangePassword: row.mustChangePassword === 1
+          });
+        }
+      );
+    });
+  }
+
+  async changePassword(userId: number, currentPassword: string, newPassword: string): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        'SELECT password FROM users WHERE id = ?',
+        [userId],
+        async (err, row: any | null) => {
+          if (err) return reject(err);
+          if (!row) return resolve(false);
+          
+          const isMatch = await bcrypt.compare(currentPassword, row.password);
+          if (!isMatch) return resolve(false);
+          
+          const hashedPassword = await bcrypt.hash(newPassword, 10);
+          this.db.run(
+            'UPDATE users SET password = ?, mustChangePassword = 0 WHERE id = ?',
+            [hashedPassword, userId],
+            (err) => {
+              if (err) return reject(err);
+              resolve(true);
+            }
+          );
         }
       );
     });

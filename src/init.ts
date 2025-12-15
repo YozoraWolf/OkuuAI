@@ -123,11 +123,11 @@ export const init = async () =>
                 }
                 if (!row) {
                     const hashed = await bcrypt.hash('admin', 10);
-                    db.run("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ['admin', hashed, 'Admin'], (insertErr: any) => {
+                    db.run("INSERT INTO users (username, password, role, mustChangePassword) VALUES (?, ?, ?, ?)", ['admin', hashed, 'Admin', 1], (insertErr: any) => {
                         if (insertErr) {
                             Logger.ERROR(`Failed to create admin user: ${insertErr}`);
                         } else {
-                            Logger.INFO('Default admin user created (username: admin, password: admin)');
+                            Logger.INFO('Default admin user created (username: admin, password: admin) - PASSWORD CHANGE REQUIRED ON FIRST LOGIN');
                         }
                     });
                 } else {

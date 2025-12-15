@@ -14,19 +14,24 @@ export const useAuthStore = defineStore('auth', {
                 this.user = res.data.user;
                 localStorage.setItem('user', JSON.stringify(this.user));
                 setAuthToken(this.token);
-                return true;
+                return { success: true, mustChangePassword: this.user?.mustChangePassword };
             }
-            return false;
+            return { success: false, mustChangePassword: false };
         },
         logout() {
             this.token = '';
             this.user = null;
             setAuthToken(null);
             localStorage.removeItem('user');
+        },
+        updateUser(user: any) {
+            this.user = user;
+            localStorage.setItem('user', JSON.stringify(this.user));
         }
     },
     getters: {
         isAuthenticated: (state) => !!state.token,
         getUser: (state) => state.user,
+        mustChangePassword: (state) => state.user?.mustChangePassword === true,
     },
 });

@@ -50,14 +50,14 @@ const isRateLimited = ref(false);
 
 const submit = async () => {
     isRateLimited.value = true;
-    const ok = await authStore.login(username.value, password.value);
+    const result = await authStore.login(username.value, password.value);
     isRateLimited.value = false;
-    if (ok) {
-        // optionally persist token longer when remembered
-        if (remember.value) {
-            // already stored in localStorage by the store
+    if (result.success) {
+        if (result.mustChangePassword) {
+            router.push('/change-password');
+        } else {
+            router.push('/');
         }
-        router.push('/');
     } else {
         $q.notify({ type: 'negative', message: 'Invalid username or password' });
     }

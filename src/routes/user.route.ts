@@ -37,6 +37,29 @@ router.post('/login', loginLimiter, async (req, res) => {
 	}
 });
 
+router.post('/change-password', requireAuth, async (req, res) => {
+	const { currentPassword, newPassword } = req.body;
+	const userId = (req as any).user?.id;
+	
+	if (!userId || !currentPassword || !newPassword) {
+		return res.status(400).json({ error: 'Missing required fields' });
+	}
+	
+	if (newPassword.length < 6) {
+		return res.status(400).json({ error: 'New password must be at least 6 characters' });
+	}
+	
+	try {
+		const success = await authService.changePassword(userId, currentPassword, newPassword);
+		if (!success) {
+			return res.status(401).json({ error: 'Current password is incorrect' });
+		}
+		res.status(200).json({ message: 'Password changed successfully' });
+	} catch (err) {
+		res.status(500).json({ error: 'Error changing password' });
+	}
+});
+
 // Protected CRUD endpoints
 router.get('/', requireAuth, async (req, res) => {
 	try {
