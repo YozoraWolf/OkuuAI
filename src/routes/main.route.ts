@@ -40,8 +40,13 @@ const checkApiKey = (req: any, res: any) => {
     }
 };
 
+const whoami = (_: any, res: any) => {
+    res.status(200).send('okuuai');
+};
+
 // Route to close app from GUI
 router.get('/status', getOkuuStatus);
 router.post("/apiKey", apiKeyLimiter, checkApiKey);
+router.get('/whoami', whoami);
 
 export default router;
