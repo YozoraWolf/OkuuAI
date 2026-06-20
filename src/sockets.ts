@@ -61,8 +61,8 @@ export const setupSockets = (server: HTTPServer) => {
                 // Set flag to prevent generation from starting if it hasn't started yet
                 Core.shouldStopGeneration = true;
 
-                // Use Ollama's built-in abort method to stop all streaming generations
-                Core.ollama_instance.abort();
+                // Ollama exposes an abort helper; custom OpenAI-compatible streams use the stop flag above.
+                Core.ollama_instance?.abort?.();
                 Logger.INFO('Generation aborted successfully');
             } catch (err) {
                 Logger.ERROR('Error processing stop generation signal: ' + err);

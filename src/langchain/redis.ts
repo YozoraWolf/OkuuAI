@@ -6,7 +6,9 @@ import { createClient, RedisClientType, SchemaFieldTypes, VectorAlgorithms } fro
 
 const REDIS_PORT: number = parseInt(process.env.REDIS_PORT || '6379', 10);
 const REDIS_PWD = process.env.REDIS_PWD;
-export const REDIS_URL = `redis://default:${REDIS_PWD}@localhost:${REDIS_PORT}/0`;
+const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
+const EMBEDDING_PROVIDER = (process.env.EMBEDDING_PROVIDER || 'none').toLowerCase();
+export const REDIS_URL = process.env.REDIS_URL || `redis://default:${REDIS_PWD}@${REDIS_HOST}:${REDIS_PORT}/0`;
 
 export let redisClientMemory: RedisClientType;
 
@@ -93,6 +95,38 @@ export async function saveMemoryWithEmbedding(
   timestamp?: number
 ) {
   try {
+    if (EMBEDDING_PROVIDER === 'none') {
+      const finalTimestamp = timestamp || Date.now();
+      const memoryKey = existingMemoryKey || `okuuMemory:${sessionId}:${finalTimestamp}`;
+      const data: any = {
+        message,
+        thinking,
+        timestamp: finalTimestamp,
+        memoryKey,
+        sessionId: sessionId || "-1",
+        type,
+        user,
+        recall_count: 0,
+      };
+
+      if (metadata) {
+        data.metadata = JSON.stringify(metadata);
+      }
+
+      await redisClientMemory.hSet(memoryKey, data);
+      return {
+        memoryKey,
+        message,
+        thinking,
+        timestamp: finalTimestamp,
+        user,
+        sessionId,
+        type,
+        recall_count: 0,
+        embedding: []
+      };
+    }
+
     // Generate embedding for the statement (e.g., "I live in Tokyo")
     const embeddingResponse = await Core.ollama_instance.embed({ input: message, model: "nomic-embed-text" });
 
@@ -170,6 +204,10 @@ async function updateRecallCount(memories: any[]) {
 
 export async function searchMemoryWithEmbedding(query: string, sessionId: string = "-1", topK: number = 5) {
   try {
+    if (EMBEDDING_PROVIDER === 'none') {
+      return [];
+    }
+
     // Generate query embedding
     const queryEmbeddingResponse = await Core.ollama_instance.embed({ input: query, model: "nomic-embed-text" });
 

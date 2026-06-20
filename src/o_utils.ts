@@ -139,7 +139,7 @@ export const doesModelExistInOllama = async (modelName: string) => {
 
 export const getOllamaDownloadedModels = async (): Promise<ModelResponse[]> => {
   // get all models from ollama using ollamajs
-  const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
+  const ollama = new Ollama({ host: process.env.OLLAMA_HOST || `http://127.0.0.1:${process.env.OLLAMA_PORT || 11434}` });
   const downloadedModels = await ollama.list();
   return downloadedModels.models;
 };

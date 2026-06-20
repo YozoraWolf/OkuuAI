@@ -61,7 +61,7 @@ export async function startAndMonitorContainers() {
 
 export const runModel = async (model_name: string) => {
 
-  const ollama = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
+  const ollama = new Ollama({ host: process.env.OLLAMA_HOST || `http://127.0.0.1:${process.env.OLLAMA_PORT || 11434}` });
 
   const list = await ollama.list();
   const models = list.models;

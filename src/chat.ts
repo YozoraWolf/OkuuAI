@@ -4,6 +4,7 @@ import { Logger } from './logger';
 import { getLatestMsgsFromSession, SESSION_ID } from './langchain/memory/memory';
 import { franc } from 'franc-ce';
 import { Ollama } from 'ollama';
+import { generateCompletion, isOllamaProvider, streamCompletion } from './llm';
 import {
     isQuestion,
     saveMemoryWithEmbedding,
@@ -242,7 +243,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 // Notify that AI generation is starting (not just processing)
                 io.to(msg.sessionId).emit('generationStarted');
 
-                const stream = await Core.ollama_instance.generate({
+                const stream = streamCompletion({
                     prompt,
                     model: Core.model_name,
                     stream: true,
@@ -310,7 +311,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                         let finalReply = '';
                         io.to(msg.sessionId).emit('generationStarted');
 
-                        const followUpStream = await Core.ollama_instance.generate({
+                        const followUpStream = streamCompletion({
                             prompt: followUpPrompt,
                             model: Core.model_name,
                             stream: true,
@@ -360,7 +361,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
         // --- NON-STREAM MODE ---
         Logger.DEBUG(`Loading full response...`);
-        const resp = await Core.ollama_instance.generate({
+        const resp = await generateCompletion({
             prompt,
             model: Core.model_name,
             system: Core.model_settings.system,
@@ -401,7 +402,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                 const toolResult = await enhancedToolSystem.executeTool(reactiveToolCall);
                 const followUpPrompt = `${prompt}\n${reply.message}\n\nTool Result: ${toolResult.output}\n\nUser: Please use this information to answer my request.\n\nOkuu:`;
 
-                const followUpResp = await Core.ollama_instance.generate({
+                const followUpResp = await generateCompletion({
                     prompt: followUpPrompt,
                     model: Core.model_name,
                     stream: false,
@@ -436,8 +437,13 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 };
 
 export const initOllamaInstance = async () => {
+    if (!isOllamaProvider() && (process.env.EMBEDDING_PROVIDER || 'none').toLowerCase() !== 'ollama') {
+        Logger.INFO(`LLM provider set to ${process.env.LLM_PROVIDER}; skipping Ollama client initialization.`);
+        return;
+    }
+
     try {
-        Core.ollama_instance = new Ollama({ host: `http://127.0.0.1:${process.env.OLLAMA_PORT}` });
+        Core.ollama_instance = new Ollama({ host: process.env.OLLAMA_HOST || `http://127.0.0.1:${process.env.OLLAMA_PORT || 11434}` });
         Logger.INFO(`✅🦙 Ollama instance initialized.`);
     } catch (error: any) {
         Logger.ERROR(`❌🦙 Error initializing Ollama instance: ${error.message}`);
