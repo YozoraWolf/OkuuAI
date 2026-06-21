@@ -23,17 +23,15 @@ Follow these steps to get OkuuAI up and running:
 
 ### Step 1: Install Dependencies
 
-Make sure you have `docker` installed and that you can [run it without sudo](https://docs.docker.com/engine/install/linux-postinstall/).
-
 Install Node.js dependencies:
 
 ```bash
 npm install
 ```
 
-### Step 2: Configure Environment
+Docker is optional, but recommended for running Redis locally.
 
-**Option A: Quick Setup (Recommended)**
+### Step 2: Configure Environment
 
 Copy the example environment file and edit it with your preferences:
 
@@ -41,23 +39,52 @@ Copy the example environment file and edit it with your preferences:
 cp .env.example .env
 ```
 
-Then edit `.env` and set your required values:
+At minimum, set:
+
 - `API_KEY` - Set a secure API key for authentication
-- `PORT` - Choose a port (default: 3009)
+- `JWT_SECRET` - Set a secure JWT secret
 - `REDIS_PWD` - Set a secure Redis password
-- Other optional settings (Discord, Tavily, Ngrok, etc.)
+- `LLM_PROVIDER`, `LLM_BASE_URL`, and `LLM_MODEL` - Point OkuuAI at your inference server
 
-**Option B: Interactive Configuration**
+OkuuAI does not download models automatically. Models are managed by your chosen inference backend.
 
-Run the interactive config script to set up your environment:
+### Step 3: Choose An Inference Backend
+
+OkuuAI can use any OpenAI-compatible inference endpoint, such as `llama.cpp` server mode, LM Studio, vLLM, or OpenRouter.
+
+For `llama.cpp` server mode:
 
 ```bash
-npm run config
+LLM_PROVIDER=openai-compatible
+LLM_BASE_URL=http://127.0.0.1:8080/v1
+LLM_MODEL=local-model
 ```
 
-This will guide you through setting up all required environment variables.
+For Ollama:
 
-### Step 3: Start the Backend
+```bash
+LLM_PROVIDER=ollama
+OLLAMA_HOST=http://127.0.0.1:11434
+LLM_MODEL=llama3
+```
+
+Pull or load models yourself using your chosen backend, for example `ollama pull llama3` or `llama-server -m model.gguf --port 8080`.
+
+### Step 4: Start Redis
+
+Using Docker:
+
+```bash
+docker compose up -d redis
+```
+
+Ollama is optional in Docker Compose:
+
+```bash
+docker compose --profile local-llm up -d
+```
+
+### Step 5: Start the Backend
 
 Start the OkuuAI backend server:
 
@@ -71,9 +98,7 @@ Or with Ngrok tunnel for remote access:
 ./start --tunnel
 ```
 
-The program will automatically download and install necessary models on first run.
-
-### Step 4: Start the Frontend (Optional)
+### Step 6: Start the Frontend (Optional)
 
 To run the web interface:
 
@@ -83,7 +108,34 @@ cd src-site/okuu-control-center && npm run dev
 
 The frontend will be available at `http://localhost:5173` (or the port shown in the terminal).
 
-### Step 5: Enable Integrations (Optional)
+### Dev Shortcut
+
+For local development with Redis, backend, frontend, and a `llama.cpp` server at `127.0.0.1:8080`:
+
+```bash
+npm run dev
+```
+
+### Semantic Memory
+
+Semantic memory is disabled by default so users do not need a separate embedding model:
+
+```bash
+EMBEDDING_PROVIDER=none
+```
+
+To enable semantic memory later, configure a separate embedding backend and model. Chat models are usually not good embedding models, so a dedicated embedding model is recommended.
+
+For a local `llama.cpp` Qwen3 embedding sidecar:
+
+```bash
+EMBEDDING_PROVIDER=openai-compatible
+EMBEDDING_BASE_URL=http://127.0.0.1:8081/v1
+EMBEDDING_MODEL=qwen3-embedding-0.6b
+EMBEDDING_DIM=1024
+```
+
+### Step 7: Enable Integrations (Optional)
 
 After basic setup, you can enable optional integrations:
 - **Discord Bot** - See [Discord Integration](#discord-bot-) section below
@@ -103,10 +155,27 @@ PORT=3009 # Port for the server to run on
 SRV_URL=http://localhost # Whitelist probably? WIP.
 
 # Redis
+REDIS_HOST=127.0.0.1 # Host for Redis when the backend runs outside Docker
 REDIS_PORT=6009 # Port for the Redis server
 REDIS_PWD=admin1234 # Password for the Redis server. (Change this)
+# REDIS_URL=redis://default:admin1234@127.0.0.1:6009/0 # Optional full Redis URL override
 
-# Ollama
+# LLM inference
+LLM_PROVIDER=openai-compatible # openai-compatible or ollama
+LLM_BASE_URL=http://127.0.0.1:8080/v1 # llama.cpp/LM Studio/vLLM/OpenRouter-compatible endpoint
+LLM_MODEL=local-model # Model name sent to the configured inference endpoint
+LLM_TOOL_MODEL=local-model # Optional separate model for tool-selection prompts
+LLM_API_KEY= # Optional bearer token for remote OpenAI-compatible providers
+
+# Embeddings / semantic memory
+EMBEDDING_PROVIDER=none # none, openai-compatible, or ollama. none avoids requiring a local embedding model.
+EMBEDDING_BASE_URL=http://127.0.0.1:8081/v1 # OpenAI-compatible embedding endpoint, for example llama.cpp --embedding
+EMBEDDING_MODEL=qwen3-embedding-0.6b
+EMBEDDING_DIM=1024 # Qwen3-Embedding-0.6B and bge-m3 use 1024 dimensions. nomic-embed-text uses 768.
+EMBEDDING_API_KEY= # Optional bearer token for remote embedding providers
+
+# Ollama (optional)
+OLLAMA_HOST=http://127.0.0.1:7009 # Used only when LLM_PROVIDER=ollama or EMBEDDING_PROVIDER=ollama
 OLLAMA_PORT=7009 # Port for the Ollama server
 OLLAMA_DEFAULT_MODEL=llama3 # Default model for Ollama if none is specified during config
 

@@ -17,23 +17,53 @@ OkuuAI fonctionne localement en utilisant votre CPU + GPU, offrant une confident
 
 ### 🚀 Installation en utilisant Docker
 
-Assurez-vous d'avoir `docker` installé et que vous pouvez [l'exécuter sans sudo](https://docs.docker.com/engine/install/linux-postinstall/).
+Docker est optionnel, mais recommandé pour exécuter Redis localement.
 
----
-
-Pour installer les dépendances du projet, exécutez la commande suivante :
+Pour installer les dépendances du projet, exécutez :
 
 ```
 npm install
 ```
 
-Avant de l'exécuter pour la première fois, veuillez exécuter le script de configuration pour définir correctement toutes les variables d'environnement. N'hésitez pas à choisir n'importe quel port, assurez-vous de bien configurer le reste pour éviter les erreurs.
+Copiez le fichier d'environnement d'exemple et modifiez-le :
 
 ```
-npm run config
+cp .env.example .env
 ```
 
-Ensuite, exécutez-le simplement en utilisant :
+Configurez au minimum `API_KEY`, `JWT_SECRET`, `REDIS_PWD`, `LLM_PROVIDER`, `LLM_BASE_URL` et `LLM_MODEL`.
+
+OkuuAI ne télécharge pas les modèles automatiquement. Les modèles sont gérés par le backend d'inférence que vous choisissez.
+
+Pour un endpoint compatible OpenAI, comme `llama.cpp`, LM Studio, vLLM ou OpenRouter :
+
+```bash
+LLM_PROVIDER=openai-compatible
+LLM_BASE_URL=http://127.0.0.1:8080/v1
+LLM_MODEL=local-model
+```
+
+Pour Ollama :
+
+```bash
+LLM_PROVIDER=ollama
+OLLAMA_HOST=http://127.0.0.1:11434
+LLM_MODEL=llama3
+```
+
+Démarrez Redis avec Docker :
+
+```bash
+docker compose up -d redis
+```
+
+Ollama est optionnel dans Docker Compose :
+
+```bash
+docker compose --profile local-llm up -d
+```
+
+Ensuite, démarrez le backend :
 
 ```
 npm start
@@ -47,7 +77,26 @@ ou
 
 Le flag `--tunnel` est optionnel et est utilisé pour démarrer le tunnel Ngrok pour un accès à distance.
 
-Le programme téléchargera et installera automatiquement les modèles nécessaires.
+Pour le développement local avec Redis, backend, frontend et un endpoint `llama.cpp` local :
+
+```bash
+npm run dev
+```
+
+La mémoire sémantique est désactivée par défaut afin de ne pas nécessiter de modèle d'embeddings séparé :
+
+```bash
+EMBEDDING_PROVIDER=none
+```
+
+Pour utiliser un serveur d'embeddings compatible OpenAI, par exemple `llama.cpp --embedding` :
+
+```bash
+EMBEDDING_PROVIDER=openai-compatible
+EMBEDDING_BASE_URL=http://127.0.0.1:8081/v1
+EMBEDDING_MODEL=qwen3-embedding-0.6b
+EMBEDDING_DIM=1024
+```
 
 ### Modèle de fichier .env
 ```python
@@ -58,10 +107,27 @@ PORT=3009 # Port pour exécuter le serveur
 SRV_URL=http://localhost # Liste blanche probablement ? WIP.
 
 # Redis
+REDIS_HOST=127.0.0.1 # Hôte Redis lorsque le backend s'exécute hors Docker
 REDIS_PORT=6009 # Port pour le serveur Redis
 REDIS_PWD=admin1234 # Mot de passe pour le serveur Redis. (Changez cela)
+# REDIS_URL=redis://default:admin1234@127.0.0.1:6009/0 # URL Redis complète optionnelle
 
-# Ollama
+# Inférence LLM
+LLM_PROVIDER=openai-compatible # openai-compatible ou ollama
+LLM_BASE_URL=http://127.0.0.1:8080/v1 # Endpoint compatible llama.cpp/LM Studio/vLLM/OpenRouter
+LLM_MODEL=local-model # Nom du modèle envoyé à l'endpoint d'inférence
+LLM_TOOL_MODEL=local-model # Modèle optionnel séparé pour la sélection d'outils
+LLM_API_KEY= # Token bearer optionnel pour les fournisseurs distants compatibles OpenAI
+
+# Embeddings / mémoire sémantique
+EMBEDDING_PROVIDER=none # none, openai-compatible ou ollama. none évite de nécessiter un modèle local d'embeddings.
+EMBEDDING_BASE_URL=http://127.0.0.1:8081/v1 # Endpoint d'embeddings compatible OpenAI
+EMBEDDING_MODEL=qwen3-embedding-0.6b
+EMBEDDING_DIM=1024 # Qwen3-Embedding-0.6B et bge-m3 utilisent 1024 dimensions. nomic-embed-text utilise 768.
+EMBEDDING_API_KEY= # Token bearer optionnel pour les fournisseurs d'embeddings distants
+
+# Ollama (optionnel)
+OLLAMA_HOST=http://127.0.0.1:7009 # Utilisé uniquement avec LLM_PROVIDER=ollama ou EMBEDDING_PROVIDER=ollama
 OLLAMA_PORT=7009 # Port pour le serveur Ollama
 OLLAMA_DEFAULT_MODEL=llama3 # Modèle par défaut pour Ollama si aucun n'est spécifié lors de la configuration
 

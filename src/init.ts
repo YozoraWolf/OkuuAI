@@ -11,7 +11,6 @@ import { initConfig, loadEnv, interactiveConfig, createEnvFile, defaultAssistant
 import { initUsersDB } from './services/user.service';
 import { setupDatabase } from './db/user.db';
 import bcrypt from 'bcrypt';
-import { runModel, startAndMonitorContainers } from './compose/containers';
 import { initRedis } from './langchain/redis';
 import { select } from '@inquirer/prompts';
 import { initOllamaInstance } from './chat';
@@ -82,22 +81,20 @@ export const init = async () =>
             think: assistantConfig.think ?? Core.model_settings.think,
         });
 
+        if (process.env.LLM_MODEL) {
+            Core.model_name = process.env.LLM_MODEL;
+        }
+        if (process.env.LLM_TOOL_MODEL) {
+            Core.tool_model_name = process.env.LLM_TOOL_MODEL;
+        }
+
         Logger.DEBUG(`Assistant: ${Core.ai_name}`);
         Logger.DEBUG(`Model: ${Core.model_name}`);
         Logger.DEBUG(`Tool Model: ${Core.tool_model_name}`);
         Logger.DEBUG(`System Prompt: ${Core.model_settings.system}`);
 
-        // check if the ollama service is on, if not, start it
-        //await checkOllamaService();
-        await startAndMonitorContainers();
-
-        // start ollama instance
+        // Inference backends are user-managed. Docker/Ollama/model downloads are optional setup steps.
         await initOllamaInstance();
-
-        // run model
-        await runModel(Core.model_name);
-        await runModel("nomic-embed-text");
-        await runModel(Core.tool_model_name);
 
         await initRedis();
 

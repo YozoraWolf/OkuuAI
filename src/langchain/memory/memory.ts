@@ -7,7 +7,7 @@ import { ConversationChain } from "langchain/chains";
 import { Logger } from "@src/logger";
 import fs from "fs";
 import { ChatMessage, setMessagesCount } from "@src/chat";
-import { redisClientMemory, saveMemoryWithEmbedding } from "../redis";
+import { REDIS_URL, redisClientMemory, saveMemoryWithEmbedding } from "../redis";
 
 const SESSION_JSON = "session.json";
 export let SESSION_ID: string;
@@ -87,7 +87,7 @@ export const startSession = async (sessionId: any): Promise<ConversationChain> =
   session = new BufferMemory({
     chatHistory: new RedisChatMessageHistory({
       sessionId, // Or some other unique identifier for the conversation
-      url: `redis://default:${process.env.REDIS_PWD}@localhost:${process.env.REDIS_PORT}/0`, // Default value, override with your own instance's URL
+      url: REDIS_URL,
     }),
     returnMessages: true,
     memoryKey: "history",

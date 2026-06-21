@@ -2,6 +2,7 @@ import { Logger } from '../logger';
 import { loadAssistantConfig } from '@src/o_utils';
 import { searchMemoryWithEmbedding } from '@src/langchain/redis';
 import { Core } from '../core';
+import { generateCompletion } from '../llm';
 import { RedisClientType } from 'redis';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -873,7 +874,7 @@ Response:`;
 
         try {
             Logger.INFO(`[ToolCheck] Analyzing message with ${Core.tool_model_name}: "${promptUserMessage.substring(0, 50)}..."`);
-            const response = await Core.ollama_instance.generate({
+            const response = await generateCompletion({
                 prompt: toolAnalysisPrompt,
                 model: Core.tool_model_name, // Use the configured tool model
                 stream: false,
