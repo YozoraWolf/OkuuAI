@@ -22,7 +22,69 @@ const getBaseUrl = () => {
     return 'http://127.0.0.1:8080/v1';
 };
 
+const getEmbeddingProvider = () => (process.env.EMBEDDING_PROVIDER || 'none').toLowerCase();
+
+const getEmbeddingBaseUrl = () => {
+    if (process.env.EMBEDDING_BASE_URL) return process.env.EMBEDDING_BASE_URL.replace(/\/$/, '');
+    if (getEmbeddingProvider() === 'ollama') return process.env.OLLAMA_HOST || `http://127.0.0.1:${process.env.OLLAMA_PORT || 11434}`;
+    return 'http://127.0.0.1:8081/v1';
+};
+
 export const isOllamaProvider = () => getProvider() === 'ollama';
+
+export const embedText = async (input: string): Promise<number[]> => {
+    const provider = getEmbeddingProvider();
+    const model = process.env.EMBEDDING_MODEL || 'nomic-embed-text';
+
+    if (provider === 'none') {
+        return [];
+    }
+
+    if (provider === 'ollama') {
+        const embeddingResponse = await Core.ollama_instance.embed({ input, model });
+        return embeddingResponse.embeddings.length === 1
+            ? embeddingResponse.embeddings[0]
+            : averageEmbeddings(embeddingResponse.embeddings);
+    }
+
+    if (provider !== 'openai-compatible') {
+        throw new Error(`Unsupported embedding provider: ${provider}`);
+    }
+
+    const response = await fetch(`${getEmbeddingBaseUrl()}/embeddings`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(process.env.EMBEDDING_API_KEY ? { Authorization: `Bearer ${process.env.EMBEDDING_API_KEY}` } : {}),
+        },
+        body: JSON.stringify({ model, input }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Embedding endpoint returned ${response.status}: ${await response.text()}`);
+    }
+
+    const data: any = await response.json();
+    const embedding = data.data?.[0]?.embedding || data.embedding;
+    if (!Array.isArray(embedding)) {
+        throw new Error('Embedding endpoint returned no embedding array.');
+    }
+
+    return embedding;
+};
+
+function averageEmbeddings(embeddings: number[][]): number[] {
+    const dimension = embeddings[0].length;
+    const summed = new Array(dimension).fill(0);
+
+    embeddings.forEach(vector => {
+        vector.forEach((val, index) => {
+            summed[index] += val;
+        });
+    });
+
+    return summed.map(val => val / embeddings.length);
+}
 
 export const generateCompletion = async (options: GenerateOptions): Promise<GenerateResponse> => {
     if (isOllamaProvider()) {

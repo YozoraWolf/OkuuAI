@@ -126,6 +126,15 @@ EMBEDDING_PROVIDER=none
 
 To enable semantic memory later, configure a separate embedding backend and model. Chat models are usually not good embedding models, so a dedicated embedding model is recommended.
 
+For a local `llama.cpp` Qwen3 embedding sidecar:
+
+```bash
+EMBEDDING_PROVIDER=openai-compatible
+EMBEDDING_BASE_URL=http://127.0.0.1:8081/v1
+EMBEDDING_MODEL=qwen3-embedding-0.6b
+EMBEDDING_DIM=1024
+```
+
 ### Step 7: Enable Integrations (Optional)
 
 After basic setup, you can enable optional integrations:
@@ -159,8 +168,11 @@ LLM_TOOL_MODEL=local-model # Optional separate model for tool-selection prompts
 LLM_API_KEY= # Optional bearer token for remote OpenAI-compatible providers
 
 # Embeddings / semantic memory
-EMBEDDING_PROVIDER=none # none or ollama. none avoids requiring a local embedding model.
-EMBEDDING_MODEL=nomic-embed-text
+EMBEDDING_PROVIDER=none # none, openai-compatible, or ollama. none avoids requiring a local embedding model.
+EMBEDDING_BASE_URL=http://127.0.0.1:8081/v1 # OpenAI-compatible embedding endpoint, for example llama.cpp --embedding
+EMBEDDING_MODEL=qwen3-embedding-0.6b
+EMBEDDING_DIM=1024 # Qwen3-Embedding-0.6B and bge-m3 use 1024 dimensions. nomic-embed-text uses 768.
+EMBEDDING_API_KEY= # Optional bearer token for remote embedding providers
 
 # Ollama (optional)
 OLLAMA_HOST=http://127.0.0.1:7009 # Used only when LLM_PROVIDER=ollama or EMBEDDING_PROVIDER=ollama

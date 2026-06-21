@@ -7,7 +7,10 @@ export REDIS_PWD="${REDIS_PWD:-admin1234}"
 export LLM_PROVIDER="${LLM_PROVIDER:-openai-compatible}"
 export LLM_BASE_URL="${LLM_BASE_URL:-http://127.0.0.1:8080/v1}"
 export LLM_MODEL="${LLM_MODEL:-local-model}"
-export EMBEDDING_PROVIDER="${EMBEDDING_PROVIDER:-none}"
+export EMBEDDING_PROVIDER="${EMBEDDING_PROVIDER:-openai-compatible}"
+export EMBEDDING_BASE_URL="${EMBEDDING_BASE_URL:-http://127.0.0.1:8081/v1}"
+export EMBEDDING_MODEL="${EMBEDDING_MODEL:-qwen3-embedding-0.6b}"
+export EMBEDDING_DIM="${EMBEDDING_DIM:-1024}"
 
 docker compose up -d redis
 

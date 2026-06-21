@@ -1,13 +1,14 @@
 import { ChatMessage } from '@src/chat';
 import { Core } from '@src/core';
+import { embedText } from '@src/llm';
 import { Logger } from '@src/logger';
-import { Ollama } from 'ollama';
 import { createClient, RedisClientType, SchemaFieldTypes, VectorAlgorithms } from 'redis';
 
 const REDIS_PORT: number = parseInt(process.env.REDIS_PORT || '6379', 10);
 const REDIS_PWD = process.env.REDIS_PWD;
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
 const EMBEDDING_PROVIDER = (process.env.EMBEDDING_PROVIDER || 'none').toLowerCase();
+const EMBEDDING_DIM = parseInt(process.env.EMBEDDING_DIM || '768', 10);
 export const REDIS_URL = process.env.REDIS_URL || `redis://default:${REDIS_PWD}@${REDIS_HOST}:${REDIS_PORT}/0`;
 
 export let redisClientMemory: RedisClientType;
@@ -31,9 +32,10 @@ async function createMemoryIndex() {
     const embeddingAttr = indexInfo['attributes']?.find(attr => attr.name === 'embedding');
     const sessionIdAttr = indexInfo['attributes']?.find(attr => attr.name === 'sessionId');
 
-    if (embeddingAttr && Number(embeddingAttr.dim) !== 768) {
+    if (embeddingAttr && Number(embeddingAttr.dim) !== EMBEDDING_DIM) {
       Logger.WARN('Dimension mismatch detected. Dropping and recreating index...');
       await redisClientMemory.ft.dropIndex('idx:memories');
+      await clearStoredEmbeddings();
       throw new Error('Index dropped for re-creation.');
     }
 
@@ -65,7 +67,7 @@ async function createMemoryIndex() {
               type: SchemaFieldTypes.VECTOR,
               ALGORITHM: VectorAlgorithms.HNSW,
               TYPE: 'FLOAT32',
-              DIM: 768,
+              DIM: EMBEDDING_DIM,
               DISTANCE_METRIC: 'COSINE',
               AS: 'embedding',
             },
@@ -82,6 +84,19 @@ async function createMemoryIndex() {
       Logger.ERROR('Error checking memory index: ' + error);
     }
   }
+}
+
+async function clearStoredEmbeddings() {
+  let cursor = 0;
+
+  do {
+    const result = await redisClientMemory.scan(cursor, { MATCH: 'okuuMemory:*', COUNT: 100 });
+    cursor = result.cursor;
+
+    for (const key of result.keys) {
+      await redisClientMemory.hDel(key, 'embedding');
+    }
+  } while (cursor !== 0);
 }
 
 export async function saveMemoryWithEmbedding(
@@ -127,16 +142,11 @@ export async function saveMemoryWithEmbedding(
       };
     }
 
-    // Generate embedding for the statement (e.g., "I live in Tokyo")
-    const embeddingResponse = await Core.ollama_instance.embed({ input: message, model: "nomic-embed-text" });
-
-    const embedding = embeddingResponse.embeddings.length === 1
-      ? embeddingResponse.embeddings[0]
-      : averageEmbeddings(embeddingResponse.embeddings);
+    const embedding = await embedText(message);
 
     // Ensure embedding dimension matches Redis index configuration
-    if (embedding.length !== 768) {
-      throw new Error(`Embedding dimensionality mismatch: Expected 768, got ${embedding.length}`);
+    if (embedding.length !== EMBEDDING_DIM) {
+      throw new Error(`Embedding dimensionality mismatch: Expected ${EMBEDDING_DIM}, got ${embedding.length}`);
     }
 
     const finalTimestamp = timestamp || Date.now();
@@ -178,20 +188,6 @@ export async function saveMemoryWithEmbedding(
   }
 }
 
-// Helper function to average multiple embeddings
-function averageEmbeddings(embeddings: number[][]): number[] {
-  const dimension = embeddings[0].length;
-  const summed = new Array(dimension).fill(0);
-
-  embeddings.forEach(vector => {
-    vector.forEach((val, index) => {
-      summed[index] += val;
-    });
-  });
-
-  return summed.map(val => val / embeddings.length); // Divide by the number of embeddings
-}
-
 // If memory is called more frequently increse its recall count
 async function updateRecallCount(memories: any[]) {
   for (const memory of memories) {
@@ -208,12 +204,11 @@ export async function searchMemoryWithEmbedding(query: string, sessionId: string
       return [];
     }
 
-    // Generate query embedding
-    const queryEmbeddingResponse = await Core.ollama_instance.embed({ input: query, model: "nomic-embed-text" });
+    const queryEmbedding = await embedText(query);
 
-    const queryEmbedding = queryEmbeddingResponse.embeddings.length === 1
-      ? queryEmbeddingResponse.embeddings[0]
-      : averageEmbeddings(queryEmbeddingResponse.embeddings);
+    if (queryEmbedding.length !== EMBEDDING_DIM) {
+      throw new Error(`Embedding dimensionality mismatch: Expected ${EMBEDDING_DIM}, got ${queryEmbedding.length}`);
+    }
 
     // Ensure correct embedding format (raw binary)
     const blobEmbedding = Buffer.from(new Float32Array(queryEmbedding).buffer)
