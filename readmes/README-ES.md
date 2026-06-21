@@ -17,23 +17,53 @@ OkuuAI se ejecuta localmente utilizando su CPU + GPU, proporcionando privacidad 
 
 ### 🚀 Instalación utilizando Docker
 
-Asegúrese de tener `docker` instalado y que pueda [ejecutarlo sin sudo](https://docs.docker.com/engine/install/linux-postinstall/).
+Docker es opcional, pero se recomienda para ejecutar Redis localmente.
 
----
-
-Para instalar las dependencias del proyecto, ejecute el siguiente comando:
+Para instalar las dependencias del proyecto, ejecute:
 
 ```
 npm install
 ```
 
-Antes de ejecutarlo por primera vez, ejecute el script de configuración para establecer correctamente todas las variables de entorno. Siéntase libre de elegir cualquier puerto, asegúrese de configurar el resto correctamente para evitar errores.
+Copie el archivo de entorno de ejemplo y edítelo:
 
 ```
-npm run config
+cp .env.example .env
 ```
 
-Luego, simplemente ejecútelo utilizando:
+Como mínimo, configure `API_KEY`, `JWT_SECRET`, `REDIS_PWD`, `LLM_PROVIDER`, `LLM_BASE_URL` y `LLM_MODEL`.
+
+OkuuAI no descarga modelos automáticamente. Los modelos son administrados por el backend de inferencia que elija.
+
+Para un endpoint compatible con OpenAI, como `llama.cpp`, LM Studio, vLLM u OpenRouter:
+
+```bash
+LLM_PROVIDER=openai-compatible
+LLM_BASE_URL=http://127.0.0.1:8080/v1
+LLM_MODEL=local-model
+```
+
+Para Ollama:
+
+```bash
+LLM_PROVIDER=ollama
+OLLAMA_HOST=http://127.0.0.1:11434
+LLM_MODEL=llama3
+```
+
+Inicie Redis con Docker:
+
+```bash
+docker compose up -d redis
+```
+
+Ollama es opcional en Docker Compose:
+
+```bash
+docker compose --profile local-llm up -d
+```
+
+Luego ejecute el backend:
 
 ```
 npm start
@@ -47,7 +77,26 @@ o
 
 El flag `--tunnel` es opcional y se utiliza para iniciar el túnel Ngrok para acceso remoto.
 
-El programa descargará e instalará automáticamente los modelos necesarios.
+Para desarrollo local con Redis, backend, frontend y un endpoint `llama.cpp` local:
+
+```bash
+npm run dev
+```
+
+La memoria semántica está desactivada por defecto para no requerir un modelo de embeddings separado:
+
+```bash
+EMBEDDING_PROVIDER=none
+```
+
+Para usar un servidor de embeddings compatible con OpenAI, por ejemplo `llama.cpp --embedding`:
+
+```bash
+EMBEDDING_PROVIDER=openai-compatible
+EMBEDDING_BASE_URL=http://127.0.0.1:8081/v1
+EMBEDDING_MODEL=qwen3-embedding-0.6b
+EMBEDDING_DIM=1024
+```
 
 ### Plantilla de archivo .env
 ```python
@@ -58,10 +107,27 @@ PORT=3009 # Puerto para ejecutar el servidor
 SRV_URL=http://localhost # Lista blanca probablemente? WIP.
 
 # Redis
+REDIS_HOST=127.0.0.1 # Host de Redis cuando el backend se ejecuta fuera de Docker
 REDIS_PORT=6009 # Puerto para el servidor Redis
 REDIS_PWD=admin1234 # Contraseña para el servidor Redis. (Cambie esto)
+# REDIS_URL=redis://default:admin1234@127.0.0.1:6009/0 # URL completa opcional de Redis
 
-# Ollama
+# Inferencia LLM
+LLM_PROVIDER=openai-compatible # openai-compatible u ollama
+LLM_BASE_URL=http://127.0.0.1:8080/v1 # Endpoint compatible con llama.cpp/LM Studio/vLLM/OpenRouter
+LLM_MODEL=local-model # Nombre del modelo enviado al endpoint de inferencia
+LLM_TOOL_MODEL=local-model # Modelo opcional separado para prompts de selección de herramientas
+LLM_API_KEY= # Token bearer opcional para proveedores remotos compatibles con OpenAI
+
+# Embeddings / memoria semántica
+EMBEDDING_PROVIDER=none # none, openai-compatible u ollama. none evita requerir un modelo local de embeddings.
+EMBEDDING_BASE_URL=http://127.0.0.1:8081/v1 # Endpoint de embeddings compatible con OpenAI
+EMBEDDING_MODEL=qwen3-embedding-0.6b
+EMBEDDING_DIM=1024 # Qwen3-Embedding-0.6B y bge-m3 usan 1024 dimensiones. nomic-embed-text usa 768.
+EMBEDDING_API_KEY= # Token bearer opcional para proveedores remotos de embeddings
+
+# Ollama (opcional)
+OLLAMA_HOST=http://127.0.0.1:7009 # Usado solo con LLM_PROVIDER=ollama o EMBEDDING_PROVIDER=ollama
 OLLAMA_PORT=7009 # Puerto para el servidor Ollama
 OLLAMA_DEFAULT_MODEL=llama3 # Modelo predeterminado para Ollama si no se especifica ninguno durante la configuración
 
