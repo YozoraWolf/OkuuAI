@@ -3,7 +3,15 @@ import axios from 'axios';
 export const resolveHostRedirect = async () => {
     // if LOCAL flag is set, return the local API URL
     if (process.env.LOCAL) {
-        return process.env.VITE_LOCAL_API_URL as string;
+        const localApiUrl = process.env.VITE_LOCAL_API_URL as string;
+        if (typeof window !== 'undefined') {
+            const url = new URL(localApiUrl);
+            if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+                url.hostname = window.location.hostname;
+            }
+            return url.toString().replace(/\/$/, '');
+        }
+        return localApiUrl;
     }
 
     // otherwise, resolve the API URL from the environment variable

@@ -1,11 +1,12 @@
 import { Logger } from '@src/logger';
+import { getSetupState } from '@src/setup';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 
 const router = express.Router();
 
 const getOkuuStatus = (_: any, res: any) => {
-    res.status(200).json({});
+    res.status(200).json({ setupRequired: getSetupState().setupRequired });
 };
 
 // Rate limiter middleware

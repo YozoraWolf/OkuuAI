@@ -15,14 +15,9 @@ import { runModel, startAndMonitorContainers } from './compose/containers';
 import { initRedis } from './langchain/redis';
 import { select } from '@inquirer/prompts';
 import { initOllamaInstance } from './chat';
+import { getSetupState } from './setup';
 
 dotenv.config();
-
-// Enforce presence of JWT_SECRET early to avoid running with a weak fallback
-if (!process.env.JWT_SECRET) {
-    Logger.ERROR('Missing JWT_SECRET environment variable. Set JWT_SECRET in .env or environment.');
-    process.exit(1);
-}
 
 /* const downloadModelFile = async (url: string, path: string) => {
     if (!fs.existsSync(path)) {
@@ -60,11 +55,17 @@ export const init = async () =>
         console.log(centeredLogoTxt);
 
         Logger.INFO("Checking envs...");
-        if (!fs.existsSync('.env') || !fs.existsSync('assistant.json')) {
-            await promptForConfig();
-            loadEnv();
-            Logger.INFO("Env files created successfully!");
-            Logger.INFO("Restart the application to apply the changes.");
+        if (getSetupState().setupRequired) {
+            Core.status = Status.INACTIVE;
+            Logger.WARN('First-run setup is required. Start the Control Center and open /setup to configure OkuuAI.');
+            resolve();
+            return;
+        }
+
+        if (!process.env.JWT_SECRET) {
+            Logger.ERROR('Missing JWT_SECRET environment variable. Set JWT_SECRET in .env or environment.');
+            Core.status = Status.FAILED;
+            resolve();
             return;
         }
 
@@ -87,19 +88,25 @@ export const init = async () =>
         Logger.DEBUG(`Tool Model: ${Core.tool_model_name}`);
         Logger.DEBUG(`System Prompt: ${Core.model_settings.system}`);
 
-        // check if the ollama service is on, if not, start it
-        //await checkOllamaService();
-        await startAndMonitorContainers();
+        const useCustomEndpoint = process.env.LLM_PROVIDER === 'custom';
 
-        // start ollama instance
-        await initOllamaInstance();
+        if (useCustomEndpoint) {
+            Logger.INFO('Custom LLM endpoint configured. Skipping Ollama Docker/model startup.');
+        } else {
+            // check if the ollama service is on, if not, start it
+            //await checkOllamaService();
+            await startAndMonitorContainers();
 
-        // run model
-        await runModel(Core.model_name);
-        await runModel("nomic-embed-text");
-        await runModel(Core.tool_model_name);
+            // start ollama instance
+            await initOllamaInstance();
 
-        await initRedis();
+            // run model
+            await runModel(Core.model_name);
+            await runModel("nomic-embed-text");
+            await runModel(Core.tool_model_name);
+
+            await initRedis();
+        }
 
         // check if model is available in ollama
         //await checkModelAvailability();
@@ -144,7 +151,15 @@ export const init = async () =>
         Logger.DEBUG(`Session Settings: ${JSON.stringify(SESSION_SETTINGS)}`);
 
         // initialize chat session
-        Core.chat_session = await startSession(sessionId);
+        try {
+            Core.chat_session = await startSession(sessionId);
+        } catch (error) {
+            Logger.ERROR(`Failed to initialize chat session: ${error}`);
+            if (!useCustomEndpoint) {
+                throw error;
+            }
+            Logger.WARN('Continuing startup because a custom LLM endpoint is configured. Chat history may be unavailable until Redis is reachable.');
+        }
 
 
         //Logger.DEBUG(`Latest history: ${await getLatestHistory()}`);

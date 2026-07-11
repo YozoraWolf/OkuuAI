@@ -10,6 +10,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('pages/Login.vue')
   },
   {
+    path: '/setup',
+    meta: { standalone: true },
+    component: () => import('pages/SetupWizard.vue')
+  },
+  {
     path: '/change-password',
     component: () => import('pages/ChangePassword.vue')
   },

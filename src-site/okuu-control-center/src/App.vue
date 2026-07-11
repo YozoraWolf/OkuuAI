@@ -1,24 +1,34 @@
 <template>
-  <div v-if="!isOkuuAIActive" class="container">
+  <q-layout v-if="isStandaloneRoute" view="lHh Lpr lFf">
+    <q-page-container>
+      <router-view />
+    </q-page-container>
+  </q-layout>
+  <div v-else-if="!isOkuuAIActive" class="container">
     <OkuuInactive />
   </div>
   <MainLayout v-else class="q-dark" />
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import MainLayout from './layouts/MainLayout.vue';
 import { useAuthStore } from './stores/auth.store';
 import { useConfigStore } from './stores/config.store';
 import OkuuInactive from './pages/OkuuInactive.vue';
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 const configStore = useConfigStore();
 const isOkuuAIActive = ref(true);
+const isStandaloneRoute = computed(() => route.matched.some((record) => record.meta.standalone));
 
 onMounted(async () => {
+  if (isStandaloneRoute.value) {
+    return;
+  }
 
   // Check if OkuuAI is active
   isOkuuAIActive.value = await configStore.checkOkuuAIStatus();

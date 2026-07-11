@@ -7,6 +7,7 @@ import {
 } from 'vue-router';
 import routes from './routes';
 import { useAuthStore } from 'src/stores/auth.store';
+import { getSetupStatus } from 'src/services/setup.service';
 
 /*
  * If not building with SSR mode, you can
@@ -33,8 +34,26 @@ export default defineRouter(function (/* { store, ssrContext } */) {
   });
 
   // Navigation guard to enforce password change
-  Router.beforeEach((to, from, next) => {
+  Router.beforeEach(async (to, from, next) => {
     const authStore = useAuthStore();
+
+    try {
+      const setupStatus = await getSetupStatus();
+      if (setupStatus.setupRequired && to.path !== '/setup') {
+        next('/setup');
+        return;
+      }
+
+      if (!setupStatus.setupRequired && to.path === '/setup' && localStorage.getItem('setupJustCompleted') !== 'true') {
+        next('/login');
+        return;
+      }
+    } catch (error) {
+      if (to.path === '/setup') {
+        next();
+        return;
+      }
+    }
     
     // If user must change password and is not going to change-password page
     if (authStore.isAuthenticated && authStore.mustChangePassword && to.path !== '/change-password') {

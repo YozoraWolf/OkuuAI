@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { Logger } from './logger';
 import { loadAssistantConfig, updateAssistantConfigJSON } from './o_utils';
 import { input, select, search } from '@inquirer/prompts';
@@ -8,7 +9,7 @@ import { Core } from './core';
 // Interfaces & Defaults
 
 // TODO: Set VITE configs too like frontend port, etc.
-interface Config {
+export interface Config {
     model_url?: string;
     model_path?: string;
     port?: number;
@@ -23,12 +24,17 @@ interface Config {
     api_key?: string;
     ollama_port?: number;
     ollama_default_model?: string;
+    llm_provider?: string;
+    llm_base_url?: string;
+    llm_api_key?: string;
+    llm_model?: string;
     web_url?: string;
     proxy_url?: string;
     proxy_email?: string;
     proxy_pwd?: string;
     proxy_fwd?: string;
     modelfile?: string;
+    jwt_secret?: string;
     [key: string]: any;
 }
 
@@ -53,6 +59,10 @@ export const defaultConfigAI: Config = {
     api_key: "adminkey1234",
     ollama_port: 7009,
     ollama_default_model: "llama3",
+    llm_provider: "ollama",
+    llm_base_url: "",
+    llm_api_key: "",
+    llm_model: "llama3",
     web_url: "",
     proxy_url: "",
     proxy_email: "",
@@ -128,14 +138,27 @@ const configName: any = {
     api_key: "API Key",
     ollama_port: "Ollama Port",
     ollama_default_model: "Ollama Default Model",
+    llm_provider: "LLM Provider",
+    llm_base_url: "LLM Base URL",
+    llm_api_key: "LLM API Key",
+    llm_model: "LLM Model",
     web_url: "Web URL",
     proxy_url: "Proxy URL",
     proxy_email: "Proxy Email",
     proxy_pwd: "Proxy Password",
-    proxy_fwd: "Proxy Forward"
+    proxy_fwd: "Proxy Forward",
+    jwt_secret: "JWT Secret"
 };
 
 const defaultValues = { ...defaultConfigAI };
+
+const redactConfig = (config: Record<string, any>) => {
+    const sensitiveKeys = ['api_key', 'llm_api_key', 'jwt_secret', 'redis_pwd', 'proxy_pwd', 'password', 'token', 'secret'];
+    return Object.fromEntries(Object.entries(config).map(([key, value]) => {
+        const isSensitive = sensitiveKeys.some((sensitiveKey) => key.toLowerCase().includes(sensitiveKey));
+        return [key, isSensitive && value ? '[REDACTED]' : value];
+    }));
+};
 
 export const createSettingsFile = async (settings = defaultSettings) => {
     const settingsPath = path.join(__dirname, '..', 'settings.json');
@@ -154,10 +177,10 @@ export const initConfig = async () => {
     await createSettingsFile();
 };
 
-export const createEnvFile = async (config: Config = defaultConfigAI) => {
+export const createEnvFile = async (config: Config = defaultConfigAI, options: { overwriteFrontend?: boolean } = {}) => {
     let envStr = '';
     Logger.INFO('Creating .env file...');
-    Logger.DEBUG(`Config: ${JSON.stringify(config)}`);
+    Logger.DEBUG(`Config: ${JSON.stringify(redactConfig(config))}`);
     try {
         envStr += '# Legacy\n';
         envStr += `#MODEL_URL=${config.model_url}\n`;
@@ -166,7 +189,8 @@ export const createEnvFile = async (config: Config = defaultConfigAI) => {
         envStr += '# Main Settings\n';
         envStr += `PORT=${config.port}\n`;
         envStr += `#SRV_URL=${config.srv_url}\n`;
-        envStr += `API_KEY=${config.api_key}\n\n`;
+        envStr += `API_KEY=${config.api_key}\n`;
+        envStr += `JWT_SECRET=${config.jwt_secret || process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex')}\n\n`;
 
         envStr += '# Redis Settings\n';
         envStr += `REDIS_PORT=${config.redis_port}\n`;
@@ -175,6 +199,12 @@ export const createEnvFile = async (config: Config = defaultConfigAI) => {
         envStr += '# Ollama\n';
         envStr += `OLLAMA_PORT=${config.ollama_port}\n`;
         envStr += `OLLAMA_DEFAULT_MODEL=${config.ollama_default_model}\n\n`;
+
+        envStr += '# LLM Provider\n';
+        envStr += `LLM_PROVIDER=${config.llm_provider}\n`;
+        envStr += `LLM_BASE_URL=${config.llm_base_url}\n`;
+        envStr += `LLM_API_KEY=${config.llm_api_key}\n`;
+        envStr += `LLM_MODEL=${config.llm_model}\n\n`;
 
         envStr += '# Proxy (Using Nginx Proxy Manager)\n';
         envStr += `WEB_URL=${config.web_url}\n`;
@@ -190,15 +220,15 @@ export const createEnvFile = async (config: Config = defaultConfigAI) => {
             VITE_LOCAL_API_URL: `http://localhost:${config.port}`,
             VUE_ROUTER_MODE: "history",
             LOCAL: "true"
-        });
+        }, options);
     } catch (error) {
         Logger.ERROR(`Failed to create .env file\n${error}`);
     }
 };
 
-const createFrontendEnv = async (config: any = defaultFront) => {
+const createFrontendEnv = async (config: any = defaultFront, options: { overwriteFrontend?: boolean } = {}) => {
     const frontendEnvPath = path.resolve(__dirname, "../src-site/okuu-control-center/.env");
-    if (fs.existsSync(frontendEnvPath)) {
+    if (fs.existsSync(frontendEnvPath) && !options.overwriteFrontend) {
         const answer = await select({
             message: 'A frontend .env file already exists. Do you want to overwrite it?',
             choices: ['Yes', 'No'],
@@ -211,7 +241,7 @@ const createFrontendEnv = async (config: any = defaultFront) => {
     }
     let envStr = '';
     Logger.INFO('Creating frontend .env file...');
-    Logger.DEBUG(`Config: ${JSON.stringify(config)}`);
+    Logger.DEBUG(`Config: ${JSON.stringify(redactConfig(config))}`);
     try {
         envStr += `VITE_API_URL=${config.VITE_API_URL}\n`;
         envStr += `VITE_LOCAL_API_URL=${config.VITE_LOCAL_API_URL}\n`;

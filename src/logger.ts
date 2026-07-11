@@ -70,7 +70,6 @@ export class Logger {
 
     private static initializeLogFile() {
         if (!fs.existsSync(path.dirname(Logger.logFilePath))) {
-            Logger.INFO('Creating logs directory...');
             fs.mkdirSync(path.dirname(Logger.logFilePath), { recursive: true });
         }
 

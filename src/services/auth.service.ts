@@ -12,14 +12,9 @@ interface User {
 
 export class AuthService {
   private db: sqlite3.Database;
-  private jwtSecret: string;
 
   constructor() {
     this.db = new sqlite3.Database('./src/db/user.db');
-    if (!process.env.JWT_SECRET) {
-      throw new Error('JWT_SECRET environment variable is required');
-    }
-    this.jwtSecret = process.env.JWT_SECRET;
   }
 
   async initialize() {
@@ -99,8 +94,12 @@ export class AuthService {
   }
 
   generateToken(user: { id: number; username: string; role: string }): string {
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      throw new Error('JWT_SECRET environment variable is required');
+    }
     const payload = { sub: user.id, username: user.username, role: user.role };
-    return jwt.sign(payload, this.jwtSecret, { expiresIn: '1h' });
+    return jwt.sign(payload, jwtSecret, { expiresIn: '1h' });
   }
 
   async getUserById(userId: number): Promise<{ id: number; username: string; role: string } | null> {
