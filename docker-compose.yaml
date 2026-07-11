@@ -32,6 +32,46 @@ services:
       retries: 20
     restart: unless-stopped
 
+  backend:
+    build:
+      context: .
+    profiles:
+      - app
+    env_file:
+      - .env
+    environment:
+      PORT: 3009
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      LLM_BASE_URL: ${DOCKER_LLM_BASE_URL:-http://host.docker.internal:8080/v1}
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - ./assistant.json:/app/assistant.json
+      - ./session.json:/app/session.json
+      - ./system.json:/app/system.json
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3009/status').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./src-site/okuu-control-center
+    profiles:
+      - app
+    ports:
+      - "${FRONTEND_PORT:-9000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   redis_data:
   ollama_data:

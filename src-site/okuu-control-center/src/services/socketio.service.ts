@@ -33,7 +33,8 @@ export class SocketioService {
             // Remove protocol from URL
             url = url.replace(/^https?:\/\//, '');
 
-            this.socket = io(`${process.env.LOCAL ? 'ws' : 'wss'}://${url}`, {
+            const protocol = process.env.LOCAL ? 'ws' : window.location.protocol === 'https:' ? 'wss' : 'ws';
+            this.socket = io(`${protocol}://${url}`, {
                 transports: ['websocket'],
                 timeout: 30000,
                 reconnectionAttempts: 3,
@@ -42,7 +43,7 @@ export class SocketioService {
 
             this.socket.connect();
 
-            console.log('Socket initialized with URL:', `${process.env.LOCAL ? 'ws' : 'wss'}://${url}`);
+            console.log('Socket initialized with URL:', `${protocol}://${url}`);
             this.sessionId = sessionId;
 
             console.log('Socket initialized:', this.sessionId);
