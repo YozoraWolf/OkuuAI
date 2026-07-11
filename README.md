@@ -17,110 +17,24 @@ OkuuAI runs locally using your CPU + GPU, providing full privacy.
 
 ---
 
-## 🚀 General Setup
+## 🚀 Quick Start
 
-Follow these steps to get OkuuAI up and running:
+OkuuAI connects to an inference server; it does not download or run a model itself. Start your OpenAI-compatible LLM at `http://127.0.0.1:8080/v1`, then choose one runtime:
 
-### Step 1: Install Dependencies
-
-Install Node.js dependencies:
-
-```bash
-npm install
-```
-
-Docker is optional, but recommended for running Redis locally.
-
-### Step 2: Configure Environment
-
-Copy the example environment file and edit it with your preferences:
+### Host Development
 
 ```bash
 cp .env.example .env
-```
-
-At minimum, set:
-
-- `API_KEY` - Set a secure API key for authentication
-- `JWT_SECRET` - Set a secure JWT secret
-- `REDIS_PWD` - Set a secure Redis password
-- `LLM_PROVIDER`, `LLM_BASE_URL`, and `LLM_MODEL` - Point OkuuAI at your inference server
-
-OkuuAI does not download models automatically. Models are managed by your chosen inference backend.
-
-### Step 3: Choose An Inference Backend
-
-OkuuAI can use any OpenAI-compatible inference endpoint, such as `llama.cpp` server mode, LM Studio, vLLM, or OpenRouter.
-
-For `llama.cpp` server mode:
-
-```bash
-LLM_PROVIDER=openai-compatible
-LLM_BASE_URL=http://127.0.0.1:8080/v1
-LLM_MODEL=local-model
-```
-
-For Ollama:
-
-```bash
-LLM_PROVIDER=ollama
-OLLAMA_HOST=http://127.0.0.1:11434
-LLM_MODEL=llama3
-```
-
-Pull or load models yourself using your chosen backend, for example `ollama pull llama3` or `llama-server -m model.gguf --port 8080`.
-
-### Step 4: Start Redis
-
-Using Docker:
-
-```bash
-docker compose up -d redis
-```
-
-Ollama is optional in Docker Compose:
-
-```bash
-docker compose --profile local-llm up -d
-```
-
-### Step 5: Start the Backend
-
-Start the OkuuAI backend server:
-
-```bash
-npm start
-```
-
-Or with Ngrok tunnel for remote access:
-
-```bash
-./start --tunnel
-```
-
-### Step 6: Start the Frontend (Optional)
-
-To run the web interface:
-
-```bash
-cd src-site/okuu-control-center && npm run dev
-```
-
-The frontend will be available at `http://localhost:5173` (or the port shown in the terminal).
-
-### Dev Shortcut
-
-For local development with Redis, backend, frontend, and a `llama.cpp` server at `127.0.0.1:8080`:
-
-```bash
+npm run setup
 npm run dev
 ```
 
-### Containerized Application Stack
+`npm run dev` starts Redis, the backend, and the frontend together. Open `http://yozorawolf-olympic.nord:9000`.
 
-The host-based development workflow above remains the recommended option for hot reload. To run the backend and frontend in containers instead, while keeping the local OpenAI-compatible LLM at port `8080`, run:
+### Docker Application Stack
 
 ```bash
+cp .env.example .env
 docker compose --profile app up --build -d
 ```
 
@@ -131,6 +45,25 @@ Docker containers cannot reach a host LLM through `127.0.0.1`; the Compose profi
 ```bash
 DOCKER_LLM_BASE_URL=http://192.168.1.10:8080/v1 docker compose --profile app up --build -d
 ```
+
+## Detailed Setup
+
+At minimum, set these in `.env` before starting OkuuAI:
+
+- `API_KEY` - Set a secure API key for authentication
+- `JWT_SECRET` - Set a secure JWT secret
+- `REDIS_PWD` - Set a secure Redis password
+- `LLM_PROVIDER`, `LLM_BASE_URL`, and `LLM_MODEL` - Point OkuuAI at your inference server
+
+OkuuAI supports OpenAI-compatible endpoints such as `llama.cpp`, LM Studio, vLLM, and OpenRouter. For Ollama, set `LLM_PROVIDER=ollama`, `OLLAMA_HOST=http://127.0.0.1:11434`, and `LLM_MODEL=llama3`.
+
+To run Ollama with Compose instead of a separate host process:
+
+```bash
+docker compose --profile local-llm up -d
+```
+
+For separate service control, use `docker compose up -d redis`, `npm run dev:backend`, and `npm run dev:frontend`.
 
 ### Semantic Memory
 
@@ -151,7 +84,7 @@ EMBEDDING_MODEL=qwen3-embedding-0.6b
 EMBEDDING_DIM=1024
 ```
 
-### Step 7: Enable Integrations (Optional)
+### Enable Integrations (Optional)
 
 After basic setup, you can enable optional integrations:
 - **Discord Bot** - See [Discord Integration](#discord-bot-) section below
