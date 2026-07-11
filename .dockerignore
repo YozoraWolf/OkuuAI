@@ -1,0 +1,13 @@
+.env
+.git
+node_modules
+src-site/okuu-control-center/node_modules
+dist
+src-site/okuu-control-center/dist
+logs
+storage
+*.db
+assistant.json
+settings.json
+session.json
+system.json

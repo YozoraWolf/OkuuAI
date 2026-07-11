@@ -116,6 +116,22 @@ For local development with Redis, backend, frontend, and a `llama.cpp` server at
 npm run dev
 ```
 
+### Containerized Application Stack
+
+The host-based development workflow above remains the recommended option for hot reload. To run the backend and frontend in containers instead, while keeping the local OpenAI-compatible LLM at port `8080`, run:
+
+```bash
+docker compose --profile app up --build -d
+```
+
+The frontend is available at `http://yozorawolf-olympic.nord:9000` and proxies API and WebSocket traffic to the backend. Stop the host-based `npm run dev` stack first, or set `FRONTEND_PORT` to use a different port.
+
+Docker containers cannot reach a host LLM through `127.0.0.1`; the Compose profile uses `http://host.docker.internal:8080/v1`. Override that endpoint for another host or machine with `DOCKER_LLM_BASE_URL`:
+
+```bash
+DOCKER_LLM_BASE_URL=http://192.168.1.10:8080/v1 docker compose --profile app up --build -d
+```
+
 ### Semantic Memory
 
 Semantic memory is disabled by default so users do not need a separate embedding model:

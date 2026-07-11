@@ -6,6 +6,11 @@ export const resolveHostRedirect = async () => {
         return process.env.VITE_LOCAL_API_URL as string;
     }
 
+    // Containerized deployments proxy the API through the frontend origin.
+    if (!process.env.VITE_API_URL) {
+        return window.location.origin;
+    }
+
     // otherwise, resolve the API URL from the environment variable
     try {
         const response = await axios.get(`${process.env.VITE_API_URL as string}`, { maxRedirects: 5 });
