@@ -14,7 +14,6 @@ import bcrypt from 'bcrypt';
 import { initRedis } from './langchain/redis';
 import { select } from '@inquirer/prompts';
 import { initOllamaInstance } from './chat';
-import { ensureWhisperServer } from './services/whisper-process.service';
 
 dotenv.config();
 
@@ -96,8 +95,6 @@ export const init = async () =>
 
         // Inference backends are user-managed. Docker/Ollama/model downloads are optional setup steps.
         await initOllamaInstance();
-
-        await ensureWhisperServer();
 
         await initRedis();
 
