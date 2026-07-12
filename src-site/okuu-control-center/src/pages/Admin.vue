@@ -10,6 +10,20 @@
         <q-icon name="dns" />
         <span>{{ overview.host.hostname }}</span>
         <small>{{ overview.host.platform }}</small>
+        <q-select
+          v-model="refreshRate"
+          :options="refreshOptions"
+          emit-value
+          map-options
+          dense
+          borderless
+          options-dense
+          class="refresh-select"
+          aria-label="Statistics refresh rate"
+        >
+          <template #prepend><q-icon name="schedule" size="14px" /></template>
+          <q-tooltip>Statistics refresh interval. Short intervals are disabled to avoid excessive requests.</q-tooltip>
+        </q-select>
       </div>
     </header>
 
@@ -56,13 +70,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { fetchAdminOverview } from 'src/services/admin.service';
 
 const overview = ref<any>(null);
 const error = ref('');
 const history = reactive({ cpu: [] as number[], memory: [] as number[], gpu: [] as number[] });
 let timer: ReturnType<typeof setInterval> | undefined;
+const refreshOptions = [
+  { label: '15 sec', value: 15000 },
+  { label: '30 sec', value: 30000 },
+  { label: '1 min', value: 60000 },
+  { label: '2 min', value: 120000 },
+];
+const savedRefreshRate = Number(localStorage.getItem('adminStatsRefreshRate'));
+const refreshRate = ref(refreshOptions.some(option => option.value === savedRefreshRate) ? savedRefreshRate : 30000);
 
 const latest = computed(() => ({
   cpu: history.cpu.at(-1) || 0,
@@ -91,18 +113,32 @@ const linePoints = (points: number[]) => points.map((value, index) => `${points.
 const areaPath = (points: number[]) => points.length ? `M0 110 L${linePoints(points).replaceAll(' ', ' L')} L300 110 Z` : '';
 const formatBytes = (bytes = 0) => `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
 
-onMounted(() => { void refresh(); timer = setInterval(refresh, 2000); });
+const scheduleRefresh = () => {
+  if (timer) clearInterval(timer);
+  timer = setInterval(refresh, refreshRate.value);
+};
+
+watch(refreshRate, value => {
+  localStorage.setItem('adminStatsRefreshRate', String(value));
+  scheduleRefresh();
+});
+
+onMounted(() => { void refresh(); scheduleRefresh(); });
 onBeforeUnmount(() => { if (timer) clearInterval(timer); });
 </script>
 
 <style lang="scss" scoped>
 .admin-page { min-height: 100%; padding: clamp(1rem, 3vw, 2.5rem); background: radial-gradient(circle at 85% 5%, color-mix(in srgb, var(--accent-1) 12%, transparent), transparent 30%), var(--surface-0); }
-.admin-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
+.admin-header { display: flex; align-items: flex-end; gap: 1rem; margin-bottom: 1.5rem; }
+.admin-header > div:first-child { margin-right: auto; }
 .eyebrow { color: var(--accent-1); font-size: .66rem; font-weight: 850; letter-spacing: .15em; }
 .admin-header h1 { margin: .25rem 0 0; font-size: clamp(1.65rem, 4vw, 2.5rem); letter-spacing: -.045em; }
 .admin-header p { margin: .35rem 0 0; color: var(--text-muted); }
-.header-meta { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: .15rem .45rem; padding: .65rem .8rem; border: 1px solid var(--surface-border); border-radius: 12px; background: var(--surface-1); }
-.header-meta .q-icon { grid-row: span 2; color: var(--accent-1); }.header-meta small { color: var(--text-muted); }
+.header-meta { display: grid; width: 210px; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: .15rem .45rem; padding: .65rem .8rem .35rem; border: 1px solid var(--surface-border); border-radius: 12px; background: var(--surface-1); }
+.header-meta > .q-icon { grid-row: span 2; color: var(--accent-1); }.header-meta > span, .header-meta > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.header-meta > small { color: var(--text-muted); }
+.refresh-select { width: 100%; grid-column: 1 / -1; margin-top: .4rem; padding-top: .15rem; border-top: 1px solid var(--surface-border); color: var(--text-muted); font-size: .68rem; opacity: .65; transition: opacity 150ms ease; }
+.refresh-select:hover, .refresh-select:focus-within { opacity: 1; }
+.refresh-select :deep(.q-field__native), .refresh-select :deep(.q-field__prepend), .refresh-select :deep(.q-field__append) { color: var(--text-muted); }
 .error-banner { margin-bottom: 1rem; color: #ffb9b9; background: rgba(180,40,40,.2); }
 .service-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin-bottom: 1rem; }
 .service-card { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .7rem; min-width: 0; padding: .85rem; border: 1px solid var(--surface-border); border-radius: 14px; background: color-mix(in srgb, var(--surface-1) 94%, transparent); }
@@ -116,5 +152,5 @@ svg { display: block; width: 100%; height: 150px; margin: .75rem 0 .3rem; overfl
 .metric-detail { display: block; overflow: hidden; color: var(--text-muted); font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
 .no-gpu { display: grid; height: 150px; place-items: center; align-content: center; gap: .45rem; color: var(--text-muted); font-size: .72rem; }.unavailable { opacity: .72; }
 @media (max-width: 1000px) { .metrics-grid { grid-template-columns: 1fr; }.service-grid { grid-template-columns: 1fr; } }
-@media (max-width: 600px) { .admin-header { align-items: flex-start; flex-direction: column; }.header-meta { width: 100%; } }
+@media (max-width: 600px) { .admin-header { align-items: flex-start; flex-direction: column; }.admin-header > div:first-child { margin-right: 0; }.header-meta { width: 100%; } }
 </style>
