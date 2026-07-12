@@ -35,6 +35,15 @@ export default defineRouter(function (/* { store, ssrContext } */) {
   // Navigation guard to enforce password change
   Router.beforeEach((to, from, next) => {
     const authStore = useAuthStore();
+
+    if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+      next('/login');
+      return;
+    }
+    if (to.meta.admin && !authStore.isAdmin) {
+      next('/');
+      return;
+    }
     
     // If user must change password and is not going to change-password page
     if (authStore.isAuthenticated && authStore.mustChangePassword && to.path !== '/change-password') {

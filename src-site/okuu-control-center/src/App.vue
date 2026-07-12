@@ -19,6 +19,7 @@ const configStore = useConfigStore();
 const isOkuuAIActive = ref(true);
 
 onMounted(async () => {
+  document.documentElement.dataset.tint = configStore.appTint;
 
   // Check if OkuuAI is active
   isOkuuAIActive.value = await configStore.checkOkuuAIStatus();

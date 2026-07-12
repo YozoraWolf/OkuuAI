@@ -4,6 +4,9 @@ import { Core } from "./core";
 import { SESSION_ID, startSession } from "./langchain/memory/memory";
 import { Logger } from "./logger";
 import { handleUserInput } from "./console";
+import jwt from 'jsonwebtoken';
+import { doesSessionBelongToUser } from './langchain/memory/memory';
+import type { JwtPayloadCustom } from './middleware/auth.middleware';
 
 let io: Server;
 
@@ -20,10 +23,27 @@ export const setupSockets = (server: HTTPServer) => {
     }
     );
 
+    io.use((socket, next) => {
+        const token = socket.handshake.auth?.token;
+        const secret = process.env.JWT_SECRET;
+        if (!token || !secret) return next(new Error('Unauthorized'));
+        try {
+            const payload = jwt.verify(token, secret) as JwtPayloadCustom;
+            socket.data.user = { id: payload.sub, username: payload.username, role: payload.role };
+            next();
+        } catch {
+            next(new Error('Unauthorized'));
+        }
+    });
+
     io.on('connection', (socket) => {
         Logger.INFO('A client connected: ' + socket.id);
 
-        socket.on('joinChat', (sessionId: string) => {
+        socket.on('joinChat', async (sessionId: string) => {
+            if (!await doesSessionBelongToUser(sessionId, socket.data.user.id)) {
+                socket.emit('error', { message: 'Forbidden session' });
+                return;
+            }
             Logger.DEBUG('Joining chat: ' + sessionId);
             socket.join(sessionId);
         });
@@ -37,6 +57,13 @@ export const setupSockets = (server: HTTPServer) => {
                     return;
                 }
 
+                if (!await doesSessionBelongToUser(data.sessionId, socket.data.user.id)) {
+                    socket.emit('error', { message: 'Forbidden session' });
+                    return;
+                }
+
+                data.ownerId = socket.data.user.id;
+                data.user = socket.data.user.username;
                 Logger.DEBUG(`Received chat message: ${JSON.stringify(data)}`);
                 Core.chat_session = await startSession(data.sessionId);
                 Logger.DEBUG(`Session started: ${SESSION_ID}`);
@@ -50,10 +77,14 @@ export const setupSockets = (server: HTTPServer) => {
         });
 
         // Handle stop generation signal
-        socket.on('stopGeneration', (data: { sessionId: string }) => {
+        socket.on('stopGeneration', async (data: { sessionId: string }) => {
             try {
                 if (!data || !data.sessionId) {
                     Logger.ERROR('Invalid stop generation data received');
+                    return;
+                }
+                if (!await doesSessionBelongToUser(data.sessionId, socket.data.user.id)) {
+                    socket.emit('error', { message: 'Forbidden session' });
                     return;
                 }
                 Logger.DEBUG(`Received stop generation signal for session: ${data.sessionId}`);
@@ -66,21 +97,6 @@ export const setupSockets = (server: HTTPServer) => {
                 Logger.INFO('Generation aborted successfully');
             } catch (err) {
                 Logger.ERROR('Error processing stop generation signal: ' + err);
-            }
-        });
-
-        // Handle stop generation signal
-        socket.on('stopGeneration', (data: { sessionId: string }) => {
-            try {
-                if (!data || !data.sessionId) {
-                    Logger.ERROR('Invalid stop generation data received');
-                    return;
-                }
-                Logger.DEBUG(`Received stop generation signal for session: ${data.sessionId}`);
-                //socket.emit('chat', { success: true });
-            } catch (err) {
-                Logger.ERROR('Error processing chat message: ' + err);
-                socket.emit('error', { message: 'Internal server error' });
             }
         });
 

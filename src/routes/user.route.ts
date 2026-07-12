@@ -13,9 +13,9 @@ const registerLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5 }); // 5 re
 
 // Public auth endpoints
 router.post('/register', registerLimiter, async (req, res) => {
-	const { username, password, role } = req.body;
+	const { username, password } = req.body;
 	try {
-		await authService.register(username, password, role || 'User');
+		await authService.register(username, password, 'User');
 		const user = await authService.login(username, password);
 		if (!user) return res.status(500).json({ error: 'Unable to create user' });
 		const token = authService.generateToken(user);

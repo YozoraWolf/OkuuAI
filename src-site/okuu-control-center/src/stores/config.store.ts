@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia';
 import { getOkuuPfp, uploadOkuuPfp, deleteOkuuPfp, getSystemPrompt, UpdateSystemPrompt, UpdateGlobalMemory, FetchGlobalMemory, CheckOkuuAIStatus, UpdateThink, FetchThink, getDownloadedModels, setOkuuModel, getOkuuModel } from 'src/services/config.service';
 
+const initialTint = localStorage.getItem('appTint') || 'utsuho';
+document.documentElement.dataset.tint = initialTint;
+const initialMessageStyle = localStorage.getItem('messageStyle') || 'transcript';
+document.documentElement.dataset.messageStyle = initialMessageStyle;
+
 export const useConfigStore = defineStore('config', {
     state: () => ({
         okuuPfp: '',
@@ -10,6 +15,8 @@ export const useConfigStore = defineStore('config', {
         globalMemory: false,
         toggleThinking: false,
         showThinkingInChat: true,
+        appTint: initialTint,
+        messageStyle: initialMessageStyle,
 
         modelList: [] as any[],
         currentModel: '',
@@ -55,6 +62,16 @@ export const useConfigStore = defineStore('config', {
         },
         setStream(stream: boolean) {
             this.stream = stream;
+        },
+        setAppTint(tint: string) {
+            this.appTint = tint;
+            localStorage.setItem('appTint', tint);
+            document.documentElement.dataset.tint = tint;
+        },
+        setMessageStyle(style: string) {
+            this.messageStyle = style;
+            localStorage.setItem('messageStyle', style);
+            document.documentElement.dataset.messageStyle = style;
         },
 
         // Stream related
@@ -204,5 +221,7 @@ export const useConfigStore = defineStore('config', {
             }
         }
     },
-   
+    getters: {
+        modelSupportsThinking: (state) => /deepseek.*r1|qwen3|qwen.*(think|reason)|reasoner|thinking/i.test(String(state.currentModel)),
+    },
 });

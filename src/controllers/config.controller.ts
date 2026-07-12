@@ -1,6 +1,7 @@
 import { Core } from '@src/core';
 import { Logger } from '@src/logger';
-import { doesModelExistInOllama, getOllamaDownloadedModels, updateAssistantConfigJSON } from '@src/o_utils';
+import { updateAssistantConfigJSON } from '@src/o_utils';
+import { getAvailableModels } from '@src/llm';
 import { Request, Response } from 'express';
 import fileUpload from 'express-fileupload';
 import fs from 'fs';
@@ -85,8 +86,12 @@ export const setOkuuModel = async (req: Request, res: Response) => {
 };
 
 export const getDownloadedModels = async (req: Request, res: Response) => {
-    const models = await getOllamaDownloadedModels();
-    res.status(200).send({ models });
+    try {
+        res.status(200).send({ models: await getAvailableModels() });
+    } catch (error) {
+        Logger.ERROR(`Failed to fetch available models: ${error instanceof Error ? error.message : error}`);
+        res.status(502).send({ error: 'Unable to fetch models from the configured provider.' });
+    }
 };
 
 
@@ -103,7 +108,7 @@ export const setSystemPrompt = (req: Request, res: Response) => {
     }
     updateAssistantConfigJSON({ system_prompt });
     Core.model_settings.system = system_prompt;
-    Logger.INFO(`✅ (API) System Prompt set to: ${system_prompt}`);
+    Logger.INFO('✅ (API) System prompt updated.');
     res.status(200).send({ system_prompt: Core.model_settings.system });
 };
 

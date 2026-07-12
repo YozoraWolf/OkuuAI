@@ -15,15 +15,23 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/settings',
-    component: () => import('pages/Settings.vue')
+    component: () => import('pages/Settings.vue'),
+    meta: { requiresAuth: true }
   },
   {
     path: '/chat',
-    component: () => import('pages/Chat.vue')
+    component: () => import('pages/Chat.vue'),
+    meta: { requiresAuth: true }
   },
   {
     path: '/chat/:id',
-    component: () => import('pages/Chat.vue')
+    component: () => import('pages/Chat.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/admin',
+    component: () => import('pages/Admin.vue'),
+    meta: { requiresAuth: true, admin: true }
   },
   {
     path: '/inactive',

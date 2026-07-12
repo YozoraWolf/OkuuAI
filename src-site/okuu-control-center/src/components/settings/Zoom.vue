@@ -1,6 +1,6 @@
 <template>
-    <div class="q-my-md flex column" style="width: 400px;">
-        <label for="zoom">Zoom Level: {{ zoomLevel }}%</label>
+    <div class="zoom-control">
+        <div class="zoom-label"><span>Interface scale</span><strong>{{ zoomLevel }}%</strong></div>
         <q-slider 
             v-model="zoomLevel" 
             :min="50" 
@@ -12,7 +12,7 @@
             :marker-labels="markedZoomLevels"
             track-color="grey-6"
         />
-        <q-btn v-if="zoomLevel !== initialZoomLevel" label="Apply" color="primary" class="q-mt-md" @click="applyZoomLevel" />
+        <q-btn v-if="zoomLevel !== initialZoomLevel" unelevated no-caps label="Apply scale" class="apply-zoom" @click="applyZoomLevel" />
     </div>
 </template>
 
@@ -42,6 +42,9 @@ watch(() => configStore.getZoomLevel(), (newZoomLevel) => {
 });
 </script>
 
-<style scoped>
-
+<style lang="scss" scoped>
+.zoom-control { display: flex; max-width: 420px; flex-direction: column; gap: 0.8rem; }
+.zoom-label { display: flex; align-items: center; justify-content: space-between; color: var(--text-muted); font-size: 0.85rem; }
+.zoom-label strong { color: var(--text-strong); }
+.apply-zoom { align-self: flex-start; border-radius: 9px; color: var(--accent-text); background: var(--accent-1); font-weight: 700; }
 </style>
