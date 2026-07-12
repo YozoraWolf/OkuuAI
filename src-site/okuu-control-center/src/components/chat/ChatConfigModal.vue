@@ -19,6 +19,19 @@
             </q-icon>
           </div>
         </div>
+        <div class="message-style">
+          <div class="style-title">Message layout</div>
+          <div class="style-options">
+            <button class="style-option" :class="{ active: configStore.messageStyle === 'transcript' }" @click="configStore.setMessageStyle('transcript')">
+              <span class="style-preview transcript-preview"><i></i><i></i><i></i></span>
+              <strong>Transcript</strong><small>Compact, continuous reading</small>
+            </button>
+            <button class="style-option" :class="{ active: configStore.messageStyle === 'bubbles' }" @click="configStore.setMessageStyle('bubbles')">
+              <span class="style-preview bubble-preview"><i></i><i></i><i></i></span>
+              <strong>Bubbles</strong><small>Separated speaker messages</small>
+            </button>
+          </div>
+        </div>
         <SystemPromptEdit @prompt-edited="onPromptEdited" />
         <GlobalToggles class="q-mt-md" />
       </div>
@@ -71,7 +84,10 @@ const onPromptEdited = (newPrompt: string) => {
 };
 
 const saveConfig = async () => {
-  if (!hasChanges.value) return;
+  if (!hasChanges.value) {
+    onDialogOK();
+    return;
+  }
   const confirm = await $q.dialog({
     title: 'Confirm',
     message: 'You have unsaved changes. Do you want to save the changes?',
@@ -152,5 +168,17 @@ onMounted(async () => {
   isLoadingConfigs.value = false;
 });
 </script>
+
+<style lang="scss" scoped>
+.message-style { margin: 1.2rem 0; padding-top: 1rem; border-top: 1px solid var(--surface-border); }
+.style-title { margin-bottom: 0.65rem; font-weight: 700; }
+.style-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
+.style-option { display: grid; gap: 0.35rem; padding: 0.7rem; border: 1px solid var(--surface-border); border-radius: 10px; color: var(--text-strong); text-align: left; cursor: pointer; background: var(--surface-2); }
+.style-option.active { border-color: var(--accent-1); background: color-mix(in srgb, var(--accent-1) 12%, var(--surface-2)); }
+.style-option small { color: var(--text-muted); font-size: 0.68rem; }
+.style-preview { display: grid; gap: 3px; height: 30px; padding: 4px; border-radius: 6px; background: var(--surface-1); }
+.style-preview i { display: block; height: 5px; border-radius: 4px; background: color-mix(in srgb, var(--accent-1) 55%, var(--surface-1)); }
+.bubble-preview i:nth-child(2) { width: 62%; margin-left: auto; background: color-mix(in srgb, var(--accent-2) 55%, var(--surface-1)); }
+</style>
 
 <style lang="scss" scoped></style>

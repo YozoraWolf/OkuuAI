@@ -12,11 +12,12 @@
       <q-icon :name="props.icon" />
     </q-item-section>
 
-    <q-item-section>
+      <q-item-section>
       <q-item-label>{{ props.title }}</q-item-label>
       <q-item-label caption>{{ props.caption }}</q-item-label>
-    </q-item-section>
-  </q-item>
+      </q-item-section>
+      <q-tooltip anchor="center right" self="center left" :delay="350">{{ props.title }}</q-tooltip>
+    </q-item>
 </template>
 
 <script setup lang="ts">

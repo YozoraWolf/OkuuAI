@@ -7,8 +7,10 @@ export interface Message {
     message: string;
     avatar?: string;
     memoryKey: string;
+    clientMessageId?: string;
     sessionId: string;
     stream: boolean;
+    think?: boolean;
     thinking?: string;
     done: boolean;
     attachment?: string;
@@ -27,11 +29,18 @@ export interface Session {
     index?: number;
 }
 
+interface SessionHistory {
+    hasMore: boolean;
+    nextBefore: number | null;
+    loadingOlder: boolean;
+}
+
 interface SessionStore {
     sessions: Session[];
     currentSessionId: string;
     isStreaming: boolean;
     isGenerating: boolean;
+    history: Record<string, SessionHistory>;
 }
 
 export const useSessionStore = defineStore('session', {
@@ -40,17 +49,21 @@ export const useSessionStore = defineStore('session', {
         currentSessionId: '',
         isStreaming: false,
         isGenerating: false,
+        history: {},
     }),
     actions: {
         async fetchAllSessions() {
-            const { data, status } = await getAllSessions();
-            //console.log('Fetched sessions:', data);
-            if (status === 200) {
-                this.sessions = data;
-                this.orderSessions();
-            } else {
-                console.error('Failed to fetch sessions');
+            try {
+                const { data, status } = await getAllSessions();
+                if (status === 200) {
+                    this.sessions = data;
+                    this.orderSessions();
+                    return true;
+                }
+            } catch (error) {
+                console.error('Failed to fetch sessions:', error);
             }
+            return false;
         },
         async sendAttachment(file: File, msg: Message) {
             const formData = new FormData();
@@ -62,7 +75,7 @@ export const useSessionStore = defineStore('session', {
                     console.error('Failed to send attachment');
                     return false;
                 }
-                return response;
+                return response.data.fileName as string;
             } catch (error) {
                 console.error('Failed to send attachment:', error);
                 return false;
@@ -70,14 +83,45 @@ export const useSessionStore = defineStore('session', {
 
         },
         async fetchSessionMessages(sessionId: string) {
-            const { data, status } = await getSessionMessages(sessionId);
-            if (status !== 200) {
-                console.error('Failed to fetch messages for session', sessionId);
-                return;
+            try {
+                const { data, status } = await getSessionMessages(sessionId);
+                if (status !== 200) {
+                    console.error('Failed to fetch messages for session', sessionId);
+                    return false;
+                }
+                const { messages } = data;
+                this.updateSessionMessagesLocal(sessionId, messages);
+                this.history[sessionId] = {
+                    hasMore: Boolean(data.pagination?.hasMore),
+                    nextBefore: data.pagination?.nextBefore ?? null,
+                    loadingOlder: false,
+                };
+                return true;
+            } catch (error) {
+                console.error('Failed to fetch messages for session:', error);
+                return false;
             }
-            const { messages } = data;
-            this.updateSessionMessagesLocal(sessionId, messages);
-            //this.orderSessions();
+        },
+        async loadOlderMessages(sessionId: string) {
+            const history = this.history[sessionId];
+            if (!history?.hasMore || history.loadingOlder || !history.nextBefore) return false;
+
+            history.loadingOlder = true;
+            try {
+                const { data, status } = await getSessionMessages(sessionId, 40, history.nextBefore);
+                if (status !== 200) return false;
+
+                const session = this.getSessionById(sessionId);
+                if (!session) return false;
+                const known = new Set(session.messages.map(message => message.memoryKey || `${message.sessionId}:${message.timestamp}`));
+                const older = (data.messages as Message[]).filter(message => !known.has(message.memoryKey || `${message.sessionId}:${message.timestamp}`));
+                session.messages = [...older, ...session.messages];
+                history.hasMore = Boolean(data.pagination?.hasMore);
+                history.nextBefore = data.pagination?.nextBefore ?? null;
+                return older.length > 0;
+            } finally {
+                history.loadingOlder = false;
+            }
         },
         updateSessionMessagesLocal(sessionId: string, messages: Message[]) {
             const session = this.sessions.find((session: Session) => session.sessionId === sessionId);
@@ -88,16 +132,20 @@ export const useSessionStore = defineStore('session', {
             }
         },
         async addSession() {
-            const { data, status } = await createSession();
-            if (status !== 200) {
-                console.error('Failed to create session');
-                return;
+            try {
+                const { data, status } = await createSession();
+                if (status !== 200) {
+                    console.error('Failed to create session');
+                    return;
+                }
+                const newSession = data;
+                newSession.lastMessage = data.messages[data.messages.length - 1] || '';
+                this.sessions.push(newSession);
+                this.orderSessions();
+                return data.sessionId;
+            } catch (error) {
+                console.error('Failed to create session:', error);
             }
-            const newSession = data;
-            newSession.lastMessage = data.messages[data.messages.length - 1] || '';
-            this.sessions.push(newSession);
-            this.orderSessions();
-            return data.sessionId;
         },
         async deleteSession(sessionId: string) {
             const { status, data } = await deleteSession(sessionId);
@@ -147,11 +195,18 @@ export const useSessionStore = defineStore('session', {
                 return;
             }
 
-            // Check if message with same timestamp already exists to prevent duplicates
-            // (e.g. when adding locally first then receiving echo from socket)
-            const exists = session.messages.some(m => m.timestamp === message.timestamp);
-            if (exists) {
-                console.log('🟡 Message already exists, skipping add:', message.timestamp);
+            // Merge the server echo into the optimistic message instead of appending it.
+            const existingMessage = session.messages.find(m =>
+                (message.clientMessageId && m.clientMessageId === message.clientMessageId) ||
+                (message.memoryKey && m.memoryKey === message.memoryKey) ||
+                (!message.memoryKey && !m.memoryKey && m.timestamp === message.timestamp)
+            );
+            if (existingMessage) {
+                const messageIndex = session.messages.indexOf(existingMessage);
+                const mergedMessage = { ...existingMessage, ...message };
+                session.messages.splice(messageIndex, 1, mergedMessage);
+                if (messageIndex === session.messages.length - 1) session.lastMessage = mergedMessage;
+                console.log('🟡 Merged server echo into existing message:', message.timestamp);
                 return;
             }
 
@@ -252,8 +307,8 @@ export const useSessionStore = defineStore('session', {
             // Order sessions by last message timestamp in descending order
             this.sessions.sort((a: Session, b: Session) => {
                 // get the last message timestamp
-                const aTimestamp = a.messages?.[a.messages.length - 1]?.timestamp ?? 0;
-                const bTimestamp = b.messages?.[b.messages.length - 1]?.timestamp ?? 0;
+                const aTimestamp = a.messages?.[a.messages.length - 1]?.timestamp ?? a.lastMessage?.timestamp ?? 0;
+                const bTimestamp = b.messages?.[b.messages.length - 1]?.timestamp ?? b.lastMessage?.timestamp ?? 0;
                 return bTimestamp - aTimestamp;
             });
         },

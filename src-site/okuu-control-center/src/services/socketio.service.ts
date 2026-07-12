@@ -77,8 +77,9 @@ export class SocketioService {
             const configStore = useConfigStore();
             message.avatar = configStore.okuuPfp;
 
-            // For streaming messages
-            if (message.stream) {
+            // Only Okuu's reply is streamed. The user's echoed message carries the
+            // stream preference too, but must be merged as a regular message.
+            if (message.stream && /^okuu/i.test(message.user)) {
                 const hasExisting = this.sessionStore.hasMessageInSession(message.memoryKey);
                 console.log('🔵 Stream message check:', {
                     hasExisting,

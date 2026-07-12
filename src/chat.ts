@@ -51,6 +51,13 @@ export const getMessagesCount = () => messagesCount;
 export const incrementMessagesCount = () => ++messagesCount;
 
 const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+const imageMimeTypes: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+};
 
 const MAX_RELEVANT_MEMORIES = 5;
 const MAX_HISTORY_CHARS = 4000; // Ollama: use char proxy instead of tokens
@@ -150,12 +157,15 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
 
         // Step 2: Update attachment in memory if file exists
         let sentImage: string[] | undefined = undefined;
+        let sentImageMimeType: string | undefined = undefined;
         if (msg.file) {
             const fileContent = await loadFileContentFromStorage(msg.file);
             if (fileContent) {
                 await updateAttachmentForMemory(memory.memoryKey, fileContent, msg.file);
-                if (imageExts.includes(msg.file.split('.').pop() || '')) {
+                const extension = msg.file.split('.').pop()?.toLowerCase() || '';
+                if (imageExts.includes(extension)) {
                     sentImage = [fileContent];
+                    sentImageMimeType = imageMimeTypes[extension];
                 }
                 msg.attachment = fileContent;
                 Logger.INFO(`Attachment updated for memory: ${memory.memoryKey}`);
@@ -250,6 +260,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                     system: Core.model_settings.system,
                     think: Core.model_settings.think,
                     images: sentImage,
+                    imageMimeType: sentImageMimeType,
                 });
 
                 for await (const part of stream) {
@@ -367,6 +378,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
             system: Core.model_settings.system,
             think: Core.model_settings.think,
             images: sentImage,
+            imageMimeType: sentImageMimeType,
         });
 
         // Tools are handled proactively before AI response generation

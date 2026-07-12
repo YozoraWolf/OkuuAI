@@ -254,16 +254,18 @@ export const createSession = async (): Promise<any> => {
   return newSession;
 };
 
-export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: number = 20): Promise<any> => {
+export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: number = 20, before?: number): Promise<any> => {
   Logger.DEBUG(`Getting latest messages from session: ${sessionId}`);
 
   try {
     // Fetch all keys for the session, matching pattern 'okuuMemory:sessionId:*'
     const sessionKeys = await redisClientMemory.keys(`okuuMemory:${sessionId}:*`);
 
+    const limit = Math.min(Math.max(Number(msg_limit) || 20, 1), 100);
     const response: any = {
       sessionId,
-      messages: []
+      messages: [],
+      pagination: { hasMore: false, nextBefore: null }
     };
 
     // Fetch hash data for each session key
@@ -272,12 +274,14 @@ export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: num
     for (const key of sessionKeys) {
       const sessionData = await redisClientMemory.hGetAll(key);
       const sessData: ChatMessage = {
+        memoryKey: sessionData['memoryKey'] || key,
         sessionId: sessionData['sessionId'],
         user: sessionData['user'],
         message: sessionData['message'],
         timestamp: parseInt(sessionData['timestamp']),
         attachment: sessionData['attachment'],
         file: sessionData['file'],
+        thinking: sessionData['thinking'],
         done: true  // Messages loaded from Redis are complete
       };
 
@@ -295,18 +299,24 @@ export const getLatestMsgsFromSession = async (sessionId: string, msg_limit: num
     // Sort messages by timestamp in ascending order
     const sortedMessages = allMessagesWithTimestamps.sort((a, b) => a.timestamp - b.timestamp);
 
-    // Limit to the most recent 'msg_limit' messages
-    const latestMessages = sortedMessages.slice(-msg_limit);
+    const messagesBeforeCursor = before
+      ? sortedMessages.filter(message => message.timestamp < before)
+      : sortedMessages;
+    const latestMessages = messagesBeforeCursor.slice(-limit);
 
     setMessagesCount(latestMessages.length);
 
     // Return the latest messages
     response.messages = latestMessages;
+    response.pagination = {
+      hasMore: messagesBeforeCursor.length > latestMessages.length,
+      nextBefore: latestMessages[0]?.timestamp ?? null,
+    };
 
     return response;
   } catch (error) {
     Logger.ERROR(`Error getting latest messages for session ${sessionId}: ${error}`);
-    return [];  // Return an empty array in case of error
+    return { sessionId, messages: [], pagination: { hasMore: false, nextBefore: null } };
   }
 };
 

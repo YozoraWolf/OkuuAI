@@ -1,49 +1,64 @@
 <template>
-    <q-layout view="hHh Lpr lFf" class="full-height">
+    <q-page class="chat-page">
         <SessionsDrawer
             :sessions="sessions"
             :selected-session-id="selectedSessionId"
+            :open="sidebarOpen"
             @add-session="addNewSession"
             @select-session="selectSession"
             @remove-session="removeSession"
+            @close="sidebarOpen = false"
         />
 
-        <q-page-container class="q-pa-none window-height">
-            <div class="chat-container full-width window-height">
-                <div class="chat-messages q-pa-md" v-if="selectedSession && selectedSession.messages"
-                    ref="chatMessagesRef" v-scale>
+        <section class="chat-container">
+                <header class="chat-toolbar" v-if="selectedSession">
+                    <div class="toolbar-left">
+                        <q-btn flat round dense icon="menu" class="mobile-menu" aria-label="Open conversations" @click="sidebarOpen = true" />
+                        <span class="toolbar-title">Chat</span>
+                    </div>
+                    <div class="connection-pill" :class="statusColor">
+                        <q-icon :name="statusIcon" size="16px" /> {{ statusMessage }}
+                    </div>
+                    <div class="toolbar-actions">
+                        <q-btn flat round dense icon="add" aria-label="New conversation" @click="addNewSession"><q-tooltip>New conversation</q-tooltip></q-btn>
+                        <q-btn flat round dense icon="delete_outline" aria-label="Delete conversation" @click="removeSession(selectedSession.sessionId)"><q-tooltip>Delete conversation</q-tooltip></q-btn>
+                    </div>
+                </header>
+                <div class="chat-messages" v-if="selectedSession && selectedSession.messages"
+                    ref="chatMessagesRef" v-scale @scroll.passive="handleHistoryScroll">
+                    <div class="history-control" v-if="historyState?.hasMore">
+                        <q-btn flat no-caps :loading="historyState.loadingOlder" label="Load earlier messages"
+                            icon="history" @click="loadOlderMessages" />
+                    </div>
                     <q-inner-loading :showing="isLoadingSessionMessages">
                         <q-spinner color="primary" size="70" />
                     </q-inner-loading>
-                    <ChatMessage v-for="(message, index) in selectedSession.messages" :key="index"
+                    <ChatMessage v-for="(message, index) in selectedSession.messages" :key="message.memoryKey || `${message.sessionId}-${message.timestamp}-${index}`"
                         :timestamp="message.timestamp" :user="message.user"
-                        :avatar="message.user.toLocaleLowerCase() === 'okuu' ? okuu_pfp : ''" :message="message"
-                        :deleteBtn="index !== 0" />
+                        :avatar="/^okuu/i.test(message.user) ? okuu_pfp : ''" :message="message"
+                        :deleteBtn="index !== 0" :generating="/^okuu/i.test(message.user) && index === selectedSession.messages.length - 1 && !message.done" />
                 </div>
-                <div v-else class="chat-messages q-pa-md flex flex-center column">
-                    <q-icon name="chat" size="100px" color="white" />
-                    <h1>Chat</h1>
-                    <h2>Select a session to start chatting</h2>
-                </div>
-                <div v-if="isLoadingResponse || isStreaming">
-                    <q-spinner-dots color="primary" size="md" class="q-mx-md" />
+                <div v-else class="chat-empty flex flex-center column">
+                    <q-btn flat round dense icon="menu" class="mobile-menu empty-menu" aria-label="Open conversations" @click="sidebarOpen = true" />
+                    <div class="empty-orb"><q-icon name="forum" size="44px" /></div>
+                    <span class="eyebrow">OKUU CONTROL CENTER</span>
+                    <h1>What would you like to explore?</h1>
+                    <p>Choose a saved conversation or start a new one whenever you are ready.</p>
                 </div>
                 <ChatInput v-if="selectedSession" :loading="isLoadingResponse" :generating="isGenerating"
-                    :disable-input="!selectedSession || (!isLoadingResponse && configLoading)" :status="status"
-                    :status-message="statusMessage" :status-icon="statusIcon" :status-color="statusColor"
-                    @send="sendMessage" @stop="stopGeneration" @retry="retryConnection" @open-config="showConfigModal"
+                    :disable-input="!selectedSession || (!isLoadingResponse && configLoading)"
+                    @send="sendMessage" @stop="stopGeneration" @open-config="showConfigModal"
                     @open-tools-config="openToolsConfig" />
-            </div>
-        </q-page-container>
+        </section>
 
         <!-- Tools Configuration Modal -->
         <ToolsConfigModal v-model:show="showToolsConfigModal" />
-    </q-layout>
+    </q-page>
 </template>
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, computed, onBeforeUnmount, watch } from 'vue';
-import { useSessionStore } from 'src/stores/session.store';
+import { useSessionStore, type Message } from 'src/stores/session.store';
 import { useQuasar } from 'quasar';
 import ChatMessage from 'src/components/chat/ChatMessage.vue';
 import SessionsDrawer from 'src/components/chat/SessionsDrawer.vue';
@@ -69,6 +84,7 @@ const toolsStore = useToolsStore();
 // Session store refs
 const { sessions, currentSession, isStreaming, isGenerating } = storeToRefs(sessionStore);
 const selectedSessionId = ref<string | undefined>(undefined);
+const sidebarOpen = ref(false);
 const chatMessagesRef = ref();
 
 // Config store refs
@@ -118,27 +134,26 @@ onMounted(async () => {
         return;
     }
     isLoadingSessionMessages.value = true;
-    await sessionStore.fetchAllSessions();
-    await nextTick();
-    sessionStore.orderSessions();
-    await configStore.fetchOkuuPfp();
-    // fetch thinking mode status from config store
-    await configStore.fetchThinkingState();
-    // fetch all downloadable models
-    await configStore.fetchAllDownloadedModels();
-    // fetch current model
-    await configStore.getOkuuModel();
-    // fetch tools configuration
-    await toolsStore.fetchToolsConfig();
-    await toolsStore.fetchAvailableTools();
+    try {
+        const loaded = await sessionStore.fetchAllSessions();
+        if (!loaded || !authStore.isAuthenticated) return;
+        await nextTick();
+        sessionStore.orderSessions();
+        await configStore.fetchOkuuPfp();
+        await configStore.fetchThinkingState();
+        await configStore.fetchAllDownloadedModels();
+        await configStore.getOkuuModel();
+        await toolsStore.fetchToolsConfig();
+        await toolsStore.fetchAvailableTools();
 
-    // If route param id is present, select that session
-    if (route.params.id) {
-        selectSession(route.params.id as string);
-    } else {
-        selectedSessionId.value = undefined;
+        if (route.params.id) {
+            await selectSession(route.params.id as string);
+        } else {
+            selectedSessionId.value = undefined;
+        }
+    } finally {
+        isLoadingSessionMessages.value = false;
     }
-    isLoadingSessionMessages.value = false;
 });
 
 // Watch for route changes to update chat session
@@ -163,11 +178,15 @@ const selectSession = async (sessionId: string) => {
         socketIO.value = null;
     }
     isLoadingSessionMessages.value = true;
-    await sessionStore.fetchSessionMessages(sessionId);
+    const loaded = await sessionStore.fetchSessionMessages(sessionId);
+    if (!loaded || !authStore.isAuthenticated) {
+        isLoadingSessionMessages.value = false;
+        return;
+    }
     sessionStore.setCurrentSessionId(sessionId);
     selectedSessionId.value = sessionId;
 
-    scrollToBottom();
+    await nextTick();
     scrollToBottom();
     socketIO.value = new SocketioService();
     socket.value = await socketIO.value.initializeSocket(sessionId, sessionStore);
@@ -184,32 +203,50 @@ const addNewSession = async () => {
     router.replace({ path: `/chat/${sessionId}` });
 };
 
+const readImageAsBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+});
+
 const sendMessage = async (messageText: string, file: File | null) => {
-    if (selectedSession.value && messageText.trim()) {
+    if (selectedSession.value && (messageText.trim() || file)) {
         const timestamp = Date.now();
-        const message = {
+        const clientMessageId = globalThis.crypto?.randomUUID?.() ?? `${timestamp}-${Math.random().toString(36).slice(2)}`;
+        const message: Message = {
             timestamp: timestamp,
+            clientMessageId,
             user: 'wolf',
-            message: messageText,
+            message: messageText.trim() || 'Please analyze the attached file.',
             sessionId: selectedSession.value.sessionId,
             memoryKey: '',
             stream: stream.value,
-            think: toggleThinking.value,
+            think: toggleThinking.value && configStore.modelSupportsThinking,
             done: true, // User messages are always done
         };
 
-        // Immediately add user message to UI for instant feedback
-        sessionStore.addMessageToSession(message);
+        isLoadingResponse.value = true;
+        let outboundMessage: Message = message;
+        if (file) {
+            const fileName = await sessionStore.sendAttachment(file, message);
+            if (!fileName) {
+                isLoadingResponse.value = false;
+                return;
+            }
+            outboundMessage = { ...message, file: fileName };
+        }
+
+        // Show image attachments immediately; the server echo persists the same
+        // base64 attachment so it remains available when history is reloaded.
+        const optimisticMessage = file?.type.startsWith('image/')
+            ? { ...outboundMessage, attachment: await readImageAsBase64(file) }
+            : outboundMessage;
+        sessionStore.addMessageToSession(optimisticMessage);
 
         // Then emit to server
-        socket.value?.emit('chat', message);
-        isLoadingResponse.value = true;
+        socket.value?.emit('chat', outboundMessage);
         scrollToBottom();
-
-        if (file) {
-            console.log('sending attachment');
-            await sessionStore.sendAttachment(file, message);
-        }
 
         // After sending the message if theres 30 seconds of inactivity, renable the send button
         inputTimeout.value = setTimeout(() => {
@@ -275,6 +312,26 @@ const status = computed(() => socketIO.value?.getStatus());
 const selectedSession = computed(() => {
     return selectedSessionId.value ? sessionStore.getSessionById(selectedSessionId.value) : undefined;
 });
+
+const historyState = computed(() => selectedSessionId.value ? sessionStore.history[selectedSessionId.value] : undefined);
+
+const loadOlderMessages = async () => {
+    if (!selectedSessionId.value || !chatMessagesRef.value) return;
+    const container = chatMessagesRef.value as HTMLElement;
+    const oldHeight = container.scrollHeight;
+    const oldTop = container.scrollTop;
+    const loaded = await sessionStore.loadOlderMessages(selectedSessionId.value);
+    if (loaded) {
+        await nextTick();
+        container.scrollTop = container.scrollHeight - oldHeight + oldTop;
+    }
+};
+
+const handleHistoryScroll = () => {
+    if (chatMessagesRef.value?.scrollTop < 72 && historyState.value?.hasMore && !historyState.value.loadingOlder) {
+        void loadOlderMessages();
+    }
+};
 
 // watch
 
@@ -351,17 +408,115 @@ watch(() => status.value, (status) => {
 <style lang="scss" scoped>
 .chat-container {
     display: flex;
+    min-width: 0;
+    flex: 1;
     flex-direction: column;
     height: 100%;
     overflow: hidden;
+    background: var(--surface-0);
 }
+
+.chat-page { display: flex; height: 100dvh; overflow: hidden; }
 
 .chat-messages {
     flex: 1;
     overflow-y: auto;
+    padding: 1.25rem clamp(1rem, 4vw, 4.5rem) 2rem;
+    scroll-behavior: smooth;
+}
+
+.chat-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 52px;
+    padding: 0.55rem clamp(1rem, 4vw, 2rem);
+    border-bottom: 1px solid var(--surface-border);
+    background: color-mix(in srgb, var(--surface-0) 88%, transparent);
+    backdrop-filter: blur(18px);
+}
+
+.chat-empty h1 {
+    margin: 0.25rem 0 0;
+    font-size: clamp(1.15rem, 2vw, 1.55rem);
+    letter-spacing: -0.035em;
+}
+
+.toolbar-left, .toolbar-actions { display: flex; align-items: center; gap: 0.3rem; }
+.toolbar-title { font-size: 0.88rem; font-weight: 750; letter-spacing: -0.02em; }
+.toolbar-actions { margin-left: 0.5rem; }
+.toolbar-actions :deep(.q-btn) { color: var(--text-muted); }
+.toolbar-actions :deep(.q-btn:hover) { color: var(--accent-1); background: color-mix(in srgb, var(--accent-1) 10%, transparent); }
+
+.mobile-menu { display: none; }
+
+.eyebrow {
+    color: var(--accent-1);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+}
+
+.connection-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.connection-pill.green { color: #a8e8c6; }
+.connection-pill.red { color: #ff9a9a; }
+
+.history-control {
+    display: flex;
+    justify-content: center;
+    margin: 0 0 0.8rem;
+}
+
+.history-control :deep(.q-btn) {
+    color: var(--text-muted);
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    background: var(--surface-1);
+}
+
+.chat-empty {
+    flex: 1;
+    text-align: center;
+    padding: 2rem;
+}
+
+.empty-menu { position: absolute; top: 1rem; left: 1rem; }
+
+.chat-empty p { color: var(--text-muted); margin: 0.75rem 0 0; }
+
+.empty-orb {
+    display: grid;
+    place-items: center;
+    width: 92px;
+    height: 92px;
+    margin-bottom: 1.35rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 32px;
+    color: var(--accent-1);
+    background: var(--surface-2);
+    box-shadow: none;
+    transform: none;
 }
 
 .q-item--active {
     background-color: var(--q-primary) !important;
+}
+
+@media (max-width: 700px) {
+    .mobile-menu { display: inline-flex; margin-right: 0.45rem; vertical-align: middle; }
+    .chat-toolbar { padding: 0.45rem 0.75rem; }
+    .connection-pill { font-size: 0; padding: 0.5rem; }
+    .connection-pill .q-icon { margin: 0; }
+    .chat-messages { padding: 0.75rem 0.85rem 1.25rem; }
 }
 </style>

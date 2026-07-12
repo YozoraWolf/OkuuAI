@@ -47,10 +47,16 @@ export const checkMemoryStatus = async (req: any, res: any) => {
 
 export const getSessionMsgs = async (req: any, res: any) => {
     const { sessionId } = req.params;
-    const { msg_limit } = req.query;
+    const { msg_limit, before } = req.query;
+    const limit = Number(msg_limit);
+    const cursor = Number(before);
 
     if(await doesSessionExist(sessionId)) {
-        res.json(await getLatestMsgsFromSession(sessionId, msg_limit));
+        res.json(await getLatestMsgsFromSession(
+            sessionId,
+            Number.isFinite(limit) ? limit : 20,
+            Number.isFinite(cursor) && cursor > 0 ? cursor : undefined,
+        ));
     } else {
         res.status(404).send('Session not found');
     }
@@ -59,12 +65,16 @@ export const getSessionMsgs = async (req: any, res: any) => {
 }
 
 export const createSess = async (req: any, res: any) => {
-    // Create a new session
-    const session = await createSession();
-    if (session) {
-        res.json(session);
-    } else {
-        res.status(500).send('Session already exists or error creating session');
+    try {
+        const session = await createSession();
+        if (session) {
+            res.json(session);
+        } else {
+            res.status(500).send('Session already exists or error creating session');
+        }
+    } catch (error) {
+        Logger.ERROR(`Failed to create session: ${error}`);
+        res.status(500).send('Unable to create a session');
     }
 }
 
@@ -100,7 +110,7 @@ export const createMemoryRecord = async (req: Request, res: Response) => {
     try {
         //const memoryKey = `okuuMemory:file:${file.name}`;
         //const result = await saveMemoryWithEmbedding(memoryKey, content, 'system', 'file');
-        const result = saveFileToStorage(file);
+        const result = await saveFileToStorage(file);
         if (result) {
             res.status(200).json({ message: 'File uploaded sucessful!', fileName: result });
         } else {

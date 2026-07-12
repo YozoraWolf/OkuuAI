@@ -21,10 +21,11 @@ export const getAllSessions = async () => {
     return response;
 };
 
-export const getSessionMessages = async (sessionId: string) => {
+export const getSessionMessages = async (sessionId: string, limit = 40, before?: number) => {
     const apiUrl = await getApiUrl();
     const response = await axios.get(`${apiUrl}/memory/sessions/${sessionId}`,{
         headers: getAuthHeaders(),
+        params: { msg_limit: limit, ...(before ? { before } : {}) },
     });
     return response;
 };
@@ -54,13 +55,12 @@ export const deleteChatMessage = async (memoryKey: string) => {
 }
 export const sendAttachment = async (formData: FormData) => {
     const apiUrl = await getApiUrl();
+    const authHeaders = getAuthHeaders();
+    const headers = authHeaders.Authorization
+        ? { Authorization: authHeaders.Authorization, 'ngrok-skip-browser-warning': true }
+        : { 'ngrok-skip-browser-warning': true };
     const response = await axios.post(`${apiUrl}/memory/record`, formData, {
-        headers: 
-        {
-            ...getAuthHeaders(),
-            'Content-Type': 'multipart/form-data',
-        },
+        headers,
     });
     return response;
 }
-

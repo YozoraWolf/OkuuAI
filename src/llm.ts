@@ -8,11 +8,29 @@ type GenerateOptions = {
     system?: string;
     think?: boolean;
     images?: string[];
+    imageMimeType?: string;
     format?: string;
 };
 
 type GenerateChunk = { response: string };
 type GenerateResponse = { response: string; thinking?: string };
+
+const getMessages = (options: GenerateOptions) => {
+    const userContent = options.images?.length
+        ? [
+            { type: 'text', text: options.prompt },
+            ...options.images.map(image => ({
+                type: 'image_url',
+                image_url: { url: `data:${options.imageMimeType || 'image/jpeg'};base64,${image}` },
+            })),
+        ]
+        : options.prompt;
+
+    return [
+        ...(options.system ? [{ role: 'system', content: options.system }] : []),
+        { role: 'user', content: userContent },
+    ];
+};
 
 const getProvider = () => (process.env.LLM_PROVIDER || 'ollama').toLowerCase();
 
@@ -31,6 +49,34 @@ const getEmbeddingBaseUrl = () => {
 };
 
 export const isOllamaProvider = () => getProvider() === 'ollama';
+
+export const getAvailableModels = async (): Promise<{ name: string; multimodal: boolean }[]> => {
+    if (isOllamaProvider()) {
+        const response = await Core.ollama_instance.list();
+        return response.models.map(model => {
+            const families = (model as any).details?.families || [];
+            return { name: model.name, multimodal: families.some((family: string) => /^(clip|vision)$/i.test(family)) };
+        });
+    }
+
+    const response = await fetch(`${getBaseUrl()}/models`, {
+        headers: process.env.LLM_API_KEY ? { Authorization: `Bearer ${process.env.LLM_API_KEY}` } : {},
+    });
+    if (!response.ok) {
+        throw new Error(`Model endpoint returned ${response.status}: ${await response.text()}`);
+    }
+
+    const payload: any = await response.json();
+    const models = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.models) ? payload.models : [];
+    return models
+        .map((model: any) => {
+            const name = model.id || model.name || model.model;
+            const modalities = [...(model.modalities || []), ...(model.input_modalities || [])];
+            const multimodal = model.vision === true || model.capabilities?.vision === true || modalities.includes('image') || /(?:vision|(?:^|[-_])vl(?:[-_]|$)|llava|bakllava|minicpm-v|qwen(?:[-_]?3(?:[._-][5-9])?))/i.test(name);
+            return { name, multimodal };
+        })
+        .filter((model: { name: unknown }) => typeof model.name === 'string' && model.name.length > 0);
+};
 
 export const embedText = async (input: string): Promise<number[]> => {
     const provider = getEmbeddingProvider();
@@ -100,10 +146,7 @@ export const generateCompletion = async (options: GenerateOptions): Promise<Gene
         body: JSON.stringify({
             model: options.model || Core.model_name,
             stream: false,
-            messages: [
-                ...(options.system ? [{ role: 'system', content: options.system }] : []),
-                { role: 'user', content: options.prompt },
-            ],
+            messages: getMessages(options),
             temperature: Core.model_settings.temperature,
         }),
     });
@@ -135,10 +178,7 @@ export const streamCompletion = async function* (options: GenerateOptions): Asyn
         body: JSON.stringify({
             model: options.model || Core.model_name,
             stream: true,
-            messages: [
-                ...(options.system ? [{ role: 'system', content: options.system }] : []),
-                { role: 'user', content: options.prompt },
-            ],
+            messages: getMessages(options),
             temperature: Core.model_settings.temperature,
         }),
     });
