@@ -1,8 +1,8 @@
 # Standalone Whisper ASR
 
-This module provides the shared OpenAI-compatible transcription service used by OkuuAI and OkuuClaw.
+This module provides the OpenAI-compatible transcription service used by OkuuAI.
 
-OkuuAI starts it automatically in a detached `screen` session named `okuuwhis`. The default endpoint is:
+The server starts automatically in a detached `screen` session named `okuuwhis`. The default endpoint is:
 
 ```text
 http://127.0.0.1:8096/v1/audio/transcriptions
