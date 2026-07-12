@@ -16,46 +16,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { io, Socket } from 'socket.io-client';
-import { resolveHostRedirect } from 'src/utils/okuuai_utils';
+import { ref, onBeforeUnmount, onMounted } from 'vue';
+import { useConfigStore } from 'src/stores/config.store';
 
-const lastCheck = ref(Date.now());
-const firstBeat = ref(false);
+const configStore = useConfigStore();
 const isOnline = ref(false);
+let statusTimer: ReturnType<typeof setInterval> | undefined;
 
-
-
-onMounted(async () => {
-    const resolvedUrl = await resolveHostRedirect();
-    console.log('Resolved WebSocket URL:', resolvedUrl);
-    let connection: Socket;
+const checkStatus = async () => {
     try {
-        const url = new URL(resolvedUrl);
-        const protocol = process.env.LOCAL ? 'ws' : window.location.protocol === 'https:' ? 'wss' : 'ws';
-        connection = io(`${protocol}://${url.host}`, {
-            transports: ['websocket'],
-            timeout: 5000,
-        });
-        connection.connect();
-    } catch (error) {
-        //console.error('Failed to connect to server:', error);
-        return;
+        isOnline.value = await configStore.checkOkuuAIStatus();
+    } catch {
+        isOnline.value = false;
     }
+};
 
-    connection.on('connect', () => {
-        console.log('Connected to server');
-        isOnline.value = true;
-    });
+onMounted(() => {
+    void checkStatus();
+    statusTimer = setInterval(checkStatus, 10000);
+});
 
-
-    connection.on('ping', (event) => {
-        lastCheck.value = Date.now();
-        firstBeat.value = true;
-        isOnline.value = true;
-    });
-
-
+onBeforeUnmount(() => {
+    if (statusTimer) clearInterval(statusTimer);
 });
 </script>
 

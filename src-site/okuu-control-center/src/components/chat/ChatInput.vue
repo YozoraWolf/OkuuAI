@@ -1,7 +1,7 @@
 <template>
     <div class="chat-input text-white q-pa-md">
         <div class="composer-field" :class="{ 'has-attachment': attachment }">
-            <q-input type="textarea" autogrow borderless hide-bottom-space :disable="disableInput"
+            <q-input v-if="!isRecording && !isTranscribing" type="textarea" autogrow borderless hide-bottom-space :disable="disableInput"
                 v-model="newMessage" placeholder="Type a message" @keyup.enter="onEnter" @keyup.shift.enter.stop
                 :readonly="loading || generating"
                 class="composer-text">
@@ -9,14 +9,40 @@
                     <ChatAttachment v-if="modelSupportsAttachments" v-model="attachment" :disable="disableInput || loading || generating" />
                     <q-btn v-if="generating" flat round icon="stop" color="negative"
                         @click="stopGeneration" />
-                    <q-btn v-else
+                    <q-btn v-else-if="canSend"
                         :disable="!canSend || loading"
                         :loading="loading && !generating"
                         unelevated round icon="send"
                         :color="canSend && !loading ? 'primary' : 'grey-8'"
                         @click="onSend" />
+                    <q-btn v-else-if="voiceMode" flat round icon="mic" color="primary" class="voice-trigger"
+                        :disable="disableInput || loading" aria-label="Hold to record voice note"
+                        @pointerdown.prevent="beginVoiceHold" @contextmenu.prevent>
+                        <q-tooltip>Hold to record · slide left to cancel</q-tooltip>
+                    </q-btn>
+                    <q-btn v-else flat round icon="send" color="grey-6"
+                        :disable="disableInput || loading" aria-label="Switch to voice recording"
+                        @click="voiceMode = true">
+                        <q-tooltip>Switch to voice note</q-tooltip>
+                    </q-btn>
                 </template>
             </q-input>
+            <div v-else class="voice-recorder" :class="{ transcribing: isTranscribing }">
+                <template v-if="isRecording">
+                    <span class="recording-dot"></span>
+                    <strong>{{ formattedRecordingTime }}</strong>
+                    <div class="voice-bars" aria-hidden="true"><i v-for="bar in 18" :key="bar" :style="{ animationDelay: `${bar * -55}ms` }"></i></div>
+                    <div class="cancel-hint" :class="{ armed: cancelArmed }" :style="{ transform: `translateX(${slideOffset}px)` }">
+                        <q-icon name="chevron_left" size="18px" />
+                        <span>{{ cancelArmed ? 'Release to cancel' : 'Slide left to cancel' }}</span>
+                    </div>
+                    <div class="recording-mic" :class="{ armed: cancelArmed }"><q-icon :name="cancelArmed ? 'delete_outline' : 'mic'" size="22px" /></div>
+                </template>
+                <template v-else>
+                    <q-spinner-dots color="primary" size="28px" />
+                    <span>Transcribing voice note…</span>
+                </template>
+            </div>
             <div v-if="attachment" class="attachment-preview" :title="attachment.name">
                 <div class="attachment-visual">
                     <img v-if="attachmentPreviewUrl" :src="attachmentPreviewUrl" alt="Selected image preview" />
@@ -83,6 +109,7 @@ import { useToolsStore } from 'src/stores/tools.store';
 import { storeToRefs } from 'pinia';
 import { useQuasar } from 'quasar';
 import ChatAttachment from './ChatAttachment.vue';
+import { transcribeVoiceNote } from 'src/services/audio.service';
 
 const props = defineProps<{
     loading: boolean;
@@ -106,12 +133,29 @@ const { stream, toggleThinking, currentModel, modelList } = storeToRefs(configSt
 const newMessage = ref('');
 const attachment = ref<File | null>(null);
 const attachmentPreviewUrl = ref('');
+const isRecording = ref(false);
+const isTranscribing = ref(false);
+const voiceMode = ref(false);
+const recordingSeconds = ref(0);
+const cancelArmed = ref(false);
+const slideOffset = ref(0);
+let mediaRecorder: MediaRecorder | null = null;
+let recordingStream: MediaStream | null = null;
+let recordingTimer: ReturnType<typeof setInterval> | undefined;
+let recordingLimitTimer: ReturnType<typeof setTimeout> | undefined;
+let holdStartTimer: ReturnType<typeof setTimeout> | undefined;
+let audioChunks: Blob[] = [];
+let transcribeAfterStop = false;
+let activePointerId: number | null = null;
+let holdStartX = 0;
+let holdReleased = false;
 const attachmentExtension = computed(() => attachment.value?.name.split('.').pop()?.toUpperCase() || 'FILE');
 const attachmentSize = computed(() => {
     if (!attachment.value) return '';
     const bytes = attachment.value.size;
     return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 });
+const formattedRecordingTime = computed(() => `${Math.floor(recordingSeconds.value / 60)}:${String(recordingSeconds.value % 60).padStart(2, '0')}`);
 
 const canSend = computed(() => {
     return (!!newMessage.value.trim() || !!attachment.value) && !props.disableInput;
@@ -139,13 +183,169 @@ watch(attachment, file => {
 
 onBeforeUnmount(() => {
     if (attachmentPreviewUrl.value) URL.revokeObjectURL(attachmentPreviewUrl.value);
+    transcribeAfterStop = false;
+    if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
+    removeHoldListeners();
+    stopRecordingStream();
 });
+
+const stopRecordingStream = () => {
+    recordingStream?.getTracks().forEach(track => track.stop());
+    recordingStream = null;
+    if (recordingTimer) clearInterval(recordingTimer);
+    if (recordingLimitTimer) clearTimeout(recordingLimitTimer);
+    recordingTimer = undefined;
+    recordingLimitTimer = undefined;
+};
+
+const getRecorderMimeType = () => [
+    'audio/webm;codecs=opus',
+    'audio/mp4',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+].find(type => MediaRecorder.isTypeSupported(type));
+
+const addHoldListeners = () => {
+    window.addEventListener('pointermove', handleVoiceHoldMove, { passive: false });
+    window.addEventListener('pointerup', handleVoiceHoldEnd);
+    window.addEventListener('pointercancel', handleVoiceHoldCancel);
+};
+
+const removeHoldListeners = () => {
+    if (holdStartTimer) clearTimeout(holdStartTimer);
+    holdStartTimer = undefined;
+    window.removeEventListener('pointermove', handleVoiceHoldMove);
+    window.removeEventListener('pointerup', handleVoiceHoldEnd);
+    window.removeEventListener('pointercancel', handleVoiceHoldCancel);
+    activePointerId = null;
+};
+
+const beginVoiceHold = (event: PointerEvent) => {
+    if (props.disableInput || props.loading || props.generating || isRecording.value || isTranscribing.value) return;
+    activePointerId = event.pointerId;
+    holdStartX = event.clientX;
+    holdReleased = false;
+    cancelArmed.value = false;
+    slideOffset.value = 0;
+    addHoldListeners();
+    holdStartTimer = setTimeout(() => {
+        holdStartTimer = undefined;
+        void startRecording();
+    }, 280);
+};
+
+const handleVoiceHoldMove = (event: PointerEvent) => {
+    if (event.pointerId !== activePointerId) return;
+    event.preventDefault();
+    const distance = Math.min(0, event.clientX - holdStartX);
+    slideOffset.value = Math.max(-96, distance * .45);
+    cancelArmed.value = distance <= -80;
+};
+
+const handleVoiceHoldEnd = (event: PointerEvent) => {
+    if (event.pointerId !== activePointerId) return;
+    holdReleased = true;
+    const slidToCancel = cancelArmed.value;
+    const recordingStarted = mediaRecorder?.state === 'recording';
+    removeHoldListeners();
+    if (recordingStarted) {
+        if (slidToCancel) cancelRecording(); else finishRecording();
+    } else {
+        voiceMode.value = false;
+    }
+};
+
+const handleVoiceHoldCancel = (event: PointerEvent) => {
+    if (event.pointerId !== activePointerId) return;
+    holdReleased = true;
+    removeHoldListeners();
+    if (mediaRecorder?.state === 'recording') cancelRecording();
+};
+
+const startRecording = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+        removeHoldListeners();
+        $q.notify({
+            type: 'negative',
+            message: !window.isSecureContext
+                ? 'Firefox requires HTTPS or localhost for microphone access.'
+                : 'Microphone recording is disabled or unavailable in this browser.',
+        });
+        return;
+    }
+    try {
+        recordingStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+        if (holdReleased) {
+            stopRecordingStream();
+            return;
+        }
+        const mimeType = getRecorderMimeType();
+        mediaRecorder = new MediaRecorder(recordingStream, mimeType ? { mimeType } : undefined);
+        audioChunks = [];
+        transcribeAfterStop = false;
+        recordingSeconds.value = 0;
+        mediaRecorder.ondataavailable = event => { if (event.data.size) audioChunks.push(event.data); };
+        mediaRecorder.onstop = handleRecordingStopped;
+        mediaRecorder.start(250);
+        isRecording.value = true;
+        recordingTimer = setInterval(() => { recordingSeconds.value += 1; }, 1000);
+        recordingLimitTimer = setTimeout(() => {
+            holdReleased = true;
+            removeHoldListeners();
+            finishRecording();
+        }, 120000);
+    } catch (error) {
+        removeHoldListeners();
+        stopRecordingStream();
+        const permissionDenied = error instanceof DOMException && ['NotAllowedError', 'SecurityError'].includes(error.name);
+        $q.notify({ type: 'negative', message: permissionDenied ? 'Microphone permission was denied. Check Firefox site permissions.' : 'Unable to start voice recording.' });
+    }
+};
+
+const handleRecordingStopped = async () => {
+    const shouldTranscribe = transcribeAfterStop;
+    const mimeType = mediaRecorder?.mimeType || audioChunks[0]?.type || 'audio/webm';
+    const audio = new Blob(audioChunks, { type: mimeType });
+    isRecording.value = false;
+    voiceMode.value = false;
+    cancelArmed.value = false;
+    slideOffset.value = 0;
+    stopRecordingStream();
+    if (!shouldTranscribe || !audio.size) return;
+
+    isTranscribing.value = true;
+    try {
+        const extension = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+        const transcript = await transcribeVoiceNote(audio, `voice-note.${extension}`);
+        if (!transcript) throw new Error('Empty transcription');
+        emit('send', transcript, null);
+    } catch {
+        $q.notify({ type: 'negative', message: 'The voice note could not be transcribed.' });
+    } finally {
+        isTranscribing.value = false;
+        audioChunks = [];
+        mediaRecorder = null;
+    }
+};
+
+const finishRecording = () => {
+    if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
+    transcribeAfterStop = true;
+    mediaRecorder.stop();
+};
+
+const cancelRecording = () => {
+    if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
+    transcribeAfterStop = false;
+    mediaRecorder.stop();
+};
 
 const onSend = () => {
     if (canSend.value) {
         emit('send', newMessage.value, attachment.value);
         newMessage.value = '';
         attachment.value = null;
+        voiceMode.value = false;
     }
 };
 
@@ -221,6 +421,17 @@ const quickToggleTools = async () => {
 .attachment-copy { display: grid; min-width: 0; gap: 0.18rem; }
 .attachment-copy strong { overflow: hidden; color: var(--text-strong); font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-copy span { color: var(--text-muted); font-size: 0.67rem; }
+.voice-trigger { touch-action: none; user-select: none; -webkit-user-select: none; }
+.voice-recorder { display: flex; min-height: 62px; align-items: center; gap: 0.65rem; padding: 0.35rem 0.55rem; pointer-events: none; user-select: none; }
+.recording-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: #ef6262; box-shadow: 0 0 0 5px rgba(239,98,98,.12); animation: recording-pulse 1.2s ease-in-out infinite; }
+.voice-recorder strong { width: 38px; flex: none; font-variant-numeric: tabular-nums; font-size: .76rem; }
+.voice-bars { display: flex; height: 32px; min-width: 0; flex: 1; align-items: center; justify-content: center; gap: 3px; overflow: hidden; }
+.voice-bars i { display: block; width: 3px; height: 8px; border-radius: 3px; background: color-mix(in srgb, var(--accent-1) 78%, var(--text-muted)); animation: voice-bar 900ms ease-in-out infinite alternate; }
+.cancel-hint { display: flex; flex: none; align-items: center; color: var(--text-muted); font-size: .68rem; white-space: nowrap; transition: color 120ms ease; }
+.cancel-hint.armed { color: #ef7878; }
+.recording-mic { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border-radius: 50%; color: var(--accent-text); background: var(--accent-1); box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-1) 12%, transparent); }
+.recording-mic.armed { color: white; background: #d95858; box-shadow: 0 0 0 7px rgba(217,88,88,.15); }
+.voice-recorder.transcribing { justify-content: center; color: var(--text-muted); font-size: .78rem; }
 .composer-footer { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
 .composer-controls { display: flex; align-items: center; min-width: 0; overflow-x: auto; }
 .composer-actions { display: flex; align-items: center; order: 3; margin-left: 0.35rem; }
@@ -229,5 +440,12 @@ const quickToggleTools = async () => {
 @media (max-width: 700px) {
     .send-hint { display: none; }
     .composer-controls { flex: 1; }
+    .voice-recorder { gap: .4rem; }
+    .voice-bars { gap: 2px; }
+    .voice-bars i:nth-child(even) { display: none; }
+    .cancel-hint span { max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
 }
+
+@keyframes recording-pulse { 50% { opacity: .55; transform: scale(.82); } }
+@keyframes voice-bar { from { height: 6px; opacity: .45; } to { height: 26px; opacity: 1; } }
 </style>
