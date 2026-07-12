@@ -108,7 +108,7 @@ export const setSystemPrompt = (req: Request, res: Response) => {
     }
     updateAssistantConfigJSON({ system_prompt });
     Core.model_settings.system = system_prompt;
-    Logger.INFO(`✅ (API) System Prompt set to: ${system_prompt}`);
+    Logger.INFO('✅ (API) System prompt updated.');
     res.status(200).send({ system_prompt: Core.model_settings.system });
 };
 

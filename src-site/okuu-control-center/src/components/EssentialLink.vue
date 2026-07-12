@@ -3,7 +3,7 @@
     clickable
     tag="a"
     @click="doPageRedirect(props.path)"
-    v-if="(!props.auth || authStore.isAuthenticated) && (props.path !== '/login' || !authStore.isAuthenticated)"
+    v-if="(!props.auth || authStore.isAuthenticated) && (!props.admin || authStore.isAdmin) && (props.path !== '/login' || !authStore.isAuthenticated)"
   >
     <q-item-section
       v-if="icon"
@@ -34,6 +34,7 @@ export interface EssentialLinkProps {
   path?: string;
   icon?: string;
   auth?: boolean;
+  admin?: boolean;
 };
 
 const doPageRedirect = (path: string) => {
@@ -54,5 +55,6 @@ const props = withDefaults(defineProps<EssentialLinkProps>(), {
   path: '',
   icon: '',
   auth: false,
+  admin: false,
 });
 </script>

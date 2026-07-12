@@ -59,7 +59,7 @@
           <div class="setting-panel zoom-panel"><Zoom /></div>
         </section>
 
-        <section class="settings-section">
+        <section v-if="authStore.isAdmin" class="settings-section">
           <div class="section-heading">
             <span>Assistant instructions</span>
             <small>Define Okuu's behavior and personality</small>
@@ -83,6 +83,7 @@ import Zoom from 'src/components/settings/Zoom.vue';
 import SystemPromptEdit from 'src/components/settings/SystemPromptEdit.vue';
 import GlobalToggles from 'src/components/settings/GlobalToggles.vue';
 import { useConfigStore } from 'src/stores/config.store';
+import { useAuthStore } from 'src/stores/auth.store';
 
 defineEmits([
   ...useDialogPluginComponent.emits,
@@ -92,6 +93,7 @@ const { dialogRef, onDialogHide, onDialogOK, onDialogCancel } = useDialogPluginC
 const $q = useQuasar();
 
 const configStore = useConfigStore();
+const authStore = useAuthStore();
 
 const stream = ref(configStore.stream);
 const globalMemory = ref(configStore.globalMemory);
@@ -106,7 +108,7 @@ const editedPrompt = ref();
 
 const hasChanges = computed(() => {
   return (
-    (editedPrompt.value !== undefined && editedPrompt.value !== originalPrompt) ||
+    (authStore.isAdmin && editedPrompt.value !== undefined && editedPrompt.value !== originalPrompt) ||
     stream.value !== originalStream ||
     globalMemory.value !== originalGlobalMemory ||
     messageStyle.value !== originalMessageStyle
@@ -127,7 +129,9 @@ const saveConfig = async () => {
   try {
     configStore.setStream(stream.value);
     configStore.setMessageStyle(messageStyle.value);
-    await configStore.updateSystemPrompt(editedPrompt.value !== undefined ? editedPrompt.value : configStore.systemPrompt);
+    if (authStore.isAdmin) {
+      await configStore.updateSystemPrompt(editedPrompt.value !== undefined ? editedPrompt.value : configStore.systemPrompt);
+    }
     await configStore.updateGlobalMemory(globalMemory.value);
     onDialogOK();
   } catch (error) {
@@ -159,6 +163,7 @@ const onCancelClick = () => {
 
 
 const fetchOriginalPrompt = async () => {
+  if (!authStore.isAdmin) return;
   if (!configStore.systemPrompt) {
     await configStore.fetchSystemPrompt();
   }

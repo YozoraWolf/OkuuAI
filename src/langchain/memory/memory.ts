@@ -2,6 +2,7 @@ import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts
 import { BufferMemory } from "langchain/memory";
 import { RedisChatMessageHistory } from "@langchain/community/stores/message/ioredis";
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
+import { getProtectedSystemPrompt } from "@src/privacy";
 import { Core } from "@src/core";
 import { ConversationChain } from "langchain/chains";
 import { Logger } from "@src/logger";
@@ -45,7 +46,7 @@ export const SESSION_SETTINGS: SessionSettings = loadSettings();
 let session: BufferMemory;
 
 const prompt = ChatPromptTemplate.fromMessages([
-  ["system", Core.model_settings.system],
+  ["system", getProtectedSystemPrompt()],
   new MessagesPlaceholder("history"),
   ["user", "{input}"]
 ]);
@@ -139,7 +140,7 @@ export interface SessionData {
   sessionId: string;
 }
 
-export const getAllSessions = async (): Promise<Array<SessionData>> => {
+export const getAllSessions = async (ownerId?: number): Promise<Array<SessionData>> => {
   Logger.DEBUG("Getting all sessions...");
 
   // Get all session keys in the pattern "okuuMemory:*"
@@ -159,6 +160,7 @@ export const getAllSessions = async (): Promise<Array<SessionData>> => {
 
   for (const [index, sessionId] of Array.from(uniqueSessionIds).entries()) {
     try {
+      if (ownerId !== undefined && !(await doesSessionBelongToUser(sessionId, ownerId))) continue;
       let msg = await getLastMsgFromSession(sessionId);
       sessionData.push({ index, lastMessage: msg, sessionId }); // Display who said the message
     } catch (error) {
@@ -228,6 +230,14 @@ export const doesSessionExist = async (sessionId: string): Promise<boolean> => {
   }
 };
 
+export const doesSessionBelongToUser = async (sessionId: string, ownerId: number): Promise<boolean> => {
+  const sessionKeys = await redisClientMemory.keys(`okuuMemory:${sessionId}:*`);
+  if (sessionKeys.length === 0) return false;
+  const firstRecord = await redisClientMemory.hGetAll(sessionKeys[0]);
+  // Existing installations predate ownership; preserve those sessions for the original admin only.
+  return firstRecord.ownerId ? firstRecord.ownerId === String(ownerId) : ownerId === 1;
+};
+
 export const doesKeyExist = async (key: string): Promise<boolean> => {
   try {
     // check if the key exists
@@ -240,12 +250,12 @@ export const doesKeyExist = async (key: string): Promise<boolean> => {
 };
 
 
-export const createSession = async (): Promise<any> => {
+export const createSession = async (ownerId?: number): Promise<any> => {
   const sessionId = String((await getSessionsCount()) + 1);
   if (await doesSessionExist(sessionId)) {
     return null;
   }
-  const memoryKey = await saveMemoryWithEmbedding(sessionId, "Session started", "system", "statement");
+  await saveMemoryWithEmbedding(sessionId, "Session started", "system", "statement", '', undefined, undefined, undefined, ownerId);
   const session: any = await getLatestMsgsFromSession(sessionId, 100);
   const newSession: any = {
     sessionId,

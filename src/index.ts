@@ -16,6 +16,7 @@ import mainRoutes, { apiLimiter } from './routes/main.route';
 import { Server } from 'socket.io';
 import userRoutes from './routes/user.route';
 import toolsRoutes from './routes/tools.route';
+import adminRoutes from './routes/admin.route';
 
 export let io: Server;
 
@@ -76,6 +77,7 @@ export let io: Server;
         app.use('/users', userRoutes);
         app.use('/config', requireAuth, configRoutes);
         app.use('/tools', requireAuth, toolsRoutes);
+        app.use('/admin', adminRoutes);
 
         server.listen(port, async () => {
             Logger.INFO(`Server is running on port ${port} ${/09$/.test(port.toString()) ? '(☢️)' : ''}`);

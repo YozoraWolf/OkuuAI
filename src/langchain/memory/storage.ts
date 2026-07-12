@@ -49,6 +49,10 @@ export const saveFileToStorage = async (file: UploadedFile): Promise<string | fa
 
 export const loadFileContentFromStorage = async (fileName: string): Promise<string | undefined> => {
     try {
+        if (!fileName || path.basename(fileName) !== fileName) {
+            Logger.WARN('Rejected file access outside managed storage.');
+            return undefined;
+        }
         const filePath = path.join(stroragePath, fileName);
         const file = fs.readFileSync(filePath);
         const extension = fileName.split('.').pop() || '';

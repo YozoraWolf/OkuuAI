@@ -20,7 +20,7 @@
                     <div class="profile-copy">
                         <strong>Assistant avatar</strong>
                         <p>This image appears beside Okuu's messages in every conversation.</p>
-                        <q-btn unelevated no-caps icon="image" label="Choose image" @click="toggleOkuuPfpSelector" />
+                        <q-btn v-if="authStore.isAdmin" unelevated no-caps icon="image" label="Choose image" @click="toggleOkuuPfpSelector" />
                     </div>
                 </div>
             </section>
@@ -45,7 +45,7 @@
                 </div>
             </section>
         </div>
-        <ImageSelectorModal :showModal="showOkuuPfpModal" @close="toggleOkuuPfpSelector" @save="fetchCurrentOkuuPfp" />
+        <ImageSelectorModal v-if="authStore.isAdmin" :showModal="showOkuuPfpModal" @close="toggleOkuuPfpSelector" @save="fetchCurrentOkuuPfp" />
     </q-page>
 </template>
 
@@ -56,9 +56,11 @@ import { ref, onMounted } from 'vue';
 import { useConfigStore } from 'src/stores/config.store';
 import { useQuasar } from 'quasar';
 import GlobalToggles from 'src/components/settings/GlobalToggles.vue';
+import { useAuthStore } from 'src/stores/auth.store';
 
 const showOkuuPfpModal = ref(false);
 const configStore = useConfigStore();
+const authStore = useAuthStore();
 const currentOkuuPfp = ref<string | null>(null);
 
 const $q = useQuasar();

@@ -55,6 +55,14 @@ const pageList: EssentialLinkProps[] = [
     auth: true,
   },
   {
+    title: 'Admin',
+    caption: 'System metrics and services',
+    icon: 'admin_panel_settings',
+    path: '/admin',
+    auth: true,
+    admin: true,
+  },
+  {
     title: 'Logout',
     caption: 'Bye!',
     icon: 'logout',

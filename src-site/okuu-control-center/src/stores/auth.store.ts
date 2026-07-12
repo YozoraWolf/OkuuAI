@@ -42,5 +42,6 @@ export const useAuthStore = defineStore('auth', {
         isAuthenticated: (state) => isTokenValid(state.token),
         getUser: (state) => state.user,
         mustChangePassword: (state) => state.user?.mustChangePassword === true,
+        isAdmin: (state) => state.user?.role === 'Admin',
     },
 });

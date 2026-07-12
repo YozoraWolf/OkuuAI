@@ -91,7 +91,7 @@ export const init = async () =>
         Logger.DEBUG(`Assistant: ${Core.ai_name}`);
         Logger.DEBUG(`Model: ${Core.model_name}`);
         Logger.DEBUG(`Tool Model: ${Core.tool_model_name}`);
-        Logger.DEBUG(`System Prompt: ${Core.model_settings.system}`);
+        Logger.DEBUG('System prompt loaded.');
 
         // Inference backends are user-managed. Docker/Ollama/model downloads are optional setup steps.
         await initOllamaInstance();
@@ -113,24 +113,31 @@ export const init = async () =>
         // Ensure auth users DB is initialized and an admin user exists
         try {
             const db = await setupDatabase() as any;
-            db.get("SELECT * FROM users WHERE username = ?", ['admin'], async (err: any, row: any) => {
-                if (err) {
-                    Logger.ERROR(`Error checking admin user: ${err}`);
-                    return;
-                }
-                if (!row) {
-                    const hashed = await bcrypt.hash('admin', 10);
-                    db.run("INSERT INTO users (username, password, role, mustChangePassword) VALUES (?, ?, ?, ?)", ['admin', hashed, 'Admin', 1], (insertErr: any) => {
-                        if (insertErr) {
-                            Logger.ERROR(`Failed to create admin user: ${insertErr}`);
-                        } else {
-                            Logger.INFO('Default admin user created (username: admin, password: admin) - PASSWORD CHANGE REQUIRED ON FIRST LOGIN');
-                        }
-                    });
-                } else {
-                    Logger.DEBUG('Admin user already exists');
-                }
+            const ensureUser = (username: string, password: string, role: string, mustChangePassword: number) => new Promise<void>((resolve, reject) => {
+                db.get('SELECT id FROM users WHERE username = ?', [username], async (err: any, row: any) => {
+                    if (err) return reject(err);
+                    if (row) return resolve();
+                    try {
+                        const hashed = await bcrypt.hash(password, 10);
+                        db.run(
+                            'INSERT INTO users (username, password, role, mustChangePassword) VALUES (?, ?, ?, ?)',
+                            [username, hashed, role, mustChangePassword],
+                            (insertErr: any) => insertErr ? reject(insertErr) : resolve(),
+                        );
+                    } catch (hashError) {
+                        reject(hashError);
+                    }
+                });
             });
+
+            await ensureUser('admin', 'admin', 'Admin', 1);
+            await ensureUser(
+                process.env.GUEST_USERNAME || 'guest',
+                process.env.GUEST_PASSWORD || 'guest',
+                'User',
+                0,
+            );
+            Logger.DEBUG('Default admin and guest accounts are available');
         } catch (err) {
             Logger.ERROR(`Failed to setup auth DB: ${err}`);
         }

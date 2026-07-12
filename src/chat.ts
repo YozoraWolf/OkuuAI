@@ -14,6 +14,7 @@ import {
 } from './langchain/redis';
 import { loadFileContentFromStorage } from './langchain/memory/storage';
 import { enhancedToolSystem } from './tools/enhancedToolSystem';
+import { getProtectedSystemPrompt } from './privacy';
 
 export interface ChatMessage {
     id?: number;
@@ -35,6 +36,7 @@ export interface ChatMessage {
         [key: string]: any;
     };
     memoryUser?: string;
+    ownerId?: number;
 }
 
 export const langMappings: { [key: string]: string } = {
@@ -65,7 +67,7 @@ const MAX_HISTORY_CHARS = 4000; // Ollama: use char proxy instead of tokens
 async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, toolsWereUsed: boolean = false) {
     // 1. Retrieve top-k relevant memories
     const memoryQuery = msg.message || '';
-    let memories = await searchMemoryWithEmbedding(memoryQuery, msg.sessionId);
+    let memories = await searchMemoryWithEmbedding(memoryQuery, msg.sessionId, 5, msg.ownerId);
     if (memories && memories.length > MAX_RELEVANT_MEMORIES) {
         memories = memories.slice(0, MAX_RELEVANT_MEMORIES);
     }
@@ -100,7 +102,7 @@ async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, tools
     }
 
     // 4. Build structured prompt
-    let systemPrompt = Core.model_settings.system;
+    let systemPrompt = getProtectedSystemPrompt();
 
     // Replace templates
     systemPrompt = systemPrompt.replace(/{{user}}/g, msg.user || 'User');
@@ -152,7 +154,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         // Step 1: Save user input in memory
         const messageType = isQuestion(msg.message as string) ? 'question' : 'statement';
         const memoryUser = msg.memoryUser || 'user';
-        const memory = await saveMemoryWithEmbedding(msg.sessionId, msg.message as string, memoryUser, messageType, '', undefined, msg.metadata, msg.timestamp);
+        const memory = await saveMemoryWithEmbedding(msg.sessionId, msg.message as string, memoryUser, messageType, '', undefined, msg.metadata, msg.timestamp, msg.ownerId);
         Logger.DEBUG(`Saved memory: ${memory.memoryKey}`);
 
         // Step 2: Update attachment in memory if file exists
@@ -257,7 +259,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                     prompt,
                     model: Core.model_name,
                     stream: true,
-                    system: Core.model_settings.system,
+                    system: getProtectedSystemPrompt(),
                     think: Core.model_settings.think,
                     images: sentImage,
                     imageMimeType: sentImageMimeType,
@@ -326,7 +328,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                             prompt: followUpPrompt,
                             model: Core.model_name,
                             stream: true,
-                            system: Core.model_settings.system,
+                            system: getProtectedSystemPrompt(),
                             think: Core.model_settings.think,
                         });
 
@@ -358,7 +360,10 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                         msg.memoryUser || "okuu",
                         messageTypeAI,
                         '', // thinking
-                        reply.memoryKey // use our pre-generated key
+                        reply.memoryKey, // use our pre-generated key
+                        undefined,
+                        undefined,
+                        msg.ownerId,
                     );
                     await updateMemory(reply);
                 } catch (memoryError: any) {
@@ -375,7 +380,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
         const resp = await generateCompletion({
             prompt,
             model: Core.model_name,
-            system: Core.model_settings.system,
+            system: getProtectedSystemPrompt(),
             think: Core.model_settings.think,
             images: sentImage,
             imageMimeType: sentImageMimeType,
@@ -418,7 +423,7 @@ export const sendChat = async (msg: ChatMessage, callback?: (data: string) => vo
                     prompt: followUpPrompt,
                     model: Core.model_name,
                     stream: false,
-                    system: Core.model_settings.system,
+                    system: getProtectedSystemPrompt(),
                 });
 
                 reply.message = followUpResp.response;
