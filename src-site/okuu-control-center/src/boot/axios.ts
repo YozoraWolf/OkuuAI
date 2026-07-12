@@ -23,7 +23,7 @@ if (existingToken) {
   api.defaults.headers.common['Authorization'] = `Bearer ${existingToken}`;
 }
 
-export default defineBoot(({ app }) => {
+export default defineBoot(({ app, router }) => {
   // for use inside Vue files (Options API) through this.$axios and this.$api
 
   app.config.globalProperties.$axios = axios;
@@ -33,6 +33,21 @@ export default defineBoot(({ app }) => {
   app.config.globalProperties.$api = api;
   // ^ ^ ^ this will allow you to use this.$api (for Vue Options API form)
   //       so you can easily perform requests against your app's API
+
+  const handleUnauthorized = (error: any) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      delete axios.defaults.headers.common['Authorization'];
+      if (router.currentRoute.value.path !== '/login') {
+        void router.replace('/login');
+      }
+    }
+    return Promise.reject(error);
+  };
+
+  axios.interceptors.response.use(response => response, handleUnauthorized);
+  api.interceptors.response.use(response => response, handleUnauthorized);
 });
 
 export { api };

@@ -31,6 +31,7 @@ async function createMemoryIndex() {
     // Check for dimension mismatch or other issues
     const embeddingAttr = indexInfo['attributes']?.find(attr => attr.name === 'embedding');
     const sessionIdAttr = indexInfo['attributes']?.find(attr => attr.name === 'sessionId');
+    const ownerIdAttr = indexInfo['attributes']?.find(attr => attr.name === 'ownerId');
 
     if (embeddingAttr && Number(embeddingAttr.dim) !== EMBEDDING_DIM) {
       Logger.WARN('Dimension mismatch detected. Dropping and recreating index...');
@@ -41,6 +42,12 @@ async function createMemoryIndex() {
 
     if (sessionIdAttr && sessionIdAttr.type !== 'TAG') {
       Logger.WARN('SessionId type mismatch (expected TAG). Dropping and recreating index...');
+      await redisClientMemory.ft.dropIndex('idx:memories');
+      throw new Error('Index dropped for re-creation.');
+    }
+
+    if (!ownerIdAttr || ownerIdAttr.type !== 'TAG') {
+      Logger.WARN('OwnerId field missing from memory index. Recreating index...');
       await redisClientMemory.ft.dropIndex('idx:memories');
       throw new Error('Index dropped for re-creation.');
     }
@@ -60,6 +67,7 @@ async function createMemoryIndex() {
             user: { type: SchemaFieldTypes.TEXT },
             memoryKey: { type: SchemaFieldTypes.TEXT },
             sessionId: { type: SchemaFieldTypes.TAG, SORTABLE: true },
+            ownerId: { type: SchemaFieldTypes.TAG, SORTABLE: true },
             type: { type: SchemaFieldTypes.TAG },
             recall_count: { type: SchemaFieldTypes.NUMERIC, SORTABLE: true },
             __vector_score: { type: SchemaFieldTypes.NUMERIC, SORTABLE: true },
@@ -107,7 +115,8 @@ export async function saveMemoryWithEmbedding(
   thinking: string = '',
   existingMemoryKey?: string,
   metadata?: any,
-  timestamp?: number
+  timestamp?: number,
+  ownerId?: number,
 ) {
   try {
     if (EMBEDDING_PROVIDER === 'none') {
@@ -122,6 +131,7 @@ export async function saveMemoryWithEmbedding(
         type,
         user,
         recall_count: 0,
+        ...(ownerId !== undefined ? { ownerId: String(ownerId) } : {}),
       };
 
       if (metadata) {
@@ -161,6 +171,7 @@ export async function saveMemoryWithEmbedding(
       type,
       user,
       recall_count: 0,
+      ...(ownerId !== undefined ? { ownerId: String(ownerId) } : {}),
       embedding: Buffer.from(new Float32Array(embedding).buffer)
     };
 
@@ -198,7 +209,7 @@ async function updateRecallCount(memories: any[]) {
   }
 }
 
-export async function searchMemoryWithEmbedding(query: string, sessionId: string = "-1", topK: number = 5) {
+export async function searchMemoryWithEmbedding(query: string, sessionId: string = "-1", topK: number = 5, ownerId?: number) {
   try {
     if (EMBEDDING_PROVIDER === 'none') {
       return [];
@@ -215,9 +226,10 @@ export async function searchMemoryWithEmbedding(query: string, sessionId: string
 
     Logger.DEBUG(`Searching memory: ${sessionId === "-1" ? 'all sessions' : `session ${sessionId}`}`);
 
-    const search_query = sessionId !== "-1" && !Core.global_memory
-      ? `(@sessionId:{${sessionId}} -@type:{question})`
-      : `(-@type:{question})`;
+    const ownerFilter = ownerId !== undefined ? `@ownerId:{${ownerId}}` : '';
+    const search_query = Core.global_memory && ownerFilter
+      ? `(${ownerFilter} -@type:{question})`
+      : `(@sessionId:{${sessionId}} ${ownerFilter} -@type:{question})`;
 
     //Logger.DEBUG(`Search query: ${search_query}`);
 

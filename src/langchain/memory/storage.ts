@@ -32,23 +32,27 @@ const checkFileExists = (fileName: string): string => {
     return path.basename(filePath);
 };
 
-export const saveFileToStorage = (file: UploadedFile): string | boolean => {
+export const saveFileToStorage = async (file: UploadedFile): Promise<string | false> => {
     const fileName = checkFileExists(file.name);
     const filePath = path.join(stroragePath, fileName);
     if(!doesStorageFolderExist()) {
         createStorageFolder();
     }
-    file.mv(filePath, (err) => {
-        if (err) {
-            Logger.ERROR(`Error saving file to storage.`);
-            return false;
-        }
-    });
-    return fileName;
+    try {
+        await file.mv(filePath);
+        return fileName;
+    } catch (error) {
+        Logger.ERROR(`Error saving file to storage: ${error}`);
+        return false;
+    }
 };
 
 export const loadFileContentFromStorage = async (fileName: string): Promise<string | undefined> => {
     try {
+        if (!fileName || path.basename(fileName) !== fileName) {
+            Logger.WARN('Rejected file access outside managed storage.');
+            return undefined;
+        }
         const filePath = path.join(stroragePath, fileName);
         const file = fs.readFileSync(filePath);
         const extension = fileName.split('.').pop() || '';

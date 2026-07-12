@@ -23,7 +23,8 @@ export class SocketioService {
     public async initializeSocket(sessionId: string, sessionStore: any): Promise<Socket> {
         this.sessionStore = sessionStore;
         if (this.socket) {
-            console.warn('Socket is already initialized.');
+            this.sessionId = sessionId;
+            this.socket.emit('joinChat', sessionId);
             return this.socket;
         }
 
@@ -36,6 +37,7 @@ export class SocketioService {
             const protocol = process.env.LOCAL ? 'ws' : window.location.protocol === 'https:' ? 'wss' : 'ws';
             this.socket = io(`${protocol}://${url}`, {
                 transports: ['websocket'],
+                auth: { token: localStorage.getItem('token') },
                 timeout: 30000,
                 reconnectionAttempts: 3,
                 reconnectionDelay: 5000,
@@ -77,8 +79,9 @@ export class SocketioService {
             const configStore = useConfigStore();
             message.avatar = configStore.okuuPfp;
 
-            // For streaming messages
-            if (message.stream) {
+            // Only Okuu's reply is streamed. The user's echoed message carries the
+            // stream preference too, but must be merged as a regular message.
+            if (message.stream && /^okuu/i.test(message.user)) {
                 const hasExisting = this.sessionStore.hasMessageInSession(message.memoryKey);
                 console.log('🔵 Stream message check:', {
                     hasExisting,

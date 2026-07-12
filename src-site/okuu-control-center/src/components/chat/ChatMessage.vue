@@ -1,5 +1,5 @@
 <template>
-    <div class="chat-message row no-wrap q-mb-sm full-width" @mouseover="showDeleteBtn = true"
+    <div class="chat-message row no-wrap q-mb-sm" :class="{ 'is-assistant': /^okuu/i.test(message.user), 'is-system': message.user.toLocaleLowerCase() === 'system', 'is-user': !/^okuu/i.test(message.user) && message.user.toLocaleLowerCase() !== 'system' }" @mouseover="showDeleteBtn = true"
         @mouseleave="showDeleteBtn = false">
         <q-avatar :src="avatar" size="32px" round class="avatar flex selft-start" style="z-index: 1;">
             <template v-if="!avatar">
@@ -27,7 +27,7 @@
                     </template>
                 </div>
                 <q-img v-if="message.attachment && isAttachmentImage" :src="attachmentSrc" loading="lazy"
-                    class="attachment-image q-mt-sm q-ml-sm cursor-pointer non-selectable"
+                    class="attachment-image q-mt-sm cursor-pointer non-selectable"
                     @click="openPreview(attachmentSrc, 'image')">
                     <template v-slot:loading>
                         <q-spinner size="50px" color="primary" />
@@ -93,6 +93,7 @@
                     </div>
                 </div>
             </div>
+            <q-spinner-dots v-if="generating" color="primary" size="22px" class="generation-indicator" />
 
         </div>
         <!-- TODO: Work on this -->
@@ -135,6 +136,10 @@ const props = defineProps({
     avatar: {
         type: String,
         default: '',
+    },
+    generating: {
+        type: Boolean,
+        default: false,
     }
 });
 
@@ -146,7 +151,7 @@ const showDeleteBtn = ref(false);
 
 const okuu_pfp = ref();
 
-const avatar: ComputedRef<any> = computed(() => props.message.user.toLocaleLowerCase() === 'okuu' ? okuu_pfp : '');
+const avatar: ComputedRef<any> = computed(() => /^okuu/i.test(props.message.user) ? okuu_pfp : '');
 
 const formattedTimestamp = computed(() => {
     const userTimezone = localStorage.getItem('userTimezone') || dayjs.tz.guess();
@@ -268,16 +273,22 @@ onMounted(async () => {
     display: flex;
     align-items: center;
     flex-direction: row;
-    margin-top: 2%;
-    margin-bottom: 2%;
-    transition: background-color 0.3s ease;
-    border-radius: 8px;
-    padding: 8px;
+    max-width: 880px;
+    margin: 1.25rem auto;
+    transition: background-color 0.22s ease, transform 0.22s ease;
+    border: 1px solid transparent;
+    border-radius: 16px;
+    padding: 0.85rem 1rem;
+    animation: message-enter 280ms cubic-bezier(.2,.8,.2,1) both;
 
     &:hover {
-        background-color: rgba(255, 255, 255, 0.05);
+        background-color: rgba(255, 255, 255, 0.04);
+        border-color: var(--surface-border);
+        transform: translateY(-1px);
     }
 }
+
+.chat-message.is-assistant { background: linear-gradient(115deg, rgba(240, 106, 69, 0.08), rgba(241, 197, 97, 0.07)); }
 
 .avatar {
     align-self: flex-start;
@@ -285,11 +296,12 @@ onMounted(async () => {
 }
 
 .user {
-    font-weight: bold;
+    font-weight: 750;
+    text-transform: capitalize;
 }
 
 .timestamp {
-    color: gray;
+    color: var(--text-muted);
     font-size: 0.8em;
 }
 
@@ -299,9 +311,12 @@ onMounted(async () => {
     word-break: break-word;
 }
 
+.generation-indicator { margin-top: 0.5rem; }
+
 .attachment-image {
-    max-width: 20%;
-    max-height: 200px;
+    max-width: min(100%, 340px);
+    max-height: 280px;
+    border-radius: 12px;
 }
 
 .source-chip {
@@ -326,5 +341,15 @@ onMounted(async () => {
 
 .danbooru-image:hover {
     transform: scale(1.02);
+}
+
+@keyframes message-enter {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 700px) {
+    .chat-message { margin: 0.8rem auto; padding: 0.75rem; }
+    .avatar { margin-right: 0.65rem; }
 }
 </style>

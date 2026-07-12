@@ -70,7 +70,9 @@ const submit = async () => {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%);
+    background:
+        radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--accent-1) 16%, transparent), transparent 44%),
+        linear-gradient(145deg, var(--surface-0), color-mix(in srgb, var(--surface-1) 88%, var(--accent-1)));
 }
 .login-container {
     width: 100%;
@@ -78,13 +80,16 @@ const submit = async () => {
     padding: 24px;
 }
 .login-card {
-    border-radius: 12px;
+    border: 1px solid var(--surface-border);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--surface-1) 94%, transparent);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
 }
 .logo-section { text-align: center; }
 .logo { width: 64px; height: 64px; margin-bottom: 8px; }
-.title { font-weight: 700; font-size: 18px; color: var(--q-color-white); }
-.subtitle { color: rgba(255,255,255,0.75); margin-bottom: 12px; }
-.help { text-align:center; color:rgba(255,255,255,0.6) }
+.title { font-weight: 700; font-size: 18px; color: var(--text-strong); }
+.subtitle { color: var(--text-muted); margin-bottom: 12px; }
+.help { text-align:center; color:var(--text-muted) }
 .form-col { display:flex; flex-direction:column; align-items:center; }
 .input-field { width: 100%; max-width: 360px; }
 .remember-row { width: 100%; max-width: 360px; display:flex; justify-content:space-between; align-items:center; margin-top: 6px; }

@@ -1,6 +1,15 @@
 import { defineStore } from 'pinia';
 import { loginWithCredentials, setAuthToken } from 'src/services/auth.service';
 
+const isTokenValid = (token: string) => {
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/')));
+        return !payload.exp || payload.exp * 1000 > Date.now();
+    } catch {
+        return false;
+    }
+};
+
 export const useAuthStore = defineStore('auth', {
     state: () => ({
         token: localStorage.getItem('token') || '',
@@ -30,8 +39,9 @@ export const useAuthStore = defineStore('auth', {
         }
     },
     getters: {
-        isAuthenticated: (state) => !!state.token,
+        isAuthenticated: (state) => isTokenValid(state.token),
         getUser: (state) => state.user,
         mustChangePassword: (state) => state.user?.mustChangePassword === true,
+        isAdmin: (state) => state.user?.role === 'Admin',
     },
 });

@@ -1,4 +1,4 @@
-import { getAllSessions, getLatestMsgsFromSession, doesSessionExist, createSession, doesKeyExist } from "@src/langchain/memory/memory";
+import { getAllSessions, getLatestMsgsFromSession, doesSessionExist, doesSessionBelongToUser, createSession, doesKeyExist } from "@src/langchain/memory/memory";
 import { deleteMemoryKey, deleteMemorySession, saveMemoryWithEmbedding } from "@src/langchain/redis";
 import { Logger } from "@src/logger";
 import { spawn } from "child_process";
@@ -47,10 +47,16 @@ export const checkMemoryStatus = async (req: any, res: any) => {
 
 export const getSessionMsgs = async (req: any, res: any) => {
     const { sessionId } = req.params;
-    const { msg_limit } = req.query;
+    const { msg_limit, before } = req.query;
+    const limit = Number(msg_limit);
+    const cursor = Number(before);
 
-    if(await doesSessionExist(sessionId)) {
-        res.json(await getLatestMsgsFromSession(sessionId, msg_limit));
+    if(await doesSessionExist(sessionId) && await doesSessionBelongToUser(sessionId, req.user.id)) {
+        res.json(await getLatestMsgsFromSession(
+            sessionId,
+            Number.isFinite(limit) ? limit : 20,
+            Number.isFinite(cursor) && cursor > 0 ? cursor : undefined,
+        ));
     } else {
         res.status(404).send('Session not found');
     }
@@ -59,12 +65,16 @@ export const getSessionMsgs = async (req: any, res: any) => {
 }
 
 export const createSess = async (req: any, res: any) => {
-    // Create a new session
-    const session = await createSession();
-    if (session) {
-        res.json(session);
-    } else {
-        res.status(500).send('Session already exists or error creating session');
+    try {
+        const session = await createSession(req.user.id);
+        if (session) {
+            res.json(session);
+        } else {
+            res.status(500).send('Session already exists or error creating session');
+        }
+    } catch (error) {
+        Logger.ERROR(`Failed to create session: ${error}`);
+        res.status(500).send('Unable to create a session');
     }
 }
 
@@ -78,6 +88,9 @@ export const createMemoryRecord = async (req: Request, res: Response) => {
     // Allow for only json, docx, txt, pdf, and csv files
     const file = req.files.file as fileUpload.UploadedFile;
     const msg = JSON.parse(req.body.message);
+    if (!await doesSessionBelongToUser(msg.sessionId, req.user!.id)) {
+        return res.status(403).send('Session does not belong to this user.');
+    }
     //Logger.DEBUG(`Received file: ${file.name}`);
     //Logger.DEBUG(`Raw buffer: ${file.data}`);
     //Logger.DEBUG(`Buffer as JSON: ${JSON.stringify(file.data)}`);
@@ -100,7 +113,7 @@ export const createMemoryRecord = async (req: Request, res: Response) => {
     try {
         //const memoryKey = `okuuMemory:file:${file.name}`;
         //const result = await saveMemoryWithEmbedding(memoryKey, content, 'system', 'file');
-        const result = saveFileToStorage(file);
+        const result = await saveFileToStorage(file);
         if (result) {
             res.status(200).json({ message: 'File uploaded sucessful!', fileName: result });
         } else {
@@ -114,7 +127,7 @@ export const createMemoryRecord = async (req: Request, res: Response) => {
 
 export const deleteSession = async (req: any, res: any) => {
     const { sessionId } = req.params;
-    if(await doesSessionExist(sessionId)) {
+    if(await doesSessionExist(sessionId) && await doesSessionBelongToUser(sessionId, req.user.id)) {
         // Delete the session
         const result = await deleteMemorySession(sessionId);
         res.status(200).json({ result });
@@ -125,7 +138,8 @@ export const deleteSession = async (req: any, res: any) => {
 
 export const deleteChatMessage = async (req: any, res: any) => {
     const { memoryKey } = req.body;
-    if(await doesKeyExist(memoryKey)) {
+    const sessionId = String(memoryKey || '').split(':')[1];
+    if(await doesKeyExist(memoryKey) && await doesSessionBelongToUser(sessionId, req.user.id)) {
         const result = await deleteMemoryKey(memoryKey);
         res.status(200).json({ result });
     } else {
@@ -134,5 +148,5 @@ export const deleteChatMessage = async (req: any, res: any) => {
 }
 
 export const getAllSessionsJSON = async (req: any, res: any) => {
-    res.json(await getAllSessions());
+    res.json(await getAllSessions(req.user.id));
 }
