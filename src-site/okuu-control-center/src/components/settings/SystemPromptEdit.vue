@@ -1,9 +1,11 @@
 <template>
-  <div>
+  <div class="system-prompt-edit">
     <q-input 
     v-model="systemPrompt" 
     label="System Prompt" 
     type="textarea"
+    outlined
+    hide-bottom-space
     rows="8"
     />
   </div>
@@ -57,4 +59,5 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.system-prompt-edit { width: 100%; }
 </style>
