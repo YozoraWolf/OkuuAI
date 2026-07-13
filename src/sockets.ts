@@ -1,14 +1,46 @@
+import { createHash } from 'crypto';
 import { Server } from "socket.io";
 import { Server as HTTPServer } from "http";
 import { Core } from "./core";
 import { SESSION_ID, startSession } from "./langchain/memory/memory";
 import { Logger } from "./logger";
-import { handleUserInput } from "./console";
+import { handleUserInput, proactiveScreenComment } from "./chat";
 import jwt from 'jsonwebtoken';
 import { doesSessionBelongToUser } from './langchain/memory/memory';
 import type { JwtPayloadCustom } from './middleware/auth.middleware';
 import { ConversationRuntime } from './modules/conversation/conversation.runtime';
-import type { ScreenFrame } from './modules/conversation/conversation.events';
+import type { ConversationObservation, ScreenFrame } from './modules/conversation/conversation.events';
+
+const proactiveState = new Map<string, { lastAt: number; lastHash?: string }>();
+
+/**
+ * Decide whether Okuu should voice a comment about the current screen observation.
+ * Gating is deliberately independent of the vision model's weak importance/category
+ * signals: it fires on a cooldown + dedup + probability, and lets the model itself decide
+ * (via the SKIP response) whether there is actually something worth saying.
+ */
+function maybeProactiveComment(userId: string, sessionId: string, observation: ConversationObservation) {
+    if (!conversationRuntime.isActive() || observation.source !== 'perception' || !observation.message) return;
+
+    const cooldownMs = Number(process.env.PROACTIVE_COMMENT_COOLDOWN_MS || 30000);
+    const state = proactiveState.get(userId) || { lastAt: 0 };
+    const now = Date.now();
+    if (now - state.lastAt < cooldownMs) return;
+
+    const hash = createHash('sha256').update(observation.message).digest('hex');
+    if (state.lastHash === hash) return; // Skip repeating the same observation.
+    if (Math.random() > Number(process.env.PROACTIVE_COMMENT_RATE || 0.6)) return;
+
+    state.lastAt = now;
+    state.lastHash = hash;
+    proactiveState.set(userId, state);
+
+    void proactiveScreenComment(
+        sessionId,
+        userId,
+        { message: observation.message, timestamp: observation.timestamp, extractedText: observation.extractedText },
+    ).catch(error => Logger.WARN(`Proactive screen comment failed: ${error}`));
+}
 
 let io: Server;
 
@@ -62,6 +94,7 @@ export const setupSockets = (server: HTTPServer, conversationRuntime: Conversati
                 observingConversation = true;
                 conversationRuntime.subscribe(String(socket.data.user.id), observation => {
                     socket.emit('conversation:observation', observation);
+                    maybeProactiveComment(String(socket.data.user.id), conversationSessionId, observation);
                 }, conversationSubscriptions.signal);
             }
             ack?.({ enabled: true, observations: conversationRuntime.getHistory(socket.data.user.id) });
