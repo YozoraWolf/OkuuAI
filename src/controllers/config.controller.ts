@@ -1,7 +1,7 @@
 import { Core } from '@src/core';
 import { Logger } from '@src/logger';
 import { updateAssistantConfigJSON } from '@src/o_utils';
-import { getAvailableModels } from '@src/llm';
+import { getAvailableModels, resolveMainModel } from '@src/llm';
 import { Request, Response } from 'express';
 import fileUpload from 'express-fileupload';
 import fs from 'fs';
@@ -87,7 +87,9 @@ export const setOkuuModel = async (req: Request, res: Response) => {
 
 export const getDownloadedModels = async (req: Request, res: Response) => {
     try {
-        res.status(200).send({ models: await getAvailableModels() });
+        const models = await getAvailableModels();
+        await resolveMainModel(models);
+        res.status(200).send({ models });
     } catch (error) {
         Logger.ERROR(`Failed to fetch available models: ${error instanceof Error ? error.message : error}`);
         res.status(502).send({ error: 'Unable to fetch models from the configured provider.' });

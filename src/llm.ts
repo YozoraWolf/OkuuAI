@@ -78,6 +78,23 @@ export const getAvailableModels = async (): Promise<{ name: string; multimodal: 
         .filter((model: { name: unknown }) => typeof model.name === 'string' && model.name.length > 0);
 };
 
+export const resolveMainModel = async (availableModels?: { name: string; multimodal: boolean }[]) => {
+    if (isOllamaProvider()) return Core.model_name;
+
+    const models = availableModels || await getAvailableModels();
+    if (!models.length) return Core.model_name;
+
+    const configuredModel = Core.model_name;
+    const configuredExists = models.some(model => model.name === configuredModel);
+    if (!configuredExists || configuredModel === 'local-model') {
+        Core.model_name = models[0].name;
+    }
+    if (!Core.tool_model_name || Core.tool_model_name === 'local-model') {
+        Core.tool_model_name = Core.model_name;
+    }
+    return Core.model_name;
+};
+
 export const embedText = async (input: string): Promise<number[]> => {
     const provider = getEmbeddingProvider();
     const model = process.env.EMBEDDING_MODEL || 'nomic-embed-text';
