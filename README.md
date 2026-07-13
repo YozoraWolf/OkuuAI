@@ -42,7 +42,7 @@ The frontend is available at `http://localhost:9000` and proxies API and WebSock
 
 ### Private-Network HTTPS
 
-Browser screen capture requires a trusted HTTPS origin. OkuuAI includes an optional TLS proxy backed by a private certificate authority for private DNS, LAN, Meshnet, Tailscale, and similar VPN networks. It does not expose OkuuAI to the public internet.
+Browser screen capture requires a trusted HTTPS origin. OkuuAI includes an optional TLS proxy backed by a private certificate authority for private DNS, LAN, and VPN networks. It does not expose OkuuAI to the public internet.
 
 Generate a certificate for the hostname used to reach the server. Including its private IP is optional but allows access by either name or address:
 
