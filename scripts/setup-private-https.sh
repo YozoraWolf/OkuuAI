@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HOST_NAME="${1:-${MESHNET_HOST:-}}"
-MESHNET_IP="${2:-${MESHNET_IP:-}}"
-TLS_DIR="${MESHNET_TLS_DIR:-storage/meshnet-tls}"
+HOST_NAME="${1:-${PRIVATE_HTTPS_HOST:-}}"
+PRIVATE_IP="${2:-${PRIVATE_HTTPS_IP:-}}"
+TLS_DIR="${PRIVATE_HTTPS_TLS_DIR:-storage/private-https}"
 
 if [[ -z "$HOST_NAME" ]]; then
-  echo "Usage: $0 <meshnet-hostname> [meshnet-ip]"
-  echo "Example: $0 yozorawolf-olympic.nord 100.64.0.10"
+  echo "Usage: $0 <private-hostname> [private-ip]"
+  echo "Example: $0 okuu.home.arpa 100.64.0.10"
   exit 1
 fi
 
 if [[ ! "$HOST_NAME" =~ ^[A-Za-z0-9.-]+$ ]]; then
-  echo "Invalid Meshnet hostname: $HOST_NAME" >&2
+  echo "Invalid private-network hostname: $HOST_NAME" >&2
   exit 1
 fi
 
-if [[ -n "$MESHNET_IP" && ! "$MESHNET_IP" =~ ^[0-9A-Fa-f:.]+$ ]]; then
-  echo "Invalid Meshnet IP address: $MESHNET_IP" >&2
+if [[ -n "$PRIVATE_IP" && ! "$PRIVATE_IP" =~ ^[0-9A-Fa-f:.]+$ ]]; then
+  echo "Invalid private-network IP address: $PRIVATE_IP" >&2
   exit 1
 fi
 
@@ -41,7 +41,7 @@ if [[ ! -f "$CA_KEY" || ! -f "$CA_CERT" ]]; then
   openssl req -x509 -new -sha256 -days 3650 \
     -key "$CA_KEY" \
     -out "$CA_CERT" \
-    -subj "/CN=OkuuAI Meshnet Local CA" \
+    -subj "/CN=OkuuAI Private Network CA" \
     -addext "basicConstraints=critical,CA:TRUE" \
     -addext "keyUsage=critical,keyCertSign,cRLSign"
 fi
@@ -56,8 +56,8 @@ subjectAltName=@alt_names
 DNS.1=$HOST_NAME
 EOF
 
-if [[ -n "$MESHNET_IP" ]]; then
-  printf 'IP.1=%s\n' "$MESHNET_IP" >> "$EXT_FILE"
+if [[ -n "$PRIVATE_IP" ]]; then
+  printf 'IP.1=%s\n' "$PRIVATE_IP" >> "$EXT_FILE"
 fi
 
 openssl genrsa -out "$SERVER_KEY" 2048
@@ -79,7 +79,7 @@ chmod 644 "$CA_CERT" "$SERVER_CERT"
 
 cat <<EOF
 
-Meshnet TLS certificate created for $HOST_NAME.
+Private-network TLS certificate created for $HOST_NAME.
 
 Keep private:
   $CA_KEY
@@ -89,8 +89,8 @@ Install this certificate as a trusted root CA on each client device:
   $CA_CERT
 
 Then start OkuuAI with:
-  docker compose --profile app --profile meshnet-https up --build -d
+  docker compose --profile app --profile private-https up --build -d
 
 Open:
-  https://$HOST_NAME:${FRONTEND_HTTPS_PORT:-9443}
+  https://$HOST_NAME:${PRIVATE_HTTPS_PORT:-9443}
 EOF
