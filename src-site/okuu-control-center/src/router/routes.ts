@@ -34,11 +34,6 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, admin: true }
   },
   {
-    path: '/modules',
-    component: () => import('pages/Modules.vue'),
-    meta: { requiresAuth: true, admin: true }
-  },
-  {
     path: '/inactive',
     component: () => import('pages/OkuuInactive.vue')
   },

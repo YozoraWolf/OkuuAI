@@ -1,5 +1,5 @@
 <template>
-  <q-page class="modules-page">
+  <section class="modules-panel">
     <header class="modules-header">
       <div>
         <span class="eyebrow">RUNTIME MODULES</span>
@@ -46,7 +46,7 @@
         </div>
       </article>
     </section>
-  </q-page>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -105,16 +105,16 @@ onBeforeUnmount(() => { if (refreshTimer) clearInterval(refreshTimer); });
 </script>
 
 <style lang="scss" scoped>
-.modules-page { min-height: 100%; padding: clamp(1rem, 4vw, 3rem); background: radial-gradient(circle at 85% 8%, color-mix(in srgb, var(--accent-1) 14%, transparent), transparent 32%), linear-gradient(160deg, var(--surface-0), color-mix(in srgb, var(--surface-0) 88%, #09111a)); }
-.modules-header { display: flex; align-items: flex-end; gap: 1rem; max-width: 1100px; margin: 0 auto 2rem; }
+.modules-panel { margin: 1.75rem 0; }
+.modules-header { display: flex; align-items: flex-end; gap: 1rem; margin-bottom: 1rem; }
 .modules-header > div:first-child { margin-right: auto; }
 .eyebrow { color: var(--accent-1); font-size: .66rem; font-weight: 850; letter-spacing: .16em; }
 .modules-header h1 { margin: .25rem 0 0; font-size: clamp(1.8rem, 5vw, 3.15rem); letter-spacing: -.055em; }
 .modules-header p { max-width: 620px; margin: .45rem 0 0; color: var(--text-muted); }
 .live-indicator { display: flex; align-items: center; gap: .45rem; color: var(--text-muted); font-size: .72rem; white-space: nowrap; }
 .live-indicator span { width: 7px; height: 7px; border-radius: 50%; background: #65d69d; box-shadow: 0 0 0 5px rgba(101,214,157,.1); }
-.error-banner { max-width: 1100px; margin: 0 auto 1rem; color: #ffb9b9; background: rgba(180,40,40,.2); }
-.module-grid { display: grid; max-width: 1100px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 0 auto; }
+.error-banner { margin-bottom: 1rem; color: #ffb9b9; background: rgba(180,40,40,.2); }
+.module-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .module-card { position: relative; display: flex; min-height: 330px; flex-direction: column; padding: 1.25rem; overflow: hidden; border: 1px solid var(--surface-border); border-radius: 22px; background: linear-gradient(145deg, color-mix(in srgb, var(--surface-2) 88%, transparent), var(--surface-1)); box-shadow: 0 22px 50px rgba(0,0,0,.18); }
 .module-card::before { position: absolute; width: 180px; height: 180px; top: -95px; right: -70px; border-radius: 50%; background: color-mix(in srgb, var(--accent-1) 12%, transparent); content: ''; filter: blur(4px); }
 .module-card.offline, .module-card.unavailable { opacity: .78; }
