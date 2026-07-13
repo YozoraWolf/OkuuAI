@@ -199,7 +199,7 @@ export const useSessionStore = defineStore('session', {
             const existingMessage = session.messages.find(m =>
                 (message.clientMessageId && m.clientMessageId === message.clientMessageId) ||
                 (message.memoryKey && m.memoryKey === message.memoryKey) ||
-                (!message.memoryKey && !m.memoryKey && m.timestamp === message.timestamp)
+                (m.sessionId === message.sessionId && m.timestamp === message.timestamp)
             );
             if (existingMessage) {
                 const messageIndex = session.messages.indexOf(existingMessage);

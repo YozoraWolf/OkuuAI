@@ -28,6 +28,7 @@ export interface ChatMessage {
     stream?: boolean;
     thinking?: string;
     memoryKey?: string;
+    clientMessageId?: string;
     file?: string;
     attachment?: string;
     metadata?: {
@@ -114,6 +115,9 @@ async function buildPrompt(msg: ChatMessage, includeTools: boolean = true, tools
         systemPrompt = systemPrompt.replace(/{{mention}}/g, '');
     }
 
+    const attachmentSection = msg.attachment && msg.file && !imageExts.includes(msg.file.split('.').pop()?.toLowerCase() || '')
+        ? `\n\nAttached file (${msg.file}):\n${msg.attachment.length > 8000 ? msg.attachment.slice(0, 8000) + '\n... (truncated)' : msg.attachment}` : '';
+
     const prompt = `
 System:
 ${systemPrompt}${toolsSection}
@@ -124,7 +128,7 @@ ${memoryContext || 'None'}
 Conversation so far:
 ${history}
 
-User (${msg.user}): ${msg.message}
+User (${msg.user}): ${msg.message}${attachmentSection}
 Okuu:
     `.trim();
 

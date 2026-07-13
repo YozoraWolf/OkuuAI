@@ -98,7 +98,7 @@ export const createMemoryRecord = async (req: Request, res: Response) => {
     Logger.DEBUG(`File type: ${file.mimetype}`);
     //Logger.DEBUG('File data: '+file.data);
     const allowedExtensions = ['json', 'docx', 'txt', 'pdf', 'csv', ...imageExts];
-    const extension = file.name.split('.').pop() || '';
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
     if (!allowedExtensions.includes(extension)) {
         res.status(400).send(`Invalid file type. Allowed types: ${allowedExtensions.join(', ')}`);
         return;
