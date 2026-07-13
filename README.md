@@ -40,6 +40,57 @@ docker compose --profile app up --build -d
 
 The frontend is available at `http://yozorawolf-olympic.nord:9000` and proxies API and WebSocket traffic to the backend. Stop the host-based `npm run dev` stack first, or set `FRONTEND_PORT` to use a different port.
 
+### Private HTTPS over Meshnet
+
+Browser screen capture requires a trusted HTTPS origin. For private Meshnet access, OkuuAI includes an optional TLS proxy backed by a private certificate authority. It does not expose OkuuAI to the public internet.
+
+Generate a certificate for the server's Nord hostname. Including the Meshnet IP is optional but allows access by either name or address:
+
+```bash
+./scripts/setup-meshnet-https.sh yozorawolf-olympic.nord 100.64.0.10
+```
+
+The generated files are stored under the ignored `storage/meshnet-tls/` directory. Keep `ca.key` and `server.key` private. Copy only `storage/meshnet-tls/ca.crt` to each personal client device and install it as a trusted root certificate:
+
+Linux (Debian/Ubuntu):
+
+```bash
+sudo cp ca.crt /usr/local/share/ca-certificates/okuuai-meshnet.crt
+sudo update-ca-certificates
+```
+
+macOS:
+
+```bash
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain ca.crt
+```
+
+Windows (Administrator PowerShell):
+
+```powershell
+certutil -addstore -f Root ca.crt
+```
+
+Restart the browser after trusting the CA, then start the HTTPS profile:
+
+Docker application stack:
+
+```bash
+docker compose --profile app --profile meshnet-https up --build -d
+```
+
+Host development with `npm run dev`:
+
+```bash
+docker compose --profile meshnet-https-dev up -d meshnet-https-dev
+npm run dev
+```
+
+The development profile uses host networking so the proxy can reach Quasar without opening the Docker bridge in the host firewall. Do not run `meshnet-https` and `meshnet-https-dev` simultaneously because they use the same HTTPS port.
+
+Open `https://yozorawolf-olympic.nord:9443`. Set `FRONTEND_HTTPS_PORT=443` in `.env` if port 443 is available and you prefer `https://yozorawolf-olympic.nord`. The original HTTP endpoint remains available unless disabled separately.
+
 Docker containers cannot reach a host LLM through `127.0.0.1`; the Compose profile uses `http://host.docker.internal:8080/v1`. Override that endpoint for another host or machine with `DOCKER_LLM_BASE_URL`:
 
 ```bash

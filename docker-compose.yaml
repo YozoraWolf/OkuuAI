@@ -72,6 +72,44 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  meshnet-https:
+    image: nginx:1.27-alpine
+    container_name: okuuai_meshnet_https
+    profiles:
+      - meshnet-https
+    ports:
+      - "${FRONTEND_HTTPS_PORT:-9443}:9443"
+    environment:
+      MESHNET_UPSTREAM: "${MESHNET_UPSTREAM:-frontend:80}"
+      MESHNET_BACKEND_UPSTREAM: "${MESHNET_BACKEND_UPSTREAM:-backend:3009}"
+      MESHNET_LISTEN_PORT: "9443"
+      NGINX_ENVSUBST_FILTER: "^(MESHNET_UPSTREAM|MESHNET_BACKEND_UPSTREAM|MESHNET_LISTEN_PORT)$"
+    volumes:
+      - ./deploy/meshnet/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./storage/meshnet-tls:/etc/nginx/tls:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    restart: unless-stopped
+
+  meshnet-https-dev:
+    image: nginx:1.27-alpine
+    container_name: okuuai_meshnet_https_dev
+    profiles:
+      - meshnet-https-dev
+    network_mode: host
+    environment:
+      MESHNET_UPSTREAM: "${MESHNET_DEV_UPSTREAM:-127.0.0.1:9000}"
+      MESHNET_BACKEND_UPSTREAM: "${MESHNET_DEV_BACKEND_UPSTREAM:-127.0.0.1:3009}"
+      MESHNET_LISTEN_PORT: "${FRONTEND_HTTPS_PORT:-9443}"
+      NGINX_ENVSUBST_FILTER: "^(MESHNET_UPSTREAM|MESHNET_BACKEND_UPSTREAM|MESHNET_LISTEN_PORT)$"
+    volumes:
+      - ./deploy/meshnet/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./storage/meshnet-tls:/etc/nginx/tls:ro
+    restart: unless-stopped
+
 volumes:
   redis_data:
   ollama_data:
