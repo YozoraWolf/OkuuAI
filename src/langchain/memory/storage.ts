@@ -8,6 +8,12 @@ import { PdfReader } from 'pdfreader';
 const stroragePath = path.join(process.cwd(), 'storage');
 const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'];
 
+const normalizeUploadFileName = (fileName: string) => {
+    if ([...fileName].some(char => char.charCodeAt(0) > 255)) return fileName;
+    const decoded = Buffer.from(fileName, 'latin1').toString('utf8');
+    return decoded.includes('\uFFFD') ? fileName : decoded;
+};
+
 const createStorageFolder = () => {
     if (!fs.existsSync(stroragePath)) {
         fs.mkdirSync(stroragePath);
@@ -33,7 +39,7 @@ const checkFileExists = (fileName: string): string => {
 };
 
 export const saveFileToStorage = async (file: UploadedFile): Promise<string | false> => {
-    const fileName = checkFileExists(file.name);
+    const fileName = checkFileExists(normalizeUploadFileName(file.name));
     const filePath = path.join(stroragePath, fileName);
     if(!doesStorageFolderExist()) {
         createStorageFolder();
@@ -66,22 +72,18 @@ export const loadFileContentFromStorage = async (fileName: string): Promise<stri
             attachment += file.toString();
             Logger.DEBUG(`Text content: ${file}`);
         } else if (extension === 'pdf') {
-            const pdfReader = new PdfReader();
-            pdfReader.parseBuffer(file, (err: any, item: any) => {
-                if (err) {
-                    Logger.ERROR(`Error parsing PDF file: ${err}`);
-                    throw err;
-                }
-                if (item && item.text) {
-                    attachment += item.text + '\n';
-                }
-                if (!item) {
-                    // End of file
-                    // Process the content as needed
-                    console.log('File content:', attachment);
-                    // Save the content to memory
-                    // await memoryService.saveMemory(content);
-                }
+            attachment = await new Promise<string>((resolve, reject) => {
+                const pdfReader = new PdfReader();
+                let text = '';
+                pdfReader.parseBuffer(file, (err: any, item: any) => {
+                    if (err) {
+                        reject(err);
+                    } else if (!item) {
+                        resolve(text);
+                    } else if (item.text) {
+                        text += item.text + '\n';
+                    }
+                });
             });
         } else if (extension === 'csv') {
             attachment += file.toString();

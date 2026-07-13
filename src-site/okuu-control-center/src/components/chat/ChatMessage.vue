@@ -39,6 +39,14 @@
                     <source :src="attachmentSrc" :type="getMimeType(message.file)">
                     Your browser does not support the video tag.
                 </video>
+                <div v-else-if="message.file && !isAttachmentImage && !isAttachmentVideo"
+                    class="file-attachment q-mt-sm">
+                    <q-icon name="description" size="32px" />
+                    <div class="file-attachment-info">
+                        <strong>{{ displayFileName }}</strong>
+                        <span>{{ fileExtension }}</span>
+                    </div>
+                </div>
             </div>
             <div v-if="message.done && message.metadata?.web_search?.sources && message.metadata.web_search.sources.length > 0"
                 class="q-mt-sm row q-gutter-xs">
@@ -185,6 +193,19 @@ const getThumbnail = (image: any) => {
     return image.url;
 };
 
+const fileExtension = computed(() => {
+    const ext = props.message.file?.split('.').pop()?.toUpperCase() || 'FILE';
+    return ext;
+});
+
+const displayFileName = computed(() => {
+    const fileName = props.message.file || '';
+    if ([...fileName].some(char => char.charCodeAt(0) > 255)) return fileName;
+    const bytes = Uint8Array.from(fileName, char => char.charCodeAt(0));
+    const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    return decoded.includes('\uFFFD') ? fileName : decoded;
+});
+
 const getMimeType = (filename: string | undefined) => {
     if (!filename) return 'video/mp4';
     const ext = filename.split('.').pop()?.toLowerCase();
@@ -326,6 +347,28 @@ onMounted(async () => {
 .source-chip:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.file-attachment {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.45rem 0.75rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 10px;
+    background: var(--surface-1);
+    color: var(--accent-1);
+}
+.file-attachment-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+.file-attachment-info strong {
+    color: var(--text-strong);
+    font-size: 0.82rem;
 }
 
 .danbooru-image-container {
