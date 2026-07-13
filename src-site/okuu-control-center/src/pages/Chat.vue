@@ -486,15 +486,39 @@ watch(() => status.value, (status) => {
         "screen screen"
         "messages commentary"
         "input commentary";
-    grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr);
-    grid-template-rows: auto minmax(250px, 1.25fr) minmax(170px, .75fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
+    grid-template-rows: auto minmax(220px, 1.1fr) minmax(0, 1fr) auto;
 }
 
 .conversation-mode .chat-toolbar { grid-area: toolbar; }
-.conversation-mode .chat-messages { grid-area: messages; padding: .8rem 1rem; }
+.conversation-mode .chat-messages { grid-area: messages; padding: .8rem 1rem; min-height: 0; }
 .conversation-mode :deep(.chat-input) { grid-area: input; }
+.conversation-mode .screen-panel { min-height: 0; }
+.conversation-mode :deep(.observation-feed) { min-height: 0; }
 
 .chat-page { display: flex; height: 100dvh; overflow: hidden; }
+
+/* Narrow / tablet: stack everything full-width, keep the chat (what Okuu says) prominent. */
+@media (max-width: 1024px) {
+    .chat-container.conversation-mode {
+        grid-template-areas:
+            "toolbar"
+            "screen"
+            "messages"
+            "commentary"
+            "input";
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(160px, 38vh) minmax(0, 1fr) minmax(120px, 30vh) auto;
+    }
+}
+
+/* Phones: tighten spacing and cap the preview/feed so the chat keeps the most room. */
+@media (max-width: 560px) {
+    .chat-container.conversation-mode {
+        grid-template-rows: auto minmax(150px, 34vh) minmax(0, 1fr) minmax(110px, 26vh) auto;
+    }
+    .conversation-mode .chat-messages { padding: .7rem .8rem; }
+}
 
 .chat-messages {
     flex: 1;
