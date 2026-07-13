@@ -23,13 +23,14 @@ import { EventBus } from './events/event-bus';
 import type { ConversationEvents } from './modules/conversation/conversation.events';
 import { ConversationRuntime } from './modules/conversation/conversation.runtime';
 import { ModuleManager } from './services/module-manager.service';
+import { LocalVisionProvider } from './modules/conversation/vision.provider';
 
 export let io: Server;
 
 (async () => {
     try {
         const eventBus = new EventBus<ConversationEvents>();
-        const conversationRuntime = new ConversationRuntime(eventBus);
+        const conversationRuntime = new ConversationRuntime(eventBus, new LocalVisionProvider());
         const moduleManager = new ModuleManager(conversationRuntime);
         await init(moduleManager);
 

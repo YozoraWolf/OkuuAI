@@ -111,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps, computed, ref, onMounted, watch, ComputedRef } from 'vue';
+import { computed, ref, onMounted, watch, ComputedRef } from 'vue';
 import { useQuasar } from 'quasar';
 import { useSessionStore, Message } from 'src/stores/session.store';
 import { useConfigStore } from 'src/stores/config.store';

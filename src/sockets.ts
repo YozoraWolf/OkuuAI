@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken';
 import { doesSessionBelongToUser } from './langchain/memory/memory';
 import type { JwtPayloadCustom } from './middleware/auth.middleware';
 import { ConversationRuntime } from './modules/conversation/conversation.runtime';
+import type { ScreenFrame } from './modules/conversation/conversation.events';
 
 let io: Server;
 
@@ -20,6 +21,7 @@ export const setupSockets = (server: HTTPServer, conversationRuntime: Conversati
         },
         pingInterval: 10000,
         pingTimeout: 5000,
+        maxHttpBufferSize: 2_000_000,
         transports: ['websocket', 'polling'] // Enable fallback to polling if websocket fails
     }
     );
@@ -41,15 +43,24 @@ export const setupSockets = (server: HTTPServer, conversationRuntime: Conversati
         Logger.INFO('A client connected: ' + socket.id);
         const conversationSubscriptions = new AbortController();
         let observingConversation = false;
+        let conversationSessionId = '';
 
-        socket.on('conversation:join', (ack?: (result: { enabled: boolean; observations: ReturnType<ConversationRuntime['getHistory']> }) => void) => {
+        socket.on('conversation:join', async (
+            data: { sessionId?: string },
+            ack?: (result: { enabled: boolean; observations: ReturnType<ConversationRuntime['getHistory']> }) => void,
+        ) => {
             if (!conversationRuntime.isActive()) {
                 ack?.({ enabled: false, observations: [] });
                 return;
             }
+            if (!data?.sessionId || !await doesSessionBelongToUser(data.sessionId, socket.data.user.id)) {
+                ack?.({ enabled: false, observations: [] });
+                return;
+            }
+            conversationSessionId = data.sessionId;
             if (!observingConversation) {
                 observingConversation = true;
-                conversationRuntime.subscribe(socket.data.user.id, observation => {
+                conversationRuntime.subscribe(String(socket.data.user.id), observation => {
                     socket.emit('conversation:observation', observation);
                 }, conversationSubscriptions.signal);
             }
@@ -57,14 +68,27 @@ export const setupSockets = (server: HTTPServer, conversationRuntime: Conversati
         });
 
         socket.on('conversation:screen-state', async (data: { shared?: boolean; application?: string }) => {
-            if (typeof data?.shared !== 'boolean') return;
+            if (!conversationSessionId || typeof data?.shared !== 'boolean') return;
             try {
                 const application = typeof data.application === 'string' ? data.application.slice(0, 100) : undefined;
-                await conversationRuntime.reportScreenState(socket.data.user.id, data.shared, application);
+                await conversationRuntime.reportScreenState(String(socket.data.user.id), conversationSessionId, data.shared, application);
             } catch (error) {
                 socket.emit('conversation:error', {
                     message: error instanceof Error ? error.message : 'Unable to update screen state',
                 });
+            }
+        });
+
+        socket.on('conversation:frame', (frame: ScreenFrame, ack?: (result: { accepted: boolean; error?: string }) => void) => {
+            if (!conversationSessionId) {
+                ack?.({ accepted: false, error: 'Conversation session is not active' });
+                return;
+            }
+            try {
+                const accepted = conversationRuntime.submitFrame(String(socket.data.user.id), conversationSessionId, frame);
+                ack?.({ accepted });
+            } catch (error) {
+                ack?.({ accepted: false, error: error instanceof Error ? error.message : 'Unable to analyze frame' });
             }
         });
 
@@ -93,6 +117,10 @@ export const setupSockets = (server: HTTPServer, conversationRuntime: Conversati
 
                 data.ownerId = socket.data.user.id;
                 data.user = socket.data.user.username;
+                const screenContext = conversationRuntime.getScreenContext(String(socket.data.user.id), data.sessionId);
+                data.metadata = { ...(data.metadata || {}) };
+                if (screenContext) data.metadata.screen_context = screenContext;
+                else delete data.metadata.screen_context;
                 Logger.DEBUG(`Received chat message: ${JSON.stringify(data)}`);
                 Core.chat_session = await startSession(data.sessionId);
                 Logger.DEBUG(`Session started: ${SESSION_ID}`);

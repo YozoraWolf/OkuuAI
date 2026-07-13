@@ -10,6 +10,9 @@ type GenerateOptions = {
     images?: string[];
     imageMimeType?: string;
     format?: string;
+    maxTokens?: number;
+    temperature?: number;
+    signal?: AbortSignal;
 };
 
 type GenerateChunk = { response: string };
@@ -151,10 +154,11 @@ function averageEmbeddings(embeddings: number[][]): number[] {
 
 export const generateCompletion = async (options: GenerateOptions): Promise<GenerateResponse> => {
     if (isOllamaProvider()) {
-        return Core.ollama_instance.generate(options as any) as Promise<GenerateResponse>;
+        return Core.ollama_instance.generate(options as any) as unknown as Promise<GenerateResponse>;
     }
 
     const response = await fetch(`${getBaseUrl()}/chat/completions`, {
+        signal: options.signal,
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -164,7 +168,9 @@ export const generateCompletion = async (options: GenerateOptions): Promise<Gene
             model: options.model || Core.model_name,
             stream: false,
             messages: getMessages(options),
-            temperature: Core.model_settings.temperature,
+            temperature: options.temperature ?? Core.model_settings.temperature,
+            ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+            chat_template_kwargs: { enable_thinking: options.think ?? Core.model_settings.think },
         }),
     });
 
@@ -173,7 +179,7 @@ export const generateCompletion = async (options: GenerateOptions): Promise<Gene
     }
 
     const data: any = await response.json();
-    return { response: data.choices?.[0]?.message?.content || '' };
+    return { response: data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning_content || '' };
 };
 
 export const streamCompletion = async function* (options: GenerateOptions): AsyncIterable<GenerateChunk> {
@@ -197,6 +203,7 @@ export const streamCompletion = async function* (options: GenerateOptions): Asyn
             stream: true,
             messages: getMessages(options),
             temperature: Core.model_settings.temperature,
+            chat_template_kwargs: { enable_thinking: options.think ?? Core.model_settings.think },
         }),
     });
 

@@ -8,6 +8,7 @@
     "start-tunnel-win": "call setup_ngrok.bat && tsx ./src/index.ts",
     "start": "tsx ./src/index.ts",
     "setup": "npm install && npm --prefix ./src-site/okuu-control-center install",
+    "setup:whisper": "./scripts/setup-whisper.sh",
     "dev": "./scripts/dev-llamacpp.sh",
     "dev:backend": "tsx watch ./src/index.ts",
     "dev:frontend": "npm --prefix ./src-site/okuu-control-center run dev",

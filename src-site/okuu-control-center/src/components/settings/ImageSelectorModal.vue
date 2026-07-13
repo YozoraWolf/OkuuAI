@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, defineEmits, defineProps, nextTick } from 'vue';
+import { ref, watch, nextTick } from 'vue';
 import Cropper from 'cropperjs';
 import 'cropperjs/dist/cropper.css';
 import { uploadOkuuPfp } from 'src/services/config.service';

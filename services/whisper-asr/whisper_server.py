@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Standalone OpenAI-compatible Whisper transcription service."""
 
-import cgi
 import json
 import os
 import tempfile
+from email.parser import BytesParser
+from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from faster_whisper import WhisperModel
@@ -49,21 +50,24 @@ class WhisperHandler(BaseHTTPRequestHandler):
             self.send_json(400, {"error": "expected multipart/form-data"})
             return
 
-        form = cgi.FieldStorage(
-            fp=self.rfile,
-            headers=self.headers,
-            environ={"REQUEST_METHOD": "POST", "CONTENT_TYPE": self.headers["Content-Type"]},
+        content_length = int(self.headers.get("Content-Length", "0"))
+        message = BytesParser(policy=default).parsebytes(
+            f"Content-Type: {self.headers['Content-Type']}\r\nMIME-Version: 1.0\r\n\r\n".encode()
+            + self.rfile.read(content_length)
         )
-        upload = form["file"] if "file" in form else None
-        if upload is None or not getattr(upload, "file", None):
+        upload = next(
+            (part for part in message.iter_parts() if part.get_param("name", header="content-disposition") == "file"),
+            None,
+        )
+        if upload is None:
             self.send_json(400, {"error": "audio file is required"})
             return
 
-        suffix = os.path.splitext(getattr(upload, "filename", "audio.webm"))[1] or ".webm"
+        suffix = os.path.splitext(upload.get_filename() or "audio.webm")[1] or ".webm"
         temp_path = ""
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-                temp_file.write(upload.file.read())
+                temp_file.write(upload.get_payload(decode=True))
                 temp_path = temp_file.name
 
             segments, info = model.transcribe(temp_path, vad_filter=True)

@@ -7,6 +7,7 @@ import { getModulePreference } from './module-state.service';
 
 const execFileAsync = promisify(execFile);
 const SCREEN_NAME = 'okuuwhis';
+const LOG_PATH = path.join(process.cwd(), 'logs', 'whisper-asr.log');
 
 const getServerScript = () => process.env.WHISPER_SERVER_SCRIPT || path.join(process.cwd(), 'services', 'whisper-asr', 'whisper_server.py');
 
@@ -57,7 +58,9 @@ export async function startWhisperServer() {
     try { await execFileAsync('screen', ['-S', SCREEN_NAME, '-X', 'quit']); } catch { /* stale session */ }
   }
 
-  const child = spawn('screen', ['-dmS', SCREEN_NAME, getPython(), script], {
+  fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
+  fs.writeFileSync(LOG_PATH, '');
+  const child = spawn('screen', ['-L', '-Logfile', LOG_PATH, '-dmS', SCREEN_NAME, getPython(), script], {
     cwd: path.dirname(script),
     env: process.env,
     detached: true,
@@ -65,14 +68,21 @@ export async function startWhisperServer() {
   });
   child.unref();
 
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  const timeoutMs = Number(process.env.WHISPER_START_TIMEOUT_MS || 300000);
+  const attempts = Math.max(1, Math.ceil(timeoutMs / 1000));
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     await new Promise(resolve => setTimeout(resolve, 1000));
     if (await isHealthy()) {
       Logger.INFO(`Whisper ASR started in screen session '${SCREEN_NAME}'.`);
       return true;
     }
+    if (!await screenExists()) {
+      const output = fs.existsSync(LOG_PATH) ? fs.readFileSync(LOG_PATH, 'utf8').trim() : '';
+      Logger.WARN(`Whisper ASR exited during startup${output ? `: ${output}` : `; inspect ${LOG_PATH}`}`);
+      return false;
+    }
   }
-  Logger.WARN(`Whisper ASR did not become healthy. Inspect with: screen -r ${SCREEN_NAME}`);
+  Logger.WARN(`Whisper ASR did not become healthy within ${timeoutMs}ms. Inspect ${LOG_PATH}`);
   return false;
 }
 

@@ -9,6 +9,16 @@ export type ConversationObservation = {
     application?: string;
     importance?: number;
     latencyMs?: number;
+    extractedText?: string;
+};
+
+export type ScreenFrame = {
+    capturedAt: number;
+    mimeType: 'image/jpeg' | 'image/webp';
+    base64: string;
+    width: number;
+    height: number;
+    application?: string;
 };
 
 export type ConversationEvent = {

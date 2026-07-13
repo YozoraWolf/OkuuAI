@@ -1,8 +1,7 @@
 
-import { Client, GatewayIntentBits, Message, Partials, TextChannel, EmbedBuilder } from 'discord.js';
+import { Client, Events, GatewayIntentBits, Message, Partials, TextChannel, EmbedBuilder } from 'discord.js';
 import { Logger } from '../logger';
 import { sendChat, ChatMessage } from '../chat';
-import { enhancedToolSystem } from '../tools/enhancedToolSystem';
 
 interface QueueItem {
     message: Message;
@@ -31,7 +30,7 @@ export class DiscordManager {
             ]
         });
 
-        this.client.on('ready', () => {
+        this.client.on(Events.ClientReady, () => {
             Logger.INFO(`Logged in as ${this.client.user?.tag}!`);
         });
 

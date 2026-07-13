@@ -13,7 +13,6 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps } from 'vue'
 import { useConfigStore } from 'src/stores/config.store'
 import { storeToRefs } from 'pinia'
 

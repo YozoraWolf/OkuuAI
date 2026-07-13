@@ -31,7 +31,7 @@
                         <q-btn flat round dense icon="delete_outline" aria-label="Delete conversation" @click="removeSession(selectedSession.sessionId)"><q-tooltip>Delete conversation</q-tooltip></q-btn>
                     </div>
                 </header>
-                <SharedScreenPanel v-if="conversationMode" @state-changed="handleScreenState" />
+                <SharedScreenPanel v-if="conversationMode" @state-changed="handleScreenState" @frame="handleScreenFrame" />
                 <div class="chat-messages" v-if="selectedSession && selectedSession.messages"
                     ref="chatMessagesRef" v-scale @scroll.passive="handleHistoryScroll">
                     <div class="history-control" v-if="historyState?.hasMore">
@@ -83,7 +83,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import SharedScreenPanel from 'src/components/conversation/SharedScreenPanel.vue';
 import ObservationFeed from 'src/components/conversation/ObservationFeed.vue';
-import type { ConversationObservation } from 'src/types/conversation';
+import type { ConversationObservation, ScreenFrame } from 'src/types/conversation';
 
 
 
@@ -234,7 +234,7 @@ const toggleConversationMode = () => {
         return;
     }
     socket.value.timeout(5000).emit(
-        'conversation:join',
+        'conversation:join', { sessionId: selectedSession.value?.sessionId },
         (error: Error | null, result?: { enabled: boolean; observations: ConversationObservation[] }) => {
             if (error) {
                 $q.notify({ type: 'negative', message: 'Conversation Mode did not respond.' });
@@ -252,6 +252,12 @@ const toggleConversationMode = () => {
 
 const handleScreenState = (state: { shared: boolean; application?: string }) => {
     socket.value?.emit('conversation:screen-state', state);
+};
+
+const handleScreenFrame = (frame: ScreenFrame) => {
+    socket.value?.emit('conversation:frame', frame, (result: { accepted: boolean; error?: string }) => {
+        if (result?.error) console.warn('Screen frame was rejected:', result.error);
+    });
 };
 
 const addNewSession = async () => {

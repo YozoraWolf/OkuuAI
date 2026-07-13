@@ -20,9 +20,9 @@
       <div v-if="!stream" class="screen-placeholder">
         <div class="screen-glyph"><q-icon name="desktop_windows" size="42px" /></div>
         <strong>No screen is being observed</strong>
-        <span>{{ unavailableReason || 'The preview stays in your browser. Raw frames are not stored or uploaded.' }}</span>
+        <span>{{ unavailableReason || 'Sampled frames are analyzed in memory and are never persisted.' }}</span>
       </div>
-      <div v-else class="privacy-label"><span></span> LIVE · LOCAL PREVIEW</div>
+      <div v-else class="privacy-label"><span></span> LIVE · AI VISION</div>
     </div>
   </section>
 </template>
@@ -30,14 +30,19 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useQuasar } from 'quasar';
+import type { ScreenFrame } from 'src/types/conversation';
 
 const emit = defineEmits<{
   stateChanged: [state: { shared: boolean; application?: string }];
+  frame: [frame: ScreenFrame];
 }>();
 
 const $q = useQuasar();
 const video = ref<HTMLVideoElement>();
 const stream = ref<MediaStream>();
+let captureTimer: ReturnType<typeof setInterval> | undefined;
+let lastSignature: Uint8ClampedArray | undefined;
+let application = 'shared screen';
 const unavailableReason = computed(() => {
   if (!window.isSecureContext) return 'Screen sharing requires HTTPS or a localhost URL.';
   if (!navigator.mediaDevices) return 'This embedded browser does not expose media capture. Open OkuuAI in a current desktop browser.';
@@ -48,6 +53,9 @@ const unavailableReason = computed(() => {
 const stopSharing = (notifyRuntime = true) => {
   const current = stream.value;
   stream.value = undefined;
+  if (captureTimer) clearInterval(captureTimer);
+  captureTimer = undefined;
+  lastSignature = undefined;
   current?.getTracks().forEach(track => track.stop());
   if (video.value) video.value.srcObject = null;
   if (notifyRuntime && current) emit('stateChanged', { shared: false });
@@ -65,7 +73,10 @@ const startSharing = async () => {
     const track = selected.getVideoTracks()[0];
     track?.addEventListener('ended', () => stopSharing(), { once: true });
     const displaySurface = track?.getSettings().displaySurface;
-    emit('stateChanged', { shared: true, application: displaySurface || 'shared screen' });
+    application = displaySurface || 'shared screen';
+    emit('stateChanged', { shared: true, application });
+    captureTimer = setInterval(captureFrame, 9000);
+    setTimeout(captureFrame, 800);
   } catch (error) {
     const messages: Record<string, string> = {
       NotAllowedError: 'Screen sharing permission was denied.',
@@ -76,6 +87,41 @@ const startSharing = async () => {
     const message = error instanceof DOMException ? messages[error.name] : undefined;
     $q.notify({ type: 'negative', message: message || 'Unable to start screen sharing.' });
   }
+};
+
+const captureFrame = () => {
+  const source = video.value;
+  if (!source || !stream.value || source.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !source.videoWidth) return;
+
+  const signatureCanvas = document.createElement('canvas');
+  signatureCanvas.width = 32;
+  signatureCanvas.height = 18;
+  const signatureContext = signatureCanvas.getContext('2d', { willReadFrequently: true });
+  if (!signatureContext) return;
+  signatureContext.drawImage(source, 0, 0, 32, 18);
+  const signature = signatureContext.getImageData(0, 0, 32, 18).data;
+  if (lastSignature) {
+    let difference = 0;
+    for (let index = 0; index < signature.length; index += 4) {
+      difference += Math.abs((signature[index] ?? 0) - (lastSignature[index] ?? 0));
+      difference += Math.abs((signature[index + 1] ?? 0) - (lastSignature[index + 1] ?? 0));
+      difference += Math.abs((signature[index + 2] ?? 0) - (lastSignature[index + 2] ?? 0));
+    }
+    if (difference / (signature.length * 0.75 * 255) < 0.025) return;
+  }
+  lastSignature = new Uint8ClampedArray(signature);
+
+  const scale = Math.min(1, 1024 / source.videoWidth, 640 / source.videoHeight);
+  const width = Math.max(1, Math.round(source.videoWidth * scale));
+  const height = Math.max(1, Math.round(source.videoHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) return;
+  context.drawImage(source, 0, 0, width, height);
+  const base64 = canvas.toDataURL('image/jpeg', 0.68).split(',')[1];
+  if (base64) emit('frame', { capturedAt: Date.now(), mimeType: 'image/jpeg', base64, width, height, application });
 };
 
 onBeforeUnmount(() => stopSharing());
