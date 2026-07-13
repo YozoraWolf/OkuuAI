@@ -29,13 +29,11 @@ export class SocketioService {
         }
 
         try {
-            let url = await resolveHostRedirect();
+            const url = await resolveHostRedirect();
             if (!url) throw new Error('Invalid URL');
-            // Remove protocol from URL
-            url = url.replace(/^https?:\/\//, '');
-
-            const protocol = process.env.LOCAL ? 'ws' : window.location.protocol === 'https:' ? 'wss' : 'ws';
-            this.socket = io(`${protocol}://${url}`, {
+            const socketUrl = new URL(url, window.location.origin);
+            socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+            this.socket = io(socketUrl.origin, {
                 transports: ['websocket'],
                 auth: { token: localStorage.getItem('token') },
                 timeout: 30000,
@@ -45,7 +43,7 @@ export class SocketioService {
 
             this.socket.connect();
 
-            console.log('Socket initialized with URL:', `${protocol}://${url}`);
+            console.log('Socket initialized with URL:', socketUrl.origin);
             this.sessionId = sessionId;
 
             console.log('Socket initialized:', this.sessionId);

@@ -16,7 +16,7 @@ import { select } from '@inquirer/prompts';
 import { initOllamaInstance } from './chat';
 import { ensureWhisperServer } from './services/whisper-process.service';
 import { resolveMainModel } from './llm';
-import { reconcileModules } from './services/module-manager.service';
+import { ModuleManager } from './services/module-manager.service';
 
 dotenv.config();
 
@@ -56,7 +56,7 @@ const promptForConfig = async () => {
     }
 };
 
-export const init = async () =>
+export const init = async (moduleManager: ModuleManager) =>
     new Promise<void>(async (resolve) => {
 
         console.log(centeredLogoTxt);
@@ -107,7 +107,7 @@ export const init = async () =>
         }
 
         await ensureWhisperServer();
-        await reconcileModules();
+        await moduleManager.reconcileModules();
 
         await initRedis();
 

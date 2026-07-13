@@ -72,6 +72,44 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  private-https:
+    image: nginx:1.27-alpine
+    container_name: okuuai_private_https
+    profiles:
+      - private-https
+    ports:
+      - "${PRIVATE_HTTPS_PORT:-9443}:9443"
+    environment:
+      PRIVATE_HTTPS_FRONTEND_UPSTREAM: "${PRIVATE_HTTPS_FRONTEND_UPSTREAM:-frontend:80}"
+      PRIVATE_HTTPS_BACKEND_UPSTREAM: "${PRIVATE_HTTPS_BACKEND_UPSTREAM:-backend:3009}"
+      PRIVATE_HTTPS_LISTEN_PORT: "9443"
+      NGINX_ENVSUBST_FILTER: "^PRIVATE_HTTPS_"
+    volumes:
+      - ./deploy/private-https/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./storage/private-https:/etc/nginx/tls:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    restart: unless-stopped
+
+  private-https-dev:
+    image: nginx:1.27-alpine
+    container_name: okuuai_private_https_dev
+    profiles:
+      - private-https-dev
+    network_mode: host
+    environment:
+      PRIVATE_HTTPS_FRONTEND_UPSTREAM: "${PRIVATE_HTTPS_DEV_FRONTEND_UPSTREAM:-127.0.0.1:9000}"
+      PRIVATE_HTTPS_BACKEND_UPSTREAM: "${PRIVATE_HTTPS_DEV_BACKEND_UPSTREAM:-127.0.0.1:3009}"
+      PRIVATE_HTTPS_LISTEN_PORT: "${PRIVATE_HTTPS_PORT:-9443}"
+      NGINX_ENVSUBST_FILTER: "^PRIVATE_HTTPS_"
+    volumes:
+      - ./deploy/private-https/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./storage/private-https:/etc/nginx/tls:ro
+    restart: unless-stopped
+
 volumes:
   redis_data:
   ollama_data:

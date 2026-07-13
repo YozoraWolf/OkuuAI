@@ -18,13 +18,20 @@ import userRoutes from './routes/user.route';
 import toolsRoutes from './routes/tools.route';
 import adminRoutes from './routes/admin.route';
 import audioRoutes from './routes/audio.route';
-import moduleRoutes from './routes/modules.route';
+import { createModuleRouter } from './routes/modules.route';
+import { EventBus } from './events/event-bus';
+import type { ConversationEvents } from './modules/conversation/conversation.events';
+import { ConversationRuntime } from './modules/conversation/conversation.runtime';
+import { ModuleManager } from './services/module-manager.service';
 
 export let io: Server;
 
 (async () => {
     try {
-        await init();
+        const eventBus = new EventBus<ConversationEvents>();
+        const conversationRuntime = new ConversationRuntime(eventBus);
+        const moduleManager = new ModuleManager(conversationRuntime);
+        await init(moduleManager);
 
         // Initialize Discord
         if (process.env.DISCORD_TOKEN) {
@@ -43,7 +50,7 @@ export let io: Server;
         const server = http.createServer(app); // Create HTTP server
 
         // Websockets
-        io = setupSockets(server);
+        io = setupSockets(server, conversationRuntime);
 
         // Use JWT-based middleware to protect internal routes.
         // For legacy API-key checks there's a /apiKey endpoint in main.route.
@@ -82,7 +89,7 @@ export let io: Server;
         app.use('/tools', requireAuth, toolsRoutes);
         app.use('/admin', adminRoutes);
         app.use('/audio', requireAuth, audioRoutes);
-        app.use('/modules', moduleRoutes);
+        app.use('/modules', createModuleRouter(moduleManager));
 
         server.listen(port, async () => {
             Logger.INFO(`Server is running on port ${port} ${/09$/.test(port.toString()) ? '(☢️)' : ''}`);

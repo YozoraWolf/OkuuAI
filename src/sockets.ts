@@ -7,10 +7,11 @@ import { handleUserInput } from "./console";
 import jwt from 'jsonwebtoken';
 import { doesSessionBelongToUser } from './langchain/memory/memory';
 import type { JwtPayloadCustom } from './middleware/auth.middleware';
+import { ConversationRuntime } from './modules/conversation/conversation.runtime';
 
 let io: Server;
 
-export const setupSockets = (server: HTTPServer) => {
+export const setupSockets = (server: HTTPServer, conversationRuntime: ConversationRuntime) => {
     io = new Server(server, {
         cors: {
             origin: "*", // Allow all origins - for production, specify exact origins
@@ -38,6 +39,34 @@ export const setupSockets = (server: HTTPServer) => {
 
     io.on('connection', (socket) => {
         Logger.INFO('A client connected: ' + socket.id);
+        const conversationSubscriptions = new AbortController();
+        let observingConversation = false;
+
+        socket.on('conversation:join', (ack?: (result: { enabled: boolean; observations: ReturnType<ConversationRuntime['getHistory']> }) => void) => {
+            if (!conversationRuntime.isActive()) {
+                ack?.({ enabled: false, observations: [] });
+                return;
+            }
+            if (!observingConversation) {
+                observingConversation = true;
+                conversationRuntime.subscribe(socket.data.user.id, observation => {
+                    socket.emit('conversation:observation', observation);
+                }, conversationSubscriptions.signal);
+            }
+            ack?.({ enabled: true, observations: conversationRuntime.getHistory(socket.data.user.id) });
+        });
+
+        socket.on('conversation:screen-state', async (data: { shared?: boolean; application?: string }) => {
+            if (typeof data?.shared !== 'boolean') return;
+            try {
+                const application = typeof data.application === 'string' ? data.application.slice(0, 100) : undefined;
+                await conversationRuntime.reportScreenState(socket.data.user.id, data.shared, application);
+            } catch (error) {
+                socket.emit('conversation:error', {
+                    message: error instanceof Error ? error.message : 'Unable to update screen state',
+                });
+            }
+        });
 
         socket.on('joinChat', async (sessionId: string) => {
             if (!await doesSessionBelongToUser(sessionId, socket.data.user.id)) {
@@ -102,6 +131,7 @@ export const setupSockets = (server: HTTPServer) => {
 
         // Handle disconnection
         socket.on('disconnect', () => {
+            conversationSubscriptions.abort();
             Logger.INFO('Client disconnected: ' + socket.id);
         });
     });

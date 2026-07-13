@@ -14,7 +14,7 @@
     <section class="module-grid">
       <article v-for="module in modules" :key="module.id" class="module-card" :class="module.status">
         <div class="module-topline">
-          <div class="module-icon"><q-icon :name="module.id === 'okuu-claw' ? 'hub' : 'graphic_eq'" size="26px" /></div>
+          <div class="module-icon"><q-icon :name="moduleIcons[module.id] || 'extension'" size="26px" /></div>
           <div class="state-pill"><span></span>{{ module.status }}</div>
         </div>
 
@@ -59,6 +59,11 @@ const modules = ref<ModuleState[]>([]);
 const error = ref('');
 const lastUpdated = ref('Waiting for status');
 const busy = reactive<Record<string, boolean>>({});
+const moduleIcons: Record<string, string> = {
+  'okuu-claw': 'hub',
+  'okuu-whisper': 'graphic_eq',
+  'conversation-mode': 'screen_share',
+};
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 
 const isTransitioning = (module: ModuleState) => module.status === 'enabling' || module.status === 'disabling';
@@ -78,7 +83,7 @@ const toggleModule = (module: ModuleState) => {
   const enabling = !module.enabled;
   $q.dialog({
     title: `${enabling ? 'Enable' : 'Disable'} ${module.name}?`,
-    message: enabling ? 'The service will start on this host.' : 'The running service will be stopped immediately.',
+    message: enabling ? 'The module will start on this host.' : 'The module will stop immediately.',
     cancel: true,
     persistent: true,
   }).onOk(async () => {
