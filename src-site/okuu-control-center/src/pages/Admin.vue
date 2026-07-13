@@ -37,6 +37,8 @@
       </article>
     </section>
 
+    <ModuleControls />
+
     <section class="metrics-grid">
       <article class="metric-card">
         <div class="metric-heading"><div><span>CPU</span><small>{{ overview?.metrics.cpu.cores || 0 }} cores</small></div><strong>{{ latest.cpu.toFixed(1) }}%</strong></div>
@@ -72,6 +74,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { fetchAdminOverview } from 'src/services/admin.service';
+import ModuleControls from 'src/components/admin/ModuleControls.vue';
 
 const overview = ref<any>(null);
 const error = ref('');

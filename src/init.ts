@@ -16,6 +16,7 @@ import { select } from '@inquirer/prompts';
 import { initOllamaInstance } from './chat';
 import { ensureWhisperServer } from './services/whisper-process.service';
 import { resolveMainModel } from './llm';
+import { reconcileModules } from './services/module-manager.service';
 
 dotenv.config();
 
@@ -106,6 +107,7 @@ export const init = async () =>
         }
 
         await ensureWhisperServer();
+        await reconcileModules();
 
         await initRedis();
 

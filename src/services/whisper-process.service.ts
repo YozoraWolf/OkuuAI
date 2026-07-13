@@ -3,6 +3,7 @@ import path from 'path';
 import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import { Logger } from '../logger';
+import { getModulePreference } from './module-state.service';
 
 const execFileAsync = promisify(execFile);
 const SCREEN_NAME = 'okuuwhis';
@@ -34,17 +35,22 @@ const screenExists = async () => {
   }
 };
 
-export async function ensureWhisperServer() {
-  if ((process.env.WHISPER_AUTOSTART || 'true').toLowerCase() === 'false') return;
+export const getWhisperStatus = async () => ({
+  healthy: await isHealthy(),
+  processRunning: await screenExists(),
+  endpoint: (process.env.WHISPER_BASE_URL || 'http://127.0.0.1:8096').replace(/\/$/, ''),
+});
+
+export async function startWhisperServer() {
   if (await isHealthy()) {
     Logger.DEBUG('Whisper ASR is already healthy.');
-    return;
+    return true;
   }
 
   const script = getServerScript();
   if (!fs.existsSync(script)) {
     Logger.WARN(`Whisper server script not found: ${script}`);
-    return;
+    return false;
   }
 
   if (await screenExists()) {
@@ -63,8 +69,26 @@ export async function ensureWhisperServer() {
     await new Promise(resolve => setTimeout(resolve, 1000));
     if (await isHealthy()) {
       Logger.INFO(`Whisper ASR started in screen session '${SCREEN_NAME}'.`);
-      return;
+      return true;
     }
   }
   Logger.WARN(`Whisper ASR did not become healthy. Inspect with: screen -r ${SCREEN_NAME}`);
+  return false;
+}
+
+export async function stopWhisperServer() {
+  if (await screenExists()) {
+    await execFileAsync('screen', ['-S', SCREEN_NAME, '-X', 'quit']);
+  }
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    if (!await isHealthy()) return true;
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+  return !await isHealthy();
+}
+
+export async function ensureWhisperServer() {
+  if (getModulePreference('okuu-whisper')?.enabled === false) return;
+  if ((process.env.WHISPER_AUTOSTART || 'true').toLowerCase() === 'false') return;
+  await startWhisperServer();
 }
