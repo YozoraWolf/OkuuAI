@@ -63,6 +63,14 @@ const pageList: EssentialLinkProps[] = [
     admin: true,
   },
   {
+    title: 'Modules',
+    caption: 'Manage optional services',
+    icon: 'extension',
+    path: '/modules',
+    auth: true,
+    admin: true,
+  },
+  {
     title: 'Logout',
     caption: 'Bye!',
     icon: 'logout',
