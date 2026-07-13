@@ -29,7 +29,7 @@ npm run setup
 npm run dev
 ```
 
-`npm run dev` starts Redis, the backend, and the frontend together. Open `http://yozorawolf-olympic.nord:9000`.
+`npm run dev` starts Redis, the backend, and the frontend together. Open `http://localhost:9000` locally or use the server's private-network hostname from another device.
 
 ### Docker Application Stack
 
@@ -38,7 +38,7 @@ cp .env.example .env
 docker compose --profile app up --build -d
 ```
 
-The frontend is available at `http://yozorawolf-olympic.nord:9000` and proxies API and WebSocket traffic to the backend. Stop the host-based `npm run dev` stack first, or set `FRONTEND_PORT` to use a different port.
+The frontend is available at `http://localhost:9000` and proxies API and WebSocket traffic to the backend. Stop the host-based `npm run dev` stack first, or set `FRONTEND_PORT` to use a different port.
 
 Docker containers cannot reach a host LLM through `127.0.0.1`; the Compose profile uses `http://host.docker.internal:8080/v1`. Override that endpoint for another host or machine with `DOCKER_LLM_BASE_URL`:
 
