@@ -29,7 +29,7 @@ npm run setup
 npm run dev
 ```
 
-`npm run dev` starts Redis, the backend, and the frontend together. Open `http://yozorawolf-olympic.nord:9000`.
+`npm run dev` starts Redis, the backend, and the frontend together. Open `http://localhost:9000` locally or use the server's private-network hostname from another device.
 
 ### Docker Application Stack
 
@@ -38,7 +38,58 @@ cp .env.example .env
 docker compose --profile app up --build -d
 ```
 
-The frontend is available at `http://yozorawolf-olympic.nord:9000` and proxies API and WebSocket traffic to the backend. Stop the host-based `npm run dev` stack first, or set `FRONTEND_PORT` to use a different port.
+The frontend is available at `http://localhost:9000` and proxies API and WebSocket traffic to the backend. Stop the host-based `npm run dev` stack first, or set `FRONTEND_PORT` to use a different port.
+
+### Private-Network HTTPS
+
+Browser screen capture requires a trusted HTTPS origin. OkuuAI includes an optional TLS proxy backed by a private certificate authority for private DNS, LAN, and VPN networks. It does not expose OkuuAI to the public internet.
+
+Generate a certificate for the hostname used to reach the server. Including its private IP is optional but allows access by either name or address:
+
+```bash
+./scripts/setup-private-https.sh okuu.home.arpa 100.64.0.10
+```
+
+The generated files are stored under the ignored `storage/private-https/` directory. Keep `ca.key` and `server.key` private. Install only `storage/private-https/ca.crt` as a trusted root certificate on each personal client device:
+
+Linux (Debian/Ubuntu):
+
+```bash
+sudo cp ca.crt /usr/local/share/ca-certificates/okuuai-meshnet.crt
+sudo update-ca-certificates
+```
+
+macOS:
+
+```bash
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain ca.crt
+```
+
+Windows (Administrator PowerShell):
+
+```powershell
+certutil -addstore -f Root ca.crt
+```
+
+Restart the browser after trusting the CA, then start the HTTPS profile:
+
+Docker application stack:
+
+```bash
+docker compose --profile app --profile private-https up --build -d
+```
+
+Host development with `npm run dev`:
+
+```bash
+docker compose --profile private-https-dev up -d private-https-dev
+npm run dev
+```
+
+The development profile uses host networking so the proxy can reach Quasar without opening the Docker bridge in the host firewall. Do not run `private-https` and `private-https-dev` simultaneously because they use the same HTTPS port.
+
+Open `https://okuu.home.arpa:9443`, replacing the example with the hostname used when generating the certificate. Set `PRIVATE_HTTPS_PORT=443` in `.env` if port 443 is available and you prefer a URL without an explicit port. The original HTTP endpoint remains available unless disabled separately.
 
 Docker containers cannot reach a host LLM through `127.0.0.1`; the Compose profile uses `http://host.docker.internal:8080/v1`. Override that endpoint for another host or machine with `DOCKER_LLM_BASE_URL`:
 

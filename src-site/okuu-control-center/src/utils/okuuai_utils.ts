@@ -1,6 +1,12 @@
 import axios from 'axios';
 
 export const resolveHostRedirect = async () => {
+    // HTTPS deployments proxy API and WebSocket traffic through the same origin.
+    // Falling back to a configured HTTP API would be blocked as mixed content.
+    if (window.location.protocol === 'https:') {
+        return window.location.origin;
+    }
+
     // if LOCAL flag is set, return the local API URL
     if (process.env.LOCAL) {
         return process.env.VITE_LOCAL_API_URL as string;
