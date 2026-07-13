@@ -17,6 +17,7 @@
     "vite:run": "vite",
     "vite:build": "vite build",
     "eslint": "eslint ./src",
+    "test": "tsx --test tests/*.test.ts",
     "config": "tsx ./src/config.ts"
   },
   "keywords": [

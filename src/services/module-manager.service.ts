@@ -3,11 +3,9 @@ import { promisify } from 'util';
 import { getWhisperStatus, startWhisperServer, stopWhisperServer } from './whisper-process.service';
 import { getModulePreference, setModulePreference } from './module-state.service';
 import { Logger } from '../logger';
+import { ConversationRuntime } from '../modules/conversation/conversation.runtime';
 
 const execFileAsync = promisify(execFile);
-const transitions = new Map<string, 'enabling' | 'disabling'>();
-const lastChangedAt = new Map<string, number>();
-
 export type ModuleState = {
   id: string;
   name: string;
@@ -48,7 +46,13 @@ const checkEndpoint = async (url?: string) => {
   }
 };
 
-const getOkuuClawStatus = async (): Promise<ModuleState> => {
+export class ModuleManager {
+private readonly transitions = new Map<string, 'enabling' | 'disabling'>();
+private readonly lastChangedAt = new Map<string, number>();
+
+constructor(private readonly conversationRuntime: ConversationRuntime) {}
+
+private getOkuuClawStatus = async (): Promise<ModuleState> => {
   const command = process.env.OKUUCLAW_COMMAND || 'okuuclaw';
   const session = process.env.OKUUCLAW_SCREEN_NAME || 'okuuclaw';
   const endpoint = process.env.OKUUCLAW_HEALTH_URL || 'http://127.0.0.1:18800/health';
@@ -58,7 +62,7 @@ const getOkuuClawStatus = async (): Promise<ModuleState> => {
     checkEndpoint(endpoint),
   ]);
   const preference = getModulePreference('okuu-claw');
-  const transition = transitions.get('okuu-claw');
+  const transition = this.transitions.get('okuu-claw');
   const status = transition || (!available ? 'unavailable' : processRunning && healthy !== false ? 'online' : processRunning ? 'degraded' : 'offline');
   return {
     id: 'okuu-claw',
@@ -69,14 +73,14 @@ const getOkuuClawStatus = async (): Promise<ModuleState> => {
     status,
     detail: !available ? `Command not found: ${command}` : processRunning ? healthy === false ? 'Process is running but health check failed' : 'Gateway is running' : 'Gateway is stopped',
     endpoint,
-    lastChangedAt: preference?.updatedAt ?? lastChangedAt.get('okuu-claw'),
+    lastChangedAt: preference?.updatedAt ?? this.lastChangedAt.get('okuu-claw'),
   };
 };
 
-const getOkuuWhisperStatus = async (): Promise<ModuleState> => {
+private getOkuuWhisperStatus = async (): Promise<ModuleState> => {
   const whisper = await getWhisperStatus();
   const preference = getModulePreference('okuu-whisper');
-  const transition = transitions.get('okuu-whisper');
+  const transition = this.transitions.get('okuu-whisper');
   return {
     id: 'okuu-whisper',
     name: 'OkuuWhisper',
@@ -86,25 +90,49 @@ const getOkuuWhisperStatus = async (): Promise<ModuleState> => {
     status: transition || (whisper.healthy ? 'online' : whisper.processRunning ? 'degraded' : 'offline'),
     detail: whisper.healthy ? 'Transcription server is healthy' : whisper.processRunning ? 'Process is running but health check failed' : 'Transcription server is stopped',
     endpoint: whisper.endpoint,
-    lastChangedAt: preference?.updatedAt ?? lastChangedAt.get('okuu-whisper'),
+    lastChangedAt: preference?.updatedAt ?? this.lastChangedAt.get('okuu-whisper'),
   };
 };
 
-const moduleStatus = {
-  'okuu-claw': getOkuuClawStatus,
-  'okuu-whisper': getOkuuWhisperStatus,
+private getConversationStatus = async (): Promise<ModuleState> => {
+  const preference = getModulePreference('conversation-mode');
+  const transition = this.transitions.get('conversation-mode');
+  const active = this.conversationRuntime.isActive();
+  return {
+    id: 'conversation-mode',
+    name: 'Conversation Mode',
+    description: 'Live voice and shared-screen collaboration workspace.',
+    enabled: preference?.enabled ?? active,
+    available: true,
+    status: transition || (active ? 'online' : 'offline'),
+    detail: active ? 'Conversation runtime is accepting sessions' : 'Conversation runtime is disabled',
+    lastChangedAt: preference?.updatedAt ?? this.lastChangedAt.get('conversation-mode'),
+  };
 };
 
-export const getModules = () => Promise.all(Object.values(moduleStatus).map(getStatus => getStatus()));
+private get moduleStatus() {
+  return {
+    'okuu-claw': this.getOkuuClawStatus,
+    'okuu-whisper': this.getOkuuWhisperStatus,
+    'conversation-mode': this.getConversationStatus,
+  };
+}
 
-export const setModuleEnabled = async (id: string, enabled: boolean) => {
-  if (!(id in moduleStatus)) throw new Error('Unknown module');
-  if (transitions.has(id)) throw new Error('Module transition already in progress');
-  transitions.set(id, enabled ? 'enabling' : 'disabling');
+getModules() {
+  return Promise.all(Object.values(this.moduleStatus).map(getStatus => getStatus()));
+}
+
+async setModuleEnabled(id: string, enabled: boolean) {
+  if (!(id in this.moduleStatus)) throw new Error('Unknown module');
+  if (this.transitions.has(id)) throw new Error('Module transition already in progress');
+  this.transitions.set(id, enabled ? 'enabling' : 'disabling');
 
   try {
     let success = false;
-    if (id === 'okuu-whisper') {
+    if (id === 'conversation-mode') {
+      await (enabled ? this.conversationRuntime.start() : this.conversationRuntime.stop());
+      success = this.conversationRuntime.isActive() === enabled;
+    } else if (id === 'okuu-whisper') {
       success = enabled ? await startWhisperServer() : await stopWhisperServer();
     } else {
       const session = process.env.OKUUCLAW_SCREEN_NAME || 'okuuclaw';
@@ -136,27 +164,30 @@ export const setModuleEnabled = async (id: string, enabled: boolean) => {
     }
 
     if (!success) throw new Error(`Failed to ${enabled ? 'enable' : 'disable'} module`);
-    lastChangedAt.set(id, Date.now());
+    this.lastChangedAt.set(id, Date.now());
     setModulePreference(id, enabled);
   } finally {
-    transitions.delete(id);
+    this.transitions.delete(id);
   }
 
-  return moduleStatus[id as keyof typeof moduleStatus]();
-};
+  const statuses = this.moduleStatus;
+  return statuses[id as keyof typeof statuses]();
+}
 
-export const reconcileModules = async () => {
-  for (const id of Object.keys(moduleStatus)) {
+async reconcileModules() {
+  for (const id of Object.keys(this.moduleStatus)) {
     const preference = getModulePreference(id);
     if (!preference) continue;
-    const status = await moduleStatus[id as keyof typeof moduleStatus]();
+    const statuses = this.moduleStatus;
+    const status = await statuses[id as keyof typeof statuses]();
     const running = status.status === 'online' || status.status === 'degraded';
     if (running !== preference.enabled) {
       try {
-        await setModuleEnabled(id, preference.enabled);
+        await this.setModuleEnabled(id, preference.enabled);
       } catch (error) {
         Logger.WARN(`Unable to reconcile module ${id}: ${error}`);
       }
     }
   }
-};
+}
+}

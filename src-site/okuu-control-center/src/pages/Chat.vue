@@ -10,20 +10,28 @@
             @close="sidebarOpen = false"
         />
 
-        <section class="chat-container">
+        <section class="chat-container" :class="{ 'conversation-mode': conversationMode }">
                 <header class="chat-toolbar" v-if="selectedSession">
                     <div class="toolbar-left">
                         <q-btn flat round dense icon="menu" class="mobile-menu" aria-label="Open conversations" @click="sidebarOpen = true" />
-                        <span class="toolbar-title">Chat</span>
+                        <span class="toolbar-title">{{ conversationMode ? 'Conversation Mode' : 'Chat' }}</span>
                     </div>
                     <div class="connection-pill" :class="statusColor">
                         <q-icon :name="statusIcon" size="16px" /> {{ statusMessage }}
                     </div>
                     <div class="toolbar-actions">
+                        <q-btn
+                            flat round dense
+                            :icon="conversationMode ? 'chat' : 'screen_share'"
+                            :color="conversationMode ? 'primary' : undefined"
+                            :aria-label="conversationMode ? 'Return to chat' : 'Enter Conversation Mode'"
+                            @click="toggleConversationMode"
+                        ><q-tooltip>{{ conversationMode ? 'Return to chat' : 'Enter Conversation Mode' }}</q-tooltip></q-btn>
                         <q-btn flat round dense icon="add" aria-label="New conversation" @click="addNewSession"><q-tooltip>New conversation</q-tooltip></q-btn>
                         <q-btn flat round dense icon="delete_outline" aria-label="Delete conversation" @click="removeSession(selectedSession.sessionId)"><q-tooltip>Delete conversation</q-tooltip></q-btn>
                     </div>
                 </header>
+                <SharedScreenPanel v-if="conversationMode" @state-changed="handleScreenState" />
                 <div class="chat-messages" v-if="selectedSession && selectedSession.messages"
                     ref="chatMessagesRef" v-scale @scroll.passive="handleHistoryScroll">
                     <div class="history-control" v-if="historyState?.hasMore">
@@ -45,6 +53,7 @@
                     <h1>What would you like to explore?</h1>
                     <p>Choose a saved conversation or start a new one whenever you are ready.</p>
                 </div>
+                <ObservationFeed v-if="conversationMode" :observations="observations" />
                 <ChatInput v-if="selectedSession" :loading="isLoadingResponse" :generating="isGenerating"
                     :disable-input="!selectedSession || (!isLoadingResponse && configLoading)"
                     @send="sendMessage" @stop="stopGeneration" @open-config="showConfigModal"
@@ -72,6 +81,9 @@ import { useAuthStore } from 'src/stores/auth.store';
 import { useToolsStore } from 'src/stores/tools.store';
 import { useRouter, useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
+import SharedScreenPanel from 'src/components/conversation/SharedScreenPanel.vue';
+import ObservationFeed from 'src/components/conversation/ObservationFeed.vue';
+import type { ConversationObservation } from 'src/types/conversation';
 
 
 
@@ -86,6 +98,8 @@ const { sessions, currentSession, isStreaming, isGenerating } = storeToRefs(sess
 const selectedSessionId = ref<string | undefined>(undefined);
 const sidebarOpen = ref(false);
 const chatMessagesRef = ref();
+const conversationMode = ref(false);
+const observations = ref<ConversationObservation[]>([]);
 
 // Config store refs
 const { stream, okuuPfp, toggleThinking, currentModel, modelList, configLoading } = storeToRefs(configStore);
@@ -169,10 +183,13 @@ watch(
 );
 
 onBeforeUnmount(() => {
+    socket.value?.off('conversation:observation', receiveObservation);
     socket.value?.disconnect();
 });
 
 const selectSession = async (sessionId: string) => {
+    conversationMode.value = false;
+    observations.value = [];
     if (socketIO.value) {
         socketIO.value.disconnectSocket();
         socketIO.value = null;
@@ -190,11 +207,51 @@ const selectSession = async (sessionId: string) => {
     scrollToBottom();
     socketIO.value = new SocketioService();
     socket.value = await socketIO.value.initializeSocket(sessionId, sessionStore);
+    socket.value.on('conversation:observation', receiveObservation);
+    socket.value.on('conversation:error', (error: { message?: string }) => {
+        $q.notify({ type: 'warning', message: error.message || 'Conversation Mode is unavailable.' });
+    });
     isLoadingSessionMessages.value = false;
 
     if (route.params.id !== sessionId) {
         router.replace({ path: `/chat/${sessionId}` });
     }
+};
+
+const receiveObservation = (observation: ConversationObservation) => {
+    if (observations.value.some(item => item.id === observation.id)) return;
+    observations.value.push(observation);
+    if (observations.value.length > 200) observations.value.shift();
+};
+
+const toggleConversationMode = () => {
+    if (conversationMode.value) {
+        conversationMode.value = false;
+        return;
+    }
+    if (!socket.value?.connected) {
+        $q.notify({ type: 'warning', message: 'Connect to OkuuAI before entering Conversation Mode.' });
+        return;
+    }
+    socket.value.timeout(5000).emit(
+        'conversation:join',
+        (error: Error | null, result?: { enabled: boolean; observations: ConversationObservation[] }) => {
+            if (error) {
+                $q.notify({ type: 'negative', message: 'Conversation Mode did not respond.' });
+                return;
+            }
+            if (!result?.enabled) {
+                $q.notify({ type: 'warning', message: 'Conversation Mode is disabled. An administrator can enable it under Modules.' });
+                return;
+            }
+            observations.value = result.observations;
+            conversationMode.value = true;
+        },
+    );
+};
+
+const handleScreenState = (state: { shared: boolean; application?: string }) => {
+    socket.value?.emit('conversation:screen-state', state);
 };
 
 const addNewSession = async () => {
@@ -416,6 +473,21 @@ watch(() => status.value, (status) => {
     background: var(--surface-0);
 }
 
+.chat-container.conversation-mode {
+    display: grid;
+    grid-template-areas:
+        "toolbar toolbar"
+        "screen screen"
+        "messages commentary"
+        "input commentary";
+    grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr);
+    grid-template-rows: auto minmax(250px, 1.25fr) minmax(170px, .75fr) auto;
+}
+
+.conversation-mode .chat-toolbar { grid-area: toolbar; }
+.conversation-mode .chat-messages { grid-area: messages; padding: .8rem 1rem; }
+.conversation-mode :deep(.chat-input) { grid-area: input; }
+
 .chat-page { display: flex; height: 100dvh; overflow: hidden; }
 
 .chat-messages {
@@ -518,5 +590,17 @@ watch(() => status.value, (status) => {
     .connection-pill { font-size: 0; padding: 0.5rem; }
     .connection-pill .q-icon { margin: 0; }
     .chat-messages { padding: 0.75rem 0.85rem 1.25rem; }
+}
+
+@media (max-width: 900px) {
+    .chat-container.conversation-mode {
+        display: grid;
+        overflow-y: auto;
+        grid-template-areas: "toolbar" "screen" "commentary" "messages" "input";
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(310px, auto) auto minmax(260px, 1fr) auto;
+    }
+    .conversation-mode .chat-toolbar { position: sticky; top: 0; z-index: 5; }
+    .conversation-mode .chat-messages { min-height: 260px; overflow-y: auto; }
 }
 </style>
