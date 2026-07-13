@@ -100,11 +100,12 @@ export const setupSockets = (server: HTTPServer, conversationRuntime: Conversati
             ack?.({ enabled: true, observations: conversationRuntime.getHistory(socket.data.user.id) });
         });
 
-        socket.on('conversation:screen-state', async (data: { shared?: boolean; application?: string }) => {
+        socket.on('conversation:screen-state', async (data: { shared?: boolean; application?: string; stream?: 'screen' | 'camera' }) => {
             if (!conversationSessionId || typeof data?.shared !== 'boolean') return;
             try {
                 const application = typeof data.application === 'string' ? data.application.slice(0, 100) : undefined;
-                await conversationRuntime.reportScreenState(String(socket.data.user.id), conversationSessionId, data.shared, application);
+                const stream = data.stream === 'camera' ? 'camera' : 'screen';
+                await conversationRuntime.reportScreenState(String(socket.data.user.id), conversationSessionId, data.shared, application, stream);
             } catch (error) {
                 socket.emit('conversation:error', {
                     message: error instanceof Error ? error.message : 'Unable to update screen state',

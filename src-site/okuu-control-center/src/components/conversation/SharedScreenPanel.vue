@@ -2,24 +2,41 @@
   <section class="screen-panel">
     <header>
       <div>
-        <span class="eyebrow">SHARED SCREEN</span>
-        <h2>{{ stream ? 'Previewing the selected screen' : 'Choose a screen to preview' }}</h2>
+        <span class="eyebrow">{{ activeMode ? (activeMode === 'camera' ? 'CAMERA' : 'SHARED SCREEN') : 'VISUAL INPUT' }}</span>
+        <h2 v-if="!stream">Choose a visual input to preview</h2>
+        <h2 v-else-if="activeMode === 'camera'">Previewing the camera</h2>
+        <h2 v-else>Previewing the selected screen</h2>
       </div>
-      <q-btn
-        no-caps
-        unelevated
-        :color="stream ? 'negative' : 'primary'"
-        :icon="stream ? 'stop_screen_share' : 'screen_share'"
-        :label="stream ? 'Stop sharing' : 'Share screen'"
-        @click="stream ? stopSharing() : startSharing()"
-      />
+      <div class="header-actions">
+        <q-btn-toggle
+          v-if="!stream"
+          v-model="mode"
+          no-caps
+          unelevated
+          dense
+          spread
+          class="source-toggle"
+          :options="[
+            { label: 'Screen', value: 'screen' },
+            { label: 'Camera', value: 'camera' },
+          ]"
+        />
+        <q-btn
+          no-caps
+          unelevated
+          :color="stream ? 'negative' : 'primary'"
+          :icon="stream ? 'stop_screen_share' : (mode === 'camera' ? 'videocam' : 'screen_share')"
+          :label="stream ? (activeMode === 'camera' ? 'Stop camera' : 'Stop sharing') : (mode === 'camera' ? 'Start camera' : 'Share screen')"
+          @click="stream ? stopSharing() : startCapture()"
+        />
+      </div>
     </header>
 
     <div class="screen-stage" :class="{ active: stream }">
       <video v-show="stream" ref="video" autoplay muted playsinline />
       <div v-if="!stream" class="screen-placeholder">
-        <div class="screen-glyph"><q-icon name="desktop_windows" size="42px" /></div>
-        <strong>No screen is being observed</strong>
+        <div class="screen-glyph"><q-icon :name="mode === 'camera' ? 'videocam' : 'desktop_windows'" size="42px" /></div>
+        <strong>{{ mode === 'camera' ? 'No camera is being observed' : 'No screen is being observed' }}</strong>
         <span>{{ unavailableReason || 'Sampled frames are analyzed in memory and are never persisted.' }}</span>
       </div>
       <div v-else class="privacy-label"><span></span> LIVE · AI VISION</div>
@@ -30,62 +47,69 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useQuasar } from 'quasar';
-import type { ScreenFrame } from 'src/types/conversation';
+import type { ScreenFrame, VisualStream } from 'src/types/conversation';
 
 const emit = defineEmits<{
-  stateChanged: [state: { shared: boolean; application?: string }];
+  stateChanged: [state: { shared: boolean; application?: string; stream?: VisualStream }];
   frame: [frame: ScreenFrame];
 }>();
 
 const $q = useQuasar();
 const video = ref<HTMLVideoElement>();
 const stream = ref<MediaStream>();
+const mode = ref<VisualStream>('screen');
+const activeMode = ref<VisualStream | undefined>(undefined);
 let captureTimer: ReturnType<typeof setInterval> | undefined;
 let lastSignature: Uint8ClampedArray | undefined;
-let application = 'shared screen';
+let application: string = 'shared screen';
 const unavailableReason = computed(() => {
-  if (!window.isSecureContext) return 'Screen sharing requires HTTPS or a localhost URL.';
-  if (!navigator.mediaDevices) return 'This embedded browser does not expose media capture. Open OkuuAI in a current desktop browser.';
-  if (!navigator.mediaDevices.getDisplayMedia) return 'This browser or webview does not implement screen capture.';
+  if (!window.isSecureContext) return 'Visual capture requires HTTPS or a localhost URL.';
+  if (!navigator.mediaDevices) return 'This embedded browser does not expose media capture. Open OkuuAI in a current browser.';
+  if (mode.value === 'camera' && !navigator.mediaDevices.getUserMedia) return 'This browser or webview does not implement camera capture.';
+  if (mode.value === 'screen' && !navigator.mediaDevices.getDisplayMedia) return 'This browser or webview does not implement screen capture (camera may still work).';
   return '';
 });
 
 const stopSharing = (notifyRuntime = true) => {
   const current = stream.value;
   stream.value = undefined;
+  activeMode.value = undefined;
   if (captureTimer) clearInterval(captureTimer);
   captureTimer = undefined;
   lastSignature = undefined;
   current?.getTracks().forEach(track => track.stop());
   if (video.value) video.value.srcObject = null;
-  if (notifyRuntime && current) emit('stateChanged', { shared: false });
+  if (notifyRuntime && current) emit('stateChanged', { shared: false, stream: mode.value });
 };
 
-const startSharing = async () => {
+const startCapture = async () => {
   if (unavailableReason.value) {
     $q.notify({ type: 'negative', message: unavailableReason.value });
     return;
   }
   try {
-    const selected = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 12 }, audio: false });
+    const selected = mode.value === 'camera'
+      ? await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+      : await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 12 }, audio: false });
     stream.value = selected;
+    activeMode.value = mode.value;
     if (video.value) video.value.srcObject = selected;
     const track = selected.getVideoTracks()[0];
     track?.addEventListener('ended', () => stopSharing(), { once: true });
-    const displaySurface = track?.getSettings().displaySurface;
-    application = displaySurface || 'shared screen';
-    emit('stateChanged', { shared: true, application });
+    application = mode.value === 'camera' ? 'camera' : (track?.getSettings().displaySurface || 'shared screen');
+    emit('stateChanged', { shared: true, application, stream: mode.value });
     captureTimer = setInterval(captureFrame, 3000);
     setTimeout(captureFrame, 800);
   } catch (error) {
+    const isCamera = mode.value === 'camera';
     const messages: Record<string, string> = {
-      NotAllowedError: 'Screen sharing permission was denied.',
-      NotReadableError: 'The operating system could not provide the selected screen.',
-      InvalidStateError: 'Screen sharing must be started from the active browser tab.',
-      AbortError: 'Screen sharing was cancelled before it could start.',
+      NotAllowedError: isCamera ? 'Camera permission was denied.' : 'Screen sharing permission was denied.',
+      NotReadableError: isCamera ? 'The camera could not be accessed.' : 'The operating system could not provide the selected screen.',
+      InvalidStateError: 'Capture must be started from the active browser tab.',
+      AbortError: isCamera ? 'Camera access was cancelled before it could start.' : 'Screen sharing was cancelled before it could start.',
     };
     const message = error instanceof DOMException ? messages[error.name] : undefined;
-    $q.notify({ type: 'negative', message: message || 'Unable to start screen sharing.' });
+    $q.notify({ type: 'negative', message: message || (isCamera ? 'Unable to start the camera.' : 'Unable to start screen sharing.') });
   }
 };
 
@@ -121,7 +145,7 @@ const captureFrame = () => {
   if (!context) return;
   context.drawImage(source, 0, 0, width, height);
   const base64 = canvas.toDataURL('image/jpeg', 0.68).split(',')[1];
-  if (base64) emit('frame', { capturedAt: Date.now(), mimeType: 'image/jpeg', base64, width, height, application });
+  if (base64) emit('frame', { capturedAt: Date.now(), mimeType: 'image/jpeg', base64, width, height, application, stream: mode.value });
 };
 
 onBeforeUnmount(() => stopSharing());
@@ -142,4 +166,9 @@ video { width: 100%; height: 100%; object-fit: contain; background: #080708; }
 .privacy-label { position: absolute; top: .65rem; right: .65rem; display: flex; align-items: center; gap: .4rem; padding: .35rem .55rem; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; color: #fff; background: rgba(12,10,11,.78); backdrop-filter: blur(8px); font-size: .58rem; font-weight: 800; letter-spacing: .08em; }
 .privacy-label span { width: 6px; height: 6px; border-radius: 50%; background: #ef6c62; box-shadow: 0 0 0 4px rgba(239,108,98,.16); }
 @media (max-width: 760px) { .screen-panel { padding: .8rem; } .screen-stage { min-height: 210px; } header :deep(.q-btn__content) { font-size: 0; } }
+.header-actions { display: flex; align-items: center; gap: .6rem; }
+.source-toggle { border: 1px solid var(--surface-border); border-radius: 10px; }
+.source-toggle :deep(.q-btn) { font-size: .72rem; font-weight: 700; }
+.source-toggle :deep(.q-btn[aria-pressed="true"]) { background: var(--accent-1); color: #08131a; }
+@media (max-width: 760px) { .header-actions { flex-direction: column; align-items: stretch; } }
 </style>

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 import { EventBus, type EventListener } from '../../events/event-bus';
 import { Logger } from '../../logger';
-import type { ConversationEvent, ConversationEvents, ConversationObservation, ObservationCategory, ScreenFrame } from './conversation.events';
+import type { ConversationEvent, ConversationEvents, ConversationObservation, ObservationCategory, ScreenFrame, VisualStream } from './conversation.events';
 import type { VisionProvider } from './vision.provider';
 
 const MAX_OBSERVATIONS = 200;
@@ -55,19 +55,23 @@ export class ConversationRuntime {
         this.screenContexts.clear();
     }
 
-    async reportScreenState(userId: string, sessionId: string, shared: boolean, application?: string) {
+    async reportScreenState(userId: string, sessionId: string, shared: boolean, application?: string, stream: VisualStream = 'screen') {
         if (!this.active) throw new Error('Conversation Mode is disabled');
         if (!shared) {
             this.screenContexts.delete(this.contextKey(userId, sessionId));
             this.frameStates.delete(this.contextKey(userId, sessionId));
         }
+        const label = stream === 'camera' ? 'Camera sharing' : 'Screen sharing';
         await this.publish(
             shared ? 'info' : 'warning',
-            shared ? 'Screen sharing started. Visual perception is active.' : 'Screen sharing stopped.',
+            shared ? `${label} started. Visual perception is active.` : `${label} stopped.`,
             'screen',
             application,
             shared ? 0.7 : 0.5,
             userId,
+            undefined,
+            undefined,
+            stream,
         );
     }
 
@@ -130,6 +134,7 @@ export class ConversationRuntime {
                 userId,
                 Date.now() - startedAt,
                 analysis.extractedText,
+                frame.stream,
             );
             this.screenContexts.set(key, observation);
         } catch (error) {
@@ -154,6 +159,7 @@ export class ConversationRuntime {
         userId?: string,
         latencyMs?: number,
         extractedText?: string,
+        stream?: VisualStream,
     ) {
         if (!this.active) throw new Error('Conversation Mode is disabled');
         const observation: ConversationObservation = {
@@ -162,6 +168,7 @@ export class ConversationRuntime {
             category,
             message,
             source,
+            stream,
             application,
             importance,
             latencyMs,

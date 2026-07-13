@@ -250,7 +250,7 @@ const toggleConversationMode = () => {
     );
 };
 
-const handleScreenState = (state: { shared: boolean; application?: string }) => {
+const handleScreenState = (state: { shared: boolean; application?: string; stream?: 'screen' | 'camera' }) => {
     socket.value?.emit('conversation:screen-state', state);
 };
 

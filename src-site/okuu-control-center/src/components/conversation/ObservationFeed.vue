@@ -19,7 +19,11 @@
         <div>
           <div class="observation-meta"><span>{{ observation.category }}</span><time>{{ formatTime(observation.timestamp) }}</time></div>
           <p>{{ observation.message }}</p>
-          <small v-if="observation.application">{{ observation.application }}</small>
+          <small v-if="observation.application || observation.stream">
+            <q-icon v-if="observation.stream === 'camera'" name="videocam" size="12px" class="source-icon" />
+            <q-icon v-else-if="observation.stream === 'screen'" name="desktop_windows" size="12px" class="source-icon" />
+            {{ observation.application || (observation.stream === 'camera' ? 'camera' : 'screen') }}
+          </small>
         </div>
       </article>
       <div v-if="filteredObservations.length === 0" class="empty-feed">
@@ -75,6 +79,7 @@ article.success .observation-icon { color: #75d4a5; background: rgba(117,212,165
 .observation-meta time { letter-spacing: 0; }
 p { margin: .28rem 0 0; color: var(--text-strong); font-size: .73rem; line-height: 1.45; }
 small { display: block; margin-top: .3rem; color: var(--text-muted); font-size: .6rem; }
+.source-icon { vertical-align: -2px; margin-right: 3px; }
 .empty-feed { display: grid; min-height: 180px; place-items: center; align-content: center; gap: .65rem; padding: 1.5rem; color: var(--text-muted); text-align: center; font-size: .7rem; line-height: 1.45; }
 @media (max-width: 900px) { .observation-feed { border-top: 1px solid var(--surface-border); border-left: 0; } .feed-list { max-height: 220px; } }
 </style>
