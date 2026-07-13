@@ -15,6 +15,7 @@ import { initRedis } from './langchain/redis';
 import { select } from '@inquirer/prompts';
 import { initOllamaInstance } from './chat';
 import { ensureWhisperServer } from './services/whisper-process.service';
+import { resolveMainModel } from './llm';
 
 dotenv.config();
 
@@ -96,6 +97,13 @@ export const init = async () =>
 
         // Inference backends are user-managed. Docker/Ollama/model downloads are optional setup steps.
         await initOllamaInstance();
+
+        try {
+            await resolveMainModel();
+            Logger.INFO(`Resolved main model: ${Core.model_name}`);
+        } catch (error) {
+            Logger.WARN(`Unable to resolve provider models during startup: ${error}`);
+        }
 
         await ensureWhisperServer();
 
