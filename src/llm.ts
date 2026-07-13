@@ -13,6 +13,7 @@ type GenerateOptions = {
     maxTokens?: number;
     temperature?: number;
     signal?: AbortSignal;
+    baseUrl?: string;
 };
 
 type GenerateChunk = { response: string };
@@ -153,11 +154,12 @@ function averageEmbeddings(embeddings: number[][]): number[] {
 }
 
 export const generateCompletion = async (options: GenerateOptions): Promise<GenerateResponse> => {
-    if (isOllamaProvider()) {
+    if (isOllamaProvider() && !options.baseUrl) {
         return Core.ollama_instance.generate(options as any) as unknown as Promise<GenerateResponse>;
     }
 
-    const response = await fetch(`${getBaseUrl()}/chat/completions`, {
+    const baseUrl = options.baseUrl || getBaseUrl();
+    const response = await fetch(`${baseUrl}/chat/completions`, {
         signal: options.signal,
         method: 'POST',
         headers: {
@@ -170,7 +172,7 @@ export const generateCompletion = async (options: GenerateOptions): Promise<Gene
             messages: getMessages(options),
             temperature: options.temperature ?? Core.model_settings.temperature,
             ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
-            chat_template_kwargs: { enable_thinking: options.think ?? Core.model_settings.think },
+            ...(options.baseUrl ? {} : { chat_template_kwargs: { enable_thinking: options.think ?? Core.model_settings.think } }),
         }),
     });
 

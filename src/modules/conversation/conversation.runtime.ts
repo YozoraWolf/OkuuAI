@@ -91,7 +91,7 @@ export class ConversationRuntime {
         const key = this.contextKey(userId, sessionId);
         const state = this.frameStates.get(key) || { inFlight: false, lastAcceptedAt: 0 };
         const now = Date.now();
-        const intervalMs = Number(process.env.VISION_ANALYSIS_INTERVAL_MS || 8000);
+        const intervalMs = Number(process.env.VISION_ANALYSIS_INTERVAL_MS || 4000);
         const hash = createHash('sha256').update(frame.base64).digest('hex');
         if (state.inFlight || now - state.lastAcceptedAt < intervalMs || state.lastHash === hash) return false;
 

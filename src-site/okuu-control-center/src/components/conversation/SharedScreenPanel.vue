@@ -75,7 +75,7 @@ const startSharing = async () => {
     const displaySurface = track?.getSettings().displaySurface;
     application = displaySurface || 'shared screen';
     emit('stateChanged', { shared: true, application });
-    captureTimer = setInterval(captureFrame, 9000);
+    captureTimer = setInterval(captureFrame, 3000);
     setTimeout(captureFrame, 800);
   } catch (error) {
     const messages: Record<string, string> = {
@@ -107,7 +107,7 @@ const captureFrame = () => {
       difference += Math.abs((signature[index + 1] ?? 0) - (lastSignature[index + 1] ?? 0));
       difference += Math.abs((signature[index + 2] ?? 0) - (lastSignature[index + 2] ?? 0));
     }
-    if (difference / (signature.length * 0.75 * 255) < 0.025) return;
+    if (difference / (signature.length * 0.75 * 255) < 0.015) return;
   }
   lastSignature = new Uint8ClampedArray(signature);
 
