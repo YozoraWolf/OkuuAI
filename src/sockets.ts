@@ -11,35 +11,39 @@ import type { JwtPayloadCustom } from './middleware/auth.middleware';
 import { ConversationRuntime } from './modules/conversation/conversation.runtime';
 import type { ConversationObservation, ScreenFrame } from './modules/conversation/conversation.events';
 
-const proactiveState = new Map<string, { lastAt: number; lastHash?: string }>();
+const proactiveState = new Map<string, { lastAt: number; lastHash?: string; inFlight?: boolean }>();
 
 /**
  * Decide whether Okuu should voice a comment about the current screen observation.
- * Gating is deliberately independent of the vision model's weak importance/category
- * signals: it fires on a cooldown + dedup + probability, and lets the model itself decide
- * (via the SKIP response) whether there is actually something worth saying.
+ * The vision model produces Okuu's opinion in the same call as the observation. This avoids
+ * a second LLM round trip and deterministically delivers each distinct, warranted comment.
  */
 function maybeProactiveComment(userId: string, sessionId: string, observation: ConversationObservation) {
-    if (!conversationRuntime.isActive() || observation.source !== 'perception' || !observation.message) return;
+    const comment = observation.comment?.trim();
+    if (!conversationRuntime.isActive() || observation.source !== 'perception' || !observation.message || !comment || /^SKIP[.!]?$/i.test(comment)) return;
 
-    const cooldownMs = Number(process.env.PROACTIVE_COMMENT_COOLDOWN_MS || 30000);
+    const cooldownMs = Number(process.env.PROACTIVE_COMMENT_COOLDOWN_MS || 12000);
     const state = proactiveState.get(userId) || { lastAt: 0 };
     const now = Date.now();
-    if (now - state.lastAt < cooldownMs) return;
+    if (state.inFlight || now - state.lastAt < cooldownMs) return;
 
-    const hash = createHash('sha256').update(observation.message).digest('hex');
+    const hash = createHash('sha256').update(comment).digest('hex');
     if (state.lastHash === hash) return; // Skip repeating the same observation.
-    if (Math.random() > Number(process.env.PROACTIVE_COMMENT_RATE || 0.6)) return;
-
-    state.lastAt = now;
-    state.lastHash = hash;
+    state.inFlight = true;
     proactiveState.set(userId, state);
 
     void proactiveScreenComment(
         sessionId,
         userId,
-        { message: observation.message, timestamp: observation.timestamp, extractedText: observation.extractedText },
-    ).catch(error => Logger.WARN(`Proactive screen comment failed: ${error}`));
+        { message: observation.message, timestamp: observation.timestamp, extractedText: observation.extractedText, stream: observation.stream },
+        comment,
+    ).then(sent => {
+        if (!sent) return;
+        state.lastAt = Date.now();
+        state.lastHash = hash;
+    }).catch(error => Logger.WARN(`Proactive screen comment failed: ${error}`)).finally(() => {
+        state.inFlight = false;
+    });
 }
 
 let io: Server;

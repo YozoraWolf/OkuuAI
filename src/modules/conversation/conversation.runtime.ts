@@ -95,7 +95,7 @@ export class ConversationRuntime {
         const key = this.contextKey(userId, sessionId);
         const state = this.frameStates.get(key) || { inFlight: false, lastAcceptedAt: 0 };
         const now = Date.now();
-        const intervalMs = Number(process.env.VISION_ANALYSIS_INTERVAL_MS || 4000);
+        const intervalMs = Number(process.env.VISION_ANALYSIS_INTERVAL_MS || 2500);
         const hash = createHash('sha256').update(frame.base64).digest('hex');
         if (state.inFlight || now - state.lastAcceptedAt < intervalMs || state.lastHash === hash) return false;
 
@@ -117,7 +117,7 @@ export class ConversationRuntime {
         try {
             const previous = this.screenContexts.get(key);
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), Number(process.env.VISION_TIMEOUT_MS || 120000));
+            const timeout = setTimeout(() => controller.abort(), Number(process.env.VISION_TIMEOUT_MS || 30000));
             let analysis;
             try {
                 analysis = await this.visionProvider!.analyze(frame, previous?.message, controller.signal);
@@ -135,6 +135,7 @@ export class ConversationRuntime {
                 Date.now() - startedAt,
                 analysis.extractedText,
                 frame.stream,
+                analysis.comment,
             );
             this.screenContexts.set(key, observation);
         } catch (error) {
@@ -160,6 +161,7 @@ export class ConversationRuntime {
         latencyMs?: number,
         extractedText?: string,
         stream?: VisualStream,
+        comment?: string,
     ) {
         if (!this.active) throw new Error('Conversation Mode is disabled');
         const observation: ConversationObservation = {
@@ -173,6 +175,7 @@ export class ConversationRuntime {
             importance,
             latencyMs,
             extractedText,
+            comment,
         };
         await this.eventBus.publish('ScreenObservation', {
             userId,

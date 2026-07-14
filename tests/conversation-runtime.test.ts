@@ -42,17 +42,25 @@ test('ConversationRuntime isolates user observations', async () => {
 
 test('ConversationRuntime analyzes frames and exposes session context', async () => {
     const visionProvider = {
-        analyze: async () => ({ observation: 'A build failed in the terminal.', category: 'error' as const, importance: 0.9, extractedText: 'Build failed' }),
+        analyze: async () => ({
+            observation: 'A build failed in the terminal.',
+            comment: 'That build failed; I would check the first TypeScript error.',
+            category: 'error' as const,
+            importance: 0.9,
+            extractedText: 'Build failed',
+        }),
     };
     const runtime = new ConversationRuntime(new EventBus<ConversationEvents>(), visionProvider);
     await runtime.start();
 
     const accepted = runtime.submitFrame('user-1', 'session-1', {
-        capturedAt: Date.now(), mimeType: 'image/jpeg', base64: 'frame-data', width: 640, height: 360,
+        capturedAt: Date.now(), mimeType: 'image/jpeg', base64: 'frame-data', width: 640, height: 360, stream: 'camera',
     });
     await new Promise(resolve => setTimeout(resolve, 10));
 
     assert.equal(accepted, true);
     assert.equal(runtime.getScreenContext('user-1', 'session-1')?.category, 'error');
+    assert.equal(runtime.getScreenContext('user-1', 'session-1')?.stream, 'camera');
+    assert.match(runtime.getScreenContext('user-1', 'session-1')?.comment || '', /build failed/);
     assert.equal(runtime.getScreenContext('user-2', 'session-1'), undefined);
 });

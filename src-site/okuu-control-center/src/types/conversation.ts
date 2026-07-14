@@ -13,6 +13,7 @@ export type ConversationObservation = {
   importance?: number;
   latencyMs?: number;
   extractedText?: string;
+  comment?: string;
 };
 
 export type ScreenFrame = {

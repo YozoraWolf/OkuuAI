@@ -98,8 +98,8 @@ const startCapture = async () => {
     track?.addEventListener('ended', () => stopSharing(), { once: true });
     application = mode.value === 'camera' ? 'camera' : (track?.getSettings().displaySurface || 'shared screen');
     emit('stateChanged', { shared: true, application, stream: mode.value });
-    captureTimer = setInterval(captureFrame, 3000);
-    setTimeout(captureFrame, 800);
+    captureTimer = setInterval(captureFrame, 2000);
+    setTimeout(captureFrame, 500);
   } catch (error) {
     const isCamera = mode.value === 'camera';
     const messages: Record<string, string> = {
@@ -135,7 +135,7 @@ const captureFrame = () => {
   }
   lastSignature = new Uint8ClampedArray(signature);
 
-  const scale = Math.min(1, 1024 / source.videoWidth, 640 / source.videoHeight);
+  const scale = Math.min(1, 768 / source.videoWidth, 512 / source.videoHeight);
   const width = Math.max(1, Math.round(source.videoWidth * scale));
   const height = Math.max(1, Math.round(source.videoHeight * scale));
   const canvas = document.createElement('canvas');
@@ -144,7 +144,7 @@ const captureFrame = () => {
   const context = canvas.getContext('2d');
   if (!context) return;
   context.drawImage(source, 0, 0, width, height);
-  const base64 = canvas.toDataURL('image/jpeg', 0.68).split(',')[1];
+  const base64 = canvas.toDataURL('image/jpeg', 0.58).split(',')[1];
   if (base64) emit('frame', { capturedAt: Date.now(), mimeType: 'image/jpeg', base64, width, height, application, stream: mode.value });
 };
 
@@ -165,10 +165,16 @@ video { width: 100%; height: 100%; object-fit: contain; background: #080708; }
 .screen-glyph { display: grid; width: 76px; height: 58px; place-items: center; border: 1px solid var(--surface-border); border-radius: 14px; color: var(--accent-1); background: var(--surface-1); }
 .privacy-label { position: absolute; top: .65rem; right: .65rem; display: flex; align-items: center; gap: .4rem; padding: .35rem .55rem; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; color: #fff; background: rgba(12,10,11,.78); backdrop-filter: blur(8px); font-size: .58rem; font-weight: 800; letter-spacing: .08em; }
 .privacy-label span { width: 6px; height: 6px; border-radius: 50%; background: #ef6c62; box-shadow: 0 0 0 4px rgba(239,108,98,.16); }
-@media (max-width: 760px) { .screen-panel { padding: .8rem; } .screen-stage { min-height: 210px; } header :deep(.q-btn__content) { font-size: 0; } }
 .header-actions { display: flex; align-items: center; gap: .6rem; }
 .source-toggle { border: 1px solid var(--surface-border); border-radius: 10px; }
 .source-toggle :deep(.q-btn) { font-size: .72rem; font-weight: 700; }
 .source-toggle :deep(.q-btn[aria-pressed="true"]) { background: var(--accent-1); color: #08131a; }
-@media (max-width: 760px) { .header-actions { flex-direction: column; align-items: stretch; } }
+@media (max-width: 760px) {
+  .screen-panel { padding: .65rem; }
+  header { align-items: stretch; flex-direction: column; gap: .55rem; margin-bottom: .55rem; }
+  h2 { font-size: .92rem; }
+  .header-actions { width: 100%; }
+  .source-toggle { flex: 1; }
+  .screen-stage { min-height: 0; border-radius: 13px; }
+}
 </style>

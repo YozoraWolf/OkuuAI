@@ -31,8 +31,19 @@
                         <q-btn flat round dense icon="delete_outline" aria-label="Delete conversation" @click="removeSession(selectedSession.sessionId)"><q-tooltip>Delete conversation</q-tooltip></q-btn>
                     </div>
                 </header>
-                <SharedScreenPanel v-if="conversationMode" @state-changed="handleScreenState" @frame="handleScreenFrame" />
+                <nav v-if="conversationMode" class="conversation-mobile-nav" aria-label="Conversation Mode panels">
+                    <q-btn flat no-caps icon="videocam" label="Camera" :class="{ active: conversationPanel === 'vision' }" @click="selectConversationPanel('vision')" />
+                    <q-btn flat no-caps icon="chat_bubble_outline" label="Chat" :class="{ active: conversationPanel === 'chat' }" @click="selectConversationPanel('chat')" />
+                    <q-btn flat no-caps icon="visibility" label="Notices" :class="{ active: conversationPanel === 'observations' }" @click="selectConversationPanel('observations')" />
+                </nav>
+                <SharedScreenPanel
+                    v-if="conversationMode"
+                    :class="{ 'mobile-panel-hidden': conversationPanel !== 'vision' }"
+                    @state-changed="handleScreenState"
+                    @frame="handleScreenFrame"
+                />
                 <div class="chat-messages" v-if="selectedSession && selectedSession.messages"
+                    :class="{ 'mobile-panel-hidden': conversationMode && conversationPanel !== 'chat' }"
                     ref="chatMessagesRef" v-scale @scroll.passive="handleHistoryScroll">
                     <div class="history-control" v-if="historyState?.hasMore">
                         <q-btn flat no-caps :loading="historyState.loadingOlder" label="Load earlier messages"
@@ -53,7 +64,11 @@
                     <h1>What would you like to explore?</h1>
                     <p>Choose a saved conversation or start a new one whenever you are ready.</p>
                 </div>
-                <ObservationFeed v-if="conversationMode" :observations="observations" />
+                <ObservationFeed
+                    v-if="conversationMode"
+                    :class="{ 'mobile-panel-hidden': conversationPanel !== 'observations' }"
+                    :observations="observations"
+                />
                 <ChatInput v-if="selectedSession" :loading="isLoadingResponse" :generating="isGenerating"
                     :disable-input="!selectedSession || (!isLoadingResponse && configLoading)"
                     @send="sendMessage" @stop="stopGeneration" @open-config="showConfigModal"
@@ -100,6 +115,7 @@ const sidebarOpen = ref(false);
 const chatMessagesRef = ref();
 const conversationMode = ref(false);
 const observations = ref<ConversationObservation[]>([]);
+const conversationPanel = ref<'vision' | 'chat' | 'observations'>('vision');
 
 // Config store refs
 const { stream, okuuPfp, toggleThinking, currentModel, modelList, configLoading } = storeToRefs(configStore);
@@ -184,6 +200,7 @@ watch(
 
 onBeforeUnmount(() => {
     socket.value?.off('conversation:observation', receiveObservation);
+    socket.value?.off('chat', receiveConversationMessage);
     socket.value?.disconnect();
 });
 
@@ -208,6 +225,7 @@ const selectSession = async (sessionId: string) => {
     socketIO.value = new SocketioService();
     socket.value = await socketIO.value.initializeSocket(sessionId, sessionStore);
     socket.value.on('conversation:observation', receiveObservation);
+    socket.value.on('chat', receiveConversationMessage);
     socket.value.on('conversation:error', (error: { message?: string }) => {
         $q.notify({ type: 'warning', message: error.message || 'Conversation Mode is unavailable.' });
     });
@@ -222,6 +240,17 @@ const receiveObservation = (observation: ConversationObservation) => {
     if (observations.value.some(item => item.id === observation.id)) return;
     observations.value.push(observation);
     if (observations.value.length > 200) observations.value.shift();
+};
+
+const receiveConversationMessage = (message: Message) => {
+    if (!conversationMode.value || !message.metadata?.proactive) return;
+    conversationPanel.value = 'chat';
+    void nextTick(scrollToBottom);
+};
+
+const selectConversationPanel = (panel: 'vision' | 'chat' | 'observations') => {
+    conversationPanel.value = panel;
+    if (panel === 'chat') void nextTick(scrollToBottom);
 };
 
 const toggleConversationMode = () => {
@@ -245,6 +274,7 @@ const toggleConversationMode = () => {
                 return;
             }
             observations.value = result.observations;
+            conversationPanel.value = 'vision';
             conversationMode.value = true;
         },
     );
@@ -495,6 +525,7 @@ watch(() => status.value, (status) => {
 .conversation-mode :deep(.chat-input) { grid-area: input; }
 .conversation-mode .screen-panel { min-height: 0; }
 .conversation-mode :deep(.observation-feed) { min-height: 0; }
+.conversation-mobile-nav { display: none; grid-area: nav; }
 
 .chat-page { display: flex; height: 100dvh; overflow: hidden; }
 
@@ -510,14 +541,6 @@ watch(() => status.value, (status) => {
         grid-template-columns: 1fr;
         grid-template-rows: auto minmax(160px, 38vh) minmax(0, 1fr) minmax(120px, 30vh) auto;
     }
-}
-
-/* Phones: tighten spacing and cap the preview/feed so the chat keeps the most room. */
-@media (max-width: 560px) {
-    .chat-container.conversation-mode {
-        grid-template-rows: auto minmax(150px, 34vh) minmax(0, 1fr) minmax(110px, 26vh) auto;
-    }
-    .conversation-mode .chat-messages { padding: .7rem .8rem; }
 }
 
 .chat-messages {
@@ -620,17 +643,41 @@ watch(() => status.value, (status) => {
     .connection-pill { font-size: 0; padding: 0.5rem; }
     .connection-pill .q-icon { margin: 0; }
     .chat-messages { padding: 0.75rem 0.85rem 1.25rem; }
-}
-
-@media (max-width: 900px) {
     .chat-container.conversation-mode {
-        display: grid;
-        overflow-y: auto;
-        grid-template-areas: "toolbar" "screen" "commentary" "messages" "input";
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-rows: auto minmax(310px, auto) auto minmax(260px, 1fr) auto;
+        overflow: hidden;
+        grid-template-areas: "toolbar" "nav" "content" "input";
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
     }
-    .conversation-mode .chat-toolbar { position: sticky; top: 0; z-index: 5; }
-    .conversation-mode .chat-messages { min-height: 260px; overflow-y: auto; }
+    .conversation-mobile-nav {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: .35rem;
+        padding: .4rem .55rem;
+        border-bottom: 1px solid var(--surface-border);
+        background: var(--surface-1);
+    }
+    .conversation-mobile-nav :deep(.q-btn) {
+        min-height: 42px;
+        border-radius: 11px;
+        color: var(--text-muted);
+        font-size: .7rem;
+    }
+    .conversation-mobile-nav :deep(.q-btn.active) {
+        color: var(--text-strong);
+        background: color-mix(in srgb, var(--accent-1) 18%, var(--surface-2));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-1) 38%, transparent);
+    }
+    .conversation-mode .screen-panel,
+    .conversation-mode .chat-messages,
+    .conversation-mode :deep(.observation-feed) {
+        grid-area: content;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+    }
+    .conversation-mode .chat-messages { padding: .75rem .85rem 1rem; overflow-y: auto; }
+    .conversation-mode :deep(.observation-feed) { border: 0; }
+    .conversation-mode :deep(.observation-feed .feed-list) { max-height: none; }
+    .conversation-mode .mobile-panel-hidden { display: none !important; }
 }
 </style>

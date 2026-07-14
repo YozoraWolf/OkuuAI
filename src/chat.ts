@@ -494,50 +494,51 @@ export const proactiveScreenComment = async (
     sessionId: string,
     ownerId: string | number,
     screenContext: ScreenCommentContext,
-): Promise<void> => {
-    const template = getProactivePromptTemplate();
-    if (!template) {
-        Logger.WARN('Proactive comment prompt is missing; skipping proactive comment.');
-        return;
-    }
-    if (!screenContext?.message) return;
+    prewrittenComment?: string,
+): Promise<boolean> => {
+    if (!screenContext?.message) return false;
 
     const screenSection = buildScreenContextSection(screenContext);
-    const prompt = template.replace(/\{\{\s*screen_observation\s*\}\}/g, screenSection.trim());
-
-    const resp = await generateCompletion({
-        prompt,
-        system: getProtectedSystemPrompt(),
-        model: Core.model_name,
-        maxTokens: Number(process.env.PROACTIVE_COMMENT_MAX_TOKENS || 160),
-        temperature: 0.7,
-        think: Core.model_settings.think,
-    });
-
-    const text = resp.response.trim();
-    if (!text || text.toUpperCase() === 'SKIP') return;
+    let text = prewrittenComment?.trim() || '';
+    if (!text) {
+        const template = getProactivePromptTemplate();
+        if (!template) {
+            Logger.WARN('Proactive comment prompt is missing; skipping proactive comment.');
+            return false;
+        }
+        const prompt = template.replace(/\{\{\s*screen_observation\s*\}\}/g, screenSection.trim());
+        const resp = await generateCompletion({
+            prompt,
+            system: getProtectedSystemPrompt(),
+            model: Core.model_name,
+            maxTokens: Number(process.env.PROACTIVE_COMMENT_MAX_TOKENS || 160),
+            temperature: 0.7,
+            think: Core.model_settings.think,
+        });
+        text = resp.response.trim();
+    }
+    if (!text || /^SKIP[.!]?$/i.test(text)) return false;
 
     const timestamp = Date.now();
+    const id = incrementMessagesCount();
     const reply: ChatMessage = {
-        id: incrementMessagesCount(),
+        id,
         type: 'assistant',
         user: Core.ai_name || 'Okuu',
         message: text,
         done: true,
+        stream: false,
         lang: 'en-US',
         sessionId,
         timestamp,
         memoryUser: 'okuu',
-        metadata: { proactive: true },
+        metadata: { proactive: true, vision: true, stream: screenContext.stream },
+        memoryKey: `vision-${timestamp}-${id}`,
     };
-
     io.to(sessionId).emit('chat', reply);
-
-    try {
-        await saveMemoryWithEmbedding(sessionId, text, 'okuu', 'statement', '', undefined, reply.metadata, timestamp, ownerId);
-    } catch (memoryError: any) {
-        Logger.ERROR(`Error saving proactive comment memory: ${memoryError?.message}`);
-    }
+    void saveMemoryWithEmbedding(sessionId, text, 'okuu', 'statement', '', undefined, reply.metadata, timestamp, ownerId)
+        .catch((memoryError: any) => Logger.ERROR(`Error saving proactive comment memory: ${memoryError?.message}`));
+    return true;
 };
 
 const buildScreenContextSection = (screenContext: {
