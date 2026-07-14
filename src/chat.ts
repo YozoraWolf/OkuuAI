@@ -492,7 +492,7 @@ const getProactivePromptTemplate = (): string => {
  */
 export const proactiveScreenComment = async (
     sessionId: string,
-    ownerId: string | number,
+    ownerId: number,
     screenContext: ScreenCommentContext,
     prewrittenComment?: string,
 ): Promise<boolean> => {

@@ -4,7 +4,8 @@ import { Server as HTTPServer } from "http";
 import { Core } from "./core";
 import { SESSION_ID, startSession } from "./langchain/memory/memory";
 import { Logger } from "./logger";
-import { handleUserInput, proactiveScreenComment } from "./chat";
+import { proactiveScreenComment } from "./chat";
+import { handleUserInput } from './console';
 import jwt from 'jsonwebtoken';
 import { doesSessionBelongToUser } from './langchain/memory/memory';
 import type { JwtPayloadCustom } from './middleware/auth.middleware';
@@ -18,9 +19,9 @@ const proactiveState = new Map<string, { lastAt: number; lastHash?: string; inFl
  * The vision model produces Okuu's opinion in the same call as the observation. This avoids
  * a second LLM round trip and deterministically delivers each distinct, warranted comment.
  */
-function maybeProactiveComment(userId: string, sessionId: string, observation: ConversationObservation) {
+function maybeProactiveComment(userId: string, ownerId: number, sessionId: string, observation: ConversationObservation) {
     const comment = observation.comment?.trim();
-    if (!conversationRuntime.isActive() || observation.source !== 'perception' || !observation.message || !comment || /^SKIP[.!]?$/i.test(comment)) return;
+    if (observation.source !== 'perception' || !observation.message || !comment || /^SKIP[.!]?$/i.test(comment)) return;
 
     const cooldownMs = Number(process.env.PROACTIVE_COMMENT_COOLDOWN_MS || 12000);
     const state = proactiveState.get(userId) || { lastAt: 0 };
@@ -34,7 +35,7 @@ function maybeProactiveComment(userId: string, sessionId: string, observation: C
 
     void proactiveScreenComment(
         sessionId,
-        userId,
+        ownerId,
         { message: observation.message, timestamp: observation.timestamp, extractedText: observation.extractedText, stream: observation.stream },
         comment,
     ).then(sent => {
@@ -98,7 +99,7 @@ export const setupSockets = (server: HTTPServer, conversationRuntime: Conversati
                 observingConversation = true;
                 conversationRuntime.subscribe(String(socket.data.user.id), observation => {
                     socket.emit('conversation:observation', observation);
-                    maybeProactiveComment(String(socket.data.user.id), conversationSessionId, observation);
+                    maybeProactiveComment(String(socket.data.user.id), socket.data.user.id, conversationSessionId, observation);
                 }, conversationSubscriptions.signal);
             }
             ack?.({ enabled: true, observations: conversationRuntime.getHistory(socket.data.user.id) });
