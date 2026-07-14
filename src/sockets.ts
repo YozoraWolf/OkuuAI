@@ -12,7 +12,22 @@ import type { JwtPayloadCustom } from './middleware/auth.middleware';
 import { ConversationRuntime } from './modules/conversation/conversation.runtime';
 import type { ConversationObservation, ScreenFrame } from './modules/conversation/conversation.events';
 
-const proactiveState = new Map<string, { lastAt: number; lastHash?: string; inFlight?: boolean }>();
+const proactiveState = new Map<string, { lastAt: number; lastHash?: string; lastComment?: string; inFlight?: boolean }>();
+const commentStopWords = new Set(['about', 'after', 'again', 'also', 'because', 'being', 'could', 'from', 'have', 'into', 'just', 'like', 'looks', 'really', 'that', 'their', 'there', 'these', 'this', 'through', 'very', 'what', 'when', 'with', 'would', 'your']);
+
+const contentWords = (text: string) => new Set(
+    (text.toLowerCase().match(/[a-z0-9']{3,}/g) || []).filter(word => !commentStopWords.has(word)),
+);
+
+const textSimilarity = (left: string, right: string) => {
+    const leftWords = contentWords(left);
+    const rightWords = contentWords(right);
+    const denominator = Math.min(leftWords.size, rightWords.size);
+    if (!denominator) return 0;
+    let shared = 0;
+    leftWords.forEach(word => { if (rightWords.has(word)) shared += 1; });
+    return shared / denominator;
+};
 
 /**
  * Decide whether Okuu should voice a comment about the current screen observation.
@@ -23,10 +38,15 @@ function maybeProactiveComment(userId: string, ownerId: number, sessionId: strin
     const comment = observation.comment?.trim();
     if (observation.source !== 'perception' || !observation.message || !comment || /^SKIP[.!]?$/i.test(comment)) return;
 
-    const cooldownMs = Number(process.env.PROACTIVE_COMMENT_COOLDOWN_MS || 12000);
+    const cooldownMs = Number(process.env.PROACTIVE_COMMENT_COOLDOWN_MS || 30000);
+    const importanceThreshold = Number(process.env.PROACTIVE_COMMENT_IMPORTANCE || 0.72);
     const state = proactiveState.get(userId) || { lastAt: 0 };
     const now = Date.now();
     if (state.inFlight || now - state.lastAt < cooldownMs) return;
+    if (observation.category === 'info' && (observation.importance || 0) < importanceThreshold) return;
+    if (!/^(?:i\b|i['’](?:d|m|ve)\b|honestly\b|you\b|let['’]s\b)/i.test(comment) || /^i see\b/i.test(comment)) return;
+    if (textSimilarity(comment, observation.message) >= 0.55) return;
+    if (state.lastComment && textSimilarity(comment, state.lastComment) >= 0.65) return;
 
     const hash = createHash('sha256').update(comment).digest('hex');
     if (state.lastHash === hash) return; // Skip repeating the same observation.
@@ -42,6 +62,7 @@ function maybeProactiveComment(userId: string, ownerId: number, sessionId: strin
         if (!sent) return;
         state.lastAt = Date.now();
         state.lastHash = hash;
+        state.lastComment = comment;
     }).catch(error => Logger.WARN(`Proactive screen comment failed: ${error}`)).finally(() => {
         state.inFlight = false;
     });

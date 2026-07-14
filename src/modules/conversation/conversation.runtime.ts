@@ -120,7 +120,10 @@ export class ConversationRuntime {
             const timeout = setTimeout(() => controller.abort(), Number(process.env.VISION_TIMEOUT_MS || 30000));
             let analysis;
             try {
-                analysis = await this.visionProvider!.analyze(frame, previous?.message, controller.signal);
+                const previousContext = previous
+                    ? `Observation: ${previous.message}\nComment: ${previous.comment || 'SKIP'}`
+                    : undefined;
+                analysis = await this.visionProvider!.analyze(frame, previousContext, controller.signal);
             } finally {
                 clearTimeout(timeout);
             }
