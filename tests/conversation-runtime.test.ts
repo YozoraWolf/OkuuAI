@@ -77,6 +77,37 @@ test('ConversationRuntime analyzes frames and exposes session context', async ()
     assert.equal(runtime.getScreenContext('user-2', 'session-1'), undefined);
 });
 
+test('ConversationRuntime suppresses semantically repeated periodic observations', async () => {
+    let call = 0;
+    const visionProvider = {
+        analyze: async () => {
+            call += 1;
+            return {
+                observation: call === 1
+                    ? 'The image shows a social media post featuring a 7-Eleven sign and user interaction options.'
+                    : 'The image displays a social media post featuring a 7-Eleven sign and user interaction panel.',
+                comment: 'SKIP',
+                category: 'info' as const,
+                importance: 0.7,
+            };
+        },
+    };
+    const runtime = new ConversationRuntime(new EventBus<ConversationEvents>(), visionProvider);
+    await runtime.start();
+    runtime.submitFrame('user-1', 'session-1', {
+        capturedAt: 1000, mimeType: 'image/jpeg', base64: 'first-frame', width: 640, height: 360, stream: 'screen',
+    });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    runtime.submitFrame('user-1', 'session-1', {
+        capturedAt: 2000, mimeType: 'image/jpeg', base64: 'second-frame', width: 640, height: 360, stream: 'screen',
+    }, true);
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    const perceptionHistory = runtime.getHistory('user-1', 'session-1').filter(item => item.source === 'perception');
+    assert.equal(call, 2);
+    assert.equal(perceptionHistory.length, 1);
+});
+
 test('ConversationRuntime queues a forced frame and waits for that exact visual context', async () => {
     const analyzedFrames: string[] = [];
     const visionProvider = {

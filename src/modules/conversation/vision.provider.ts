@@ -43,7 +43,7 @@ export class LocalVisionProvider implements VisionProvider {
 
     private async complete(prompt: string, frame: ScreenFrame, signal?: AbortSignal) {
         const model = process.env.VISION_MODEL || 'redule26/huihui_ai_qwen2.5-vl-7b-abliterated:latest';
-        const maxTokens = Number(process.env.VISION_MAX_TOKENS || 180);
+        const maxTokens = Number(process.env.VISION_MAX_TOKENS || 220);
         if ((process.env.VISION_PROVIDER || 'openai-compatible').toLowerCase() === 'ollama') {
             const baseUrl = (process.env.VISION_BASE_URL || 'http://127.0.0.1:11434').replace(/\/v1\/?$/, '').replace(/\/$/, '');
             const response = await fetch(`${baseUrl}/api/chat`, {
@@ -90,7 +90,7 @@ export class LocalVisionProvider implements VisionProvider {
                     observation: String(parsed.observation || '').trim().slice(0, 600),
                     category,
                     importance: Math.max(0, Math.min(1, Number(parsed.importance) || 0.5)),
-                    extractedText: String(parsed.extractedText || '').trim().slice(0, 1200) || undefined,
+                    extractedText: this.cleanExtractedText(String(parsed.extractedText || '')),
                     comment: String(parsed.comment || '').trim().slice(0, 400) || undefined,
                     contextLabel: String(parsed.contextLabel || '').trim().slice(0, 120) || undefined,
                     contextConfidence: Math.max(0, Math.min(1, Number(parsed.contextConfidence) || 0)),
@@ -100,9 +100,44 @@ export class LocalVisionProvider implements VisionProvider {
                     researchDepth: parsed.researchDepth === 'concrete' ? 'concrete' : 'simple',
                 };
             } catch {
-                // Fall through to a text observation when a model adds prose around malformed JSON.
+                // Recover complete fields from truncated JSON (usually caused by runaway OCR).
             }
         }
+        const recoveredObservation = this.extractStringField(cleaned, 'observation');
+        if (recoveredObservation) {
+            const recoveredCategory = this.extractStringField(cleaned, 'category') as ObservationCategory | undefined;
+            const importance = Number(cleaned.match(/"importance"\s*:\s*([0-9.]+)/)?.[1]);
+            return {
+                observation: recoveredObservation.slice(0, 600),
+                comment: this.extractStringField(cleaned, 'comment')?.slice(0, 400),
+                category: recoveredCategory && categories.has(recoveredCategory) ? recoveredCategory : 'info',
+                importance: Math.max(0, Math.min(1, importance || 0.5)),
+                extractedText: this.cleanExtractedText(this.extractStringField(cleaned, 'extractedText') || ''),
+                contextLabel: this.extractStringField(cleaned, 'contextLabel')?.slice(0, 120),
+                contextConfidence: Math.max(0, Math.min(1, Number(cleaned.match(/"contextConfidence"\s*:\s*([0-9.]+)/)?.[1]) || 0)),
+            };
+        }
         return { observation: cleaned.slice(0, 600), category: 'info', importance: 0.5 };
+    }
+
+    private extractStringField(response: string, field: string) {
+        const match = response.match(new RegExp(`"${field}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`));
+        if (!match?.[1]) return undefined;
+        try {
+            return JSON.parse(`"${match[1]}"`) as string;
+        } catch {
+            return match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+        }
+    }
+
+    private cleanExtractedText(value: string) {
+        const seen = new Set<string>();
+        const unique = value.split(/\r?\n/).map(line => line.trim()).filter(line => {
+            const normalized = line.toLowerCase();
+            if (!normalized || seen.has(normalized)) return false;
+            seen.add(normalized);
+            return true;
+        });
+        return unique.join('\n').slice(0, 400) || undefined;
     }
 }

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 import { EventBus, type EventListener } from '../../events/event-bus';
 import { Logger } from '../../logger';
-import type { ConversationEvent, ConversationEvents, ConversationObservation, ObservationCategory, ScreenFrame, VisualStream } from './conversation.events';
+import type { ConversationEvent, ConversationEvents, ConversationObservation, ConversationResearchContext, ObservationCategory, ScreenFrame, VisualStream } from './conversation.events';
 import type { ConversationResearchProvider } from './context-research.service';
 import type { VisionProvider } from './vision.provider';
 
@@ -218,6 +218,22 @@ export class ConversationRuntime {
             }
             if (!analysis.observation || !this.active || state.cancelled) return;
             const matchingResearch = sameResearchTopic(analysis.contextLabel, research?.topic) ? research : undefined;
+            const researchTask = analysis.contextLabel
+                ? this.researchProvider?.observe(userId, sessionId, {
+                    topic: analysis.contextLabel,
+                    focus: analysis.researchFocus,
+                    confidence: analysis.contextConfidence,
+                    depth: analysis.researchDepth,
+                    observation: analysis.observation,
+                })
+                : undefined;
+            const latencyMs = Date.now() - startedAt;
+            if (!frame.query && previous && this.isDuplicateObservation(previous, analysis)) {
+                previous.capturedAt = frame.capturedAt;
+                previous.latencyMs = latencyMs;
+                this.attachResearchResult(key, userId, sessionId, researchTask);
+                return;
+            }
             const observation = await this.publish(
                 analysis.category,
                 analysis.observation,
@@ -225,7 +241,7 @@ export class ConversationRuntime {
                 frame.application,
                 analysis.importance,
                 userId,
-                Date.now() - startedAt,
+                latencyMs,
                 analysis.extractedText,
                 frame.stream,
                 analysis.comment,
@@ -236,29 +252,7 @@ export class ConversationRuntime {
                 sessionId,
             );
             this.screenContexts.set(key, observation);
-            if (analysis.contextLabel) {
-                const researchTask = this.researchProvider?.observe(userId, sessionId, {
-                    topic: analysis.contextLabel,
-                    focus: analysis.researchFocus,
-                    confidence: analysis.contextConfidence,
-                    depth: analysis.researchDepth,
-                    observation: analysis.observation,
-                });
-                if (researchTask) void researchTask.then(async updatedResearch => {
-                    const current = this.screenContexts.get(key);
-                    let changed = false;
-                    if (updatedResearch && current && sameResearchTopic(current.contextLabel, updatedResearch.topic)) {
-                        current.research = updatedResearch;
-                        changed = true;
-                    }
-                    const approvalRequired = this.researchProvider?.getPendingApproval?.(userId, sessionId);
-                    if (current && current.researchApprovalRequired !== approvalRequired) {
-                        current.researchApprovalRequired = approvalRequired;
-                        changed = true;
-                    }
-                    if (current && changed) await this.eventBus.publish('ScreenObservation', { userId, sessionId, observation: current });
-                }).catch(error => Logger.WARN(`[ConversationResearch] Observation processing failed: ${error}`));
-            }
+            this.attachResearchResult(key, userId, sessionId, researchTask);
         } catch (error) {
             Logger.WARN(`Screen perception failed: ${error}`);
             if (Date.now() - (state.lastErrorAt || 0) > 60000 && this.active) {
@@ -273,6 +267,64 @@ export class ConversationRuntime {
             state.pendingFrame = undefined;
             if (pendingFrame && this.active && !state.cancelled) this.submitFrame(userId, sessionId, pendingFrame, true);
         }
+    }
+
+    private attachResearchResult(
+        key: string,
+        userId: string,
+        sessionId: string,
+        researchTask?: Promise<ConversationResearchContext | undefined>,
+    ) {
+        if (!researchTask) return;
+        void researchTask.then(async updatedResearch => {
+            const current = this.screenContexts.get(key);
+            let changed = false;
+            if (
+                updatedResearch
+                && current
+                && sameResearchTopic(current.contextLabel, updatedResearch.topic)
+                && current.research?.updatedAt !== updatedResearch.updatedAt
+            ) {
+                current.research = updatedResearch;
+                changed = true;
+            }
+            const approvalRequired = this.researchProvider?.getPendingApproval?.(userId, sessionId);
+            if (current && current.researchApprovalRequired !== approvalRequired) {
+                current.researchApprovalRequired = approvalRequired;
+                changed = true;
+            }
+            if (current && changed) await this.eventBus.publish('ScreenObservation', { userId, sessionId, observation: current });
+        }).catch(error => Logger.WARN(`[ConversationResearch] Observation processing failed: ${error}`));
+    }
+
+    private isDuplicateObservation(previous: ConversationObservation, analysis: {
+        observation: string;
+        category: ObservationCategory;
+        importance: number;
+        extractedText?: string;
+        contextLabel?: string;
+    }) {
+        if (previous.category !== analysis.category) return false;
+        if (Math.abs((previous.importance || 0.5) - (analysis.importance || 0.5)) > 0.2) return false;
+        if (analysis.contextLabel && previous.contextLabel && !sameResearchTopic(previous.contextLabel, analysis.contextLabel)) return false;
+        if (
+            ['warning', 'error'].includes(analysis.category)
+            && analysis.extractedText
+            && previous.extractedText
+            && analysis.extractedText !== previous.extractedText
+        ) return false;
+
+        const ignored = new Set(['about', 'display', 'displayed', 'displays', 'featuring', 'image', 'interface', 'screen', 'showing', 'shown', 'shows', 'that', 'the', 'this', 'visible', 'with']);
+        const words = (value: string) => new Set(
+            (value.toLowerCase().match(/[a-z0-9]+/g) || []).filter(word => word.length > 2 && !ignored.has(word)),
+        );
+        const previousWords = words(previous.message);
+        const currentWords = words(analysis.observation);
+        const denominator = Math.min(previousWords.size, currentWords.size);
+        if (!denominator) return previous.message.trim().toLowerCase() === analysis.observation.trim().toLowerCase();
+        let shared = 0;
+        previousWords.forEach(word => { if (currentWords.has(word)) shared += 1; });
+        return shared / denominator >= Number(process.env.VISION_OBSERVATION_SIMILARITY || 0.6);
     }
 
     async publish(
