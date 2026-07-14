@@ -128,8 +128,7 @@ export class EnhancedToolSystem {
                     type: "object",
                     properties: {
                         query: { type: "string", description: "Search query" },
-                        max_results: { type: "number", description: "Maximum number of results", default: 3 },
-                        provider: { type: "string", description: "Search provider preference: auto, duckduckgo, or tavily", default: "auto" }
+                        max_results: { type: "number", description: "Maximum number of results", default: 3 }
                     },
                     required: ["query"]
                 },
@@ -401,11 +400,13 @@ export class EnhancedToolSystem {
     private async webSearch(params: { query: string; location?: string; max_results?: number; provider?: 'auto' | 'duckduckgo' | 'tavily' }): Promise<ToolResult> {
         const maxResults = params.max_results || 5;
         const isImageSearch = params.query.toLowerCase().includes('images') || params.query.toLowerCase().includes('picture') || params.query.toLowerCase().includes('photo');
-        const preferredProvider = params.provider || 'auto';
+        // DuckDuckGo is the safe/free default. Tavily is only used by callers that explicitly
+        // request it after applying their own concrete-information and credit-budget policy.
+        const preferredProvider = params.provider || 'duckduckgo';
 
         // Try Tavily first if both package and API key are available
         const tavilyApiKey = process.env.TAVILY_API_KEY;
-        if (preferredProvider !== 'duckduckgo' && this.tavilyAvailable && tavilyApiKey && tavilyModule) {
+        if (preferredProvider === 'tavily' && this.tavilyAvailable && tavilyApiKey && tavilyModule) {
             try {
                 Logger.INFO(`Using Tavily for search: "${params.query}"`);
                 const { tavily } = tavilyModule;

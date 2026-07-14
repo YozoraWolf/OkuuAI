@@ -35,6 +35,7 @@ type ResearchState = {
     pendingApproval?: string;
     approvedTopics: Set<string>;
     deniedTopics: Set<string>;
+    tavilySearches: number;
 };
 
 type ResearchSearch = (query: string, provider: 'duckduckgo' | 'tavily') => Promise<ToolResult>;
@@ -42,6 +43,7 @@ type ResearchStore = {
     hGetAll(key: string): Promise<Record<string, string>>;
     hSet(key: string, data: Record<string, string>): Promise<unknown>;
     expire(key: string, seconds: number): Promise<unknown>;
+    incr(key: string): Promise<number>;
 };
 
 const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -138,6 +140,7 @@ export class WebContextResearchService implements ConversationResearchProvider {
             state.observations = [];
             state.loadedTopics.clear();
             state.pendingApproval = undefined;
+            state.tavilySearches = 0;
             if (state.current && !sameTopic(state.current.topic, topic)) {
                 state.current = undefined;
                 state.lastSearchAt = 0;
@@ -199,8 +202,14 @@ export class WebContextResearchService implements ConversationResearchProvider {
             && ['items', 'builds', 'quests', 'troubleshooting'].includes(focus)
             && (process.env.CONVERSATION_RESEARCH_TAVILY_ENABLED || 'true').toLowerCase() === 'true';
         try {
-            Logger.INFO(`[ConversationResearch] Researching "${stableTopic}" with query "${query}"`);
-            const result = await this.searchWithTimeout(query, concreteAllowed ? 'tavily' : 'duckduckgo');
+            const maxTavilyPerTopic = Math.max(0, Math.min(3, Number(process.env.CONVERSATION_RESEARCH_TAVILY_MAX_PER_TOPIC || 1)));
+            const useTavily = concreteAllowed
+                && state.tavilySearches < maxTavilyPerTopic
+                && await this.reserveTavilySearch(userId);
+            if (useTavily) state.tavilySearches += 1;
+            const provider = useTavily ? 'tavily' : 'duckduckgo';
+            Logger.INFO(`[ConversationResearch] Researching "${stableTopic}" via ${provider} with query "${query}"`);
+            const result = await this.searchWithTimeout(query, provider);
             if (this.states.get(stateKey) !== state || state.generation !== generation || !sameTopic(state.candidate || '', stableTopic)) {
                 return this.get(userId, sessionId);
             }
@@ -246,6 +255,7 @@ export class WebContextResearchService implements ConversationResearchProvider {
                 generation: 0,
                 approvedTopics: new Set(),
                 deniedTopics: new Set(),
+                tavilySearches: 0,
             };
             this.states.set(key, state);
         }
@@ -331,6 +341,27 @@ export class WebContextResearchService implements ConversationResearchProvider {
         searches.push(now);
         this.userSearches.set(userId, searches);
         return true;
+    }
+
+    private async reserveTavilySearch(userId: string) {
+        try {
+            const configuredMax = Number(process.env.CONVERSATION_RESEARCH_TAVILY_MAX_PER_DAY || 2);
+            const maxPerDay = Number.isFinite(configuredMax) ? Math.max(0, Math.min(20, configuredMax)) : 2;
+            if (maxPerDay === 0) return false;
+            const day = new Date().toISOString().slice(0, 10);
+            const key = `conversationResearchBudget:${userId}:${day}:tavily`;
+            const store = this.getStore();
+            const count = await store.incr(key);
+            if (count === 1) await store.expire(key, 172800);
+            if (count > maxPerDay) {
+                Logger.INFO(`[ConversationResearch] Daily Tavily budget exhausted for user ${userId}; using DuckDuckGo.`);
+                return false;
+            }
+            return true;
+        } catch (error) {
+            Logger.WARN(`[ConversationResearch] Could not reserve Tavily budget; using DuckDuckGo: ${error}`);
+            return false;
+        }
     }
 
     private searchWithTimeout(query: string, provider: 'duckduckgo' | 'tavily') {

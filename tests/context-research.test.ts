@@ -4,12 +4,18 @@ import { WebContextResearchService } from '../src/modules/conversation/context-r
 
 const createStore = () => {
     const records = new Map<string, Record<string, string>>();
+    const counters = new Map<string, number>();
     return {
         records,
         store: {
             hGetAll: async (key: string) => records.get(key) || {},
             hSet: async (key: string, data: Record<string, string>) => { records.set(key, data); },
             expire: async () => 1,
+            incr: async (key: string) => {
+                const value = (counters.get(key) || 0) + 1;
+                counters.set(key, value);
+                return value;
+            },
         },
     };
 };
