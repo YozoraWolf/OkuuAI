@@ -18,6 +18,7 @@ const reprompt = () => {
 };
 
 const clearLine = () => {
+    if (!stdout.isTTY) return;
     stdout.clearLine(0);
     stdout.cursorTo(0);
 };
@@ -71,8 +72,13 @@ export const handleUserInput = async (line: string, msg: ChatMessage) => {
         console.log('\x1b[32mOkuu:\x1b[0m ' + resp.message);
 };
 
-export const initConsole = async () =>
-    new Promise<void>((resolve) => {
+export const initConsole = async () => {
+    if (!process.stdin.isTTY || !stdout.isTTY) {
+        Logger.INFO('Interactive console disabled (no TTY).');
+        return;
+    }
+
+    return new Promise<void>((resolve) => {
 
         rl = readline.createInterface({
             input: process.stdin,
@@ -112,6 +118,7 @@ export const initConsole = async () =>
 
         resolve();
     });
+};
 
 // TODO: find out where that "Terminated is coming from"
 export const exitOkuuAI = async () => {
