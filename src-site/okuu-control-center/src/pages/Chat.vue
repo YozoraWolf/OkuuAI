@@ -118,6 +118,7 @@ const sharedScreenRef = ref<InstanceType<typeof SharedScreenPanel>>();
 const conversationMode = ref(false);
 const observations = ref<ConversationObservation[]>([]);
 const conversationPanel = ref<'vision' | 'chat' | 'observations'>('vision');
+const researchApprovalPrompts = new Set<string>();
 
 // Config store refs
 const { stream, okuuPfp, toggleThinking, currentModel, modelList, configLoading } = storeToRefs(configStore);
@@ -210,6 +211,7 @@ onBeforeUnmount(() => {
 const selectSession = async (sessionId: string) => {
     conversationMode.value = false;
     observations.value = [];
+    researchApprovalPrompts.clear();
     if (socketIO.value) {
         socketIO.value.disconnectSocket();
         socketIO.value = null;
@@ -241,9 +243,24 @@ const selectSession = async (sessionId: string) => {
 };
 
 const receiveObservation = (observation: ConversationObservation) => {
-    if (observations.value.some(item => item.id === observation.id)) return;
-    observations.value.push(observation);
+    const existingIndex = observations.value.findIndex(item => item.id === observation.id);
+    if (existingIndex >= 0) observations.value.splice(existingIndex, 1, observation);
+    else observations.value.push(observation);
     if (observations.value.length > 200) observations.value.shift();
+    const topic = observation.researchApprovalRequired;
+    if (!topic || researchApprovalPrompts.has(topic)) return;
+    researchApprovalPrompts.add(topic);
+    $q.dialog({
+        title: 'Allow contextual research?',
+        message: `Okuu recognized “${topic}”. Allow web research so she can learn the context and offer better comments and tips? Simple research uses DuckDuckGo; Tavily is reserved for concrete details.`,
+        ok: { label: 'Allow research', color: 'primary' },
+        cancel: { label: 'Not now', flat: true },
+        persistent: true,
+    }).onOk(() => {
+        socket.value?.emit('conversation:research-consent', { topic, approved: true });
+    }).onCancel(() => {
+        socket.value?.emit('conversation:research-consent', { topic, approved: false });
+    });
 };
 
 const receiveFrameRequest = (_request: { requestedAt: number }, acknowledge: (frame?: ScreenFrame) => void) => {

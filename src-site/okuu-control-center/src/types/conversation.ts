@@ -2,6 +2,13 @@ export type ObservationCategory = 'info' | 'suggestion' | 'warning' | 'error' | 
 
 export type VisualStream = 'screen' | 'camera';
 
+export type ConversationResearchContext = {
+  topic: string;
+  summary: string;
+  sources: { title: string; url: string }[];
+  updatedAt: number;
+};
+
 export type ConversationObservation = {
   id: string;
   timestamp: number;
@@ -16,6 +23,9 @@ export type ConversationObservation = {
   comment?: string;
   capturedAt?: number;
   requestedVisualContext?: boolean;
+  contextLabel?: string;
+  research?: ConversationResearchContext;
+  researchApprovalRequired?: string;
 };
 
 export type ScreenFrame = {

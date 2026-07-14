@@ -128,7 +128,8 @@ export class EnhancedToolSystem {
                     type: "object",
                     properties: {
                         query: { type: "string", description: "Search query" },
-                        max_results: { type: "number", description: "Maximum number of results", default: 3 }
+                        max_results: { type: "number", description: "Maximum number of results", default: 3 },
+                        provider: { type: "string", description: "Search provider preference: auto, duckduckgo, or tavily", default: "auto" }
                     },
                     required: ["query"]
                 },
@@ -397,13 +398,14 @@ export class EnhancedToolSystem {
         }
     }
 
-    private async webSearch(params: { query: string; location?: string; max_results?: number }): Promise<ToolResult> {
+    private async webSearch(params: { query: string; location?: string; max_results?: number; provider?: 'auto' | 'duckduckgo' | 'tavily' }): Promise<ToolResult> {
         const maxResults = params.max_results || 5;
         const isImageSearch = params.query.toLowerCase().includes('images') || params.query.toLowerCase().includes('picture') || params.query.toLowerCase().includes('photo');
+        const preferredProvider = params.provider || 'auto';
 
         // Try Tavily first if both package and API key are available
         const tavilyApiKey = process.env.TAVILY_API_KEY;
-        if (this.tavilyAvailable && tavilyApiKey && tavilyModule) {
+        if (preferredProvider !== 'duckduckgo' && this.tavilyAvailable && tavilyApiKey && tavilyModule) {
             try {
                 Logger.INFO(`Using Tavily for search: "${params.query}"`);
                 const { tavily } = tavilyModule;
@@ -515,6 +517,7 @@ export class EnhancedToolSystem {
             const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(params.query)}`;
 
             const response = await fetch(searchUrl, {
+                signal: AbortSignal.timeout(Number(process.env.WEB_SEARCH_TIMEOUT_MS || 12000)),
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
                 }
@@ -528,35 +531,38 @@ export class EnhancedToolSystem {
             const sources: Source[] = [];
             let output = '';
 
-            // Parse search results from HTML
-            const resultRegex = /<div class="result[^"]*"[^>]*>[\s\S]*?<a class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+            const decodeHtml = (value: string) => value
+                .replace(/<[^>]+>/g, '')
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;|&#x27;/g, "'")
+                .replace(/&#x2F;/g, '/')
+                .trim();
+            const resolveDuckDuckGoUrl = (value: string) => {
+                const decoded = decodeHtml(value);
+                try {
+                    const url = new URL(decoded.startsWith('//') ? `https:${decoded}` : decoded);
+                    return url.searchParams.get('uddg') || url.toString();
+                } catch {
+                    return decoded;
+                }
+            };
+
+            // DuckDuckGo changes wrapper markup periodically; parse each result title and
+            // look ahead only to its nearest snippet instead of depending on div nesting.
+            const resultRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
 
             let match;
             let count = 0;
 
             while ((match = resultRegex.exec(html)) !== null && count < maxResults) {
-                const url = match[1];
-                const titleHtml = match[2];
-                const snippetHtml = match[3];
-
-                // Clean HTML tags and entities
-                const title = titleHtml
-                    .replace(/<[^>]+>/g, '')
-                    .replace(/&amp;/g, '&')
-                    .replace(/&lt;/g, '<')
-                    .replace(/&gt;/g, '>')
-                    .replace(/&quot;/g, '"')
-                    .replace(/&#39;/g, "'")
-                    .trim();
-
-                const snippet = snippetHtml
-                    .replace(/<[^>]+>/g, '')
-                    .replace(/&amp;/g, '&')
-                    .replace(/&lt;/g, '<')
-                    .replace(/&gt;/g, '>')
-                    .replace(/&quot;/g, '"')
-                    .replace(/&#39;/g, "'")
-                    .trim();
+                const url = resolveDuckDuckGoUrl(match[1]);
+                const title = decodeHtml(match[2]);
+                const lookahead = html.slice(resultRegex.lastIndex, resultRegex.lastIndex + 5000);
+                const snippetMatch = lookahead.match(/<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/);
+                const snippet = decodeHtml(snippetMatch?.[1] || '');
 
                 if (title && url) {
                     sources.push({ title, url });

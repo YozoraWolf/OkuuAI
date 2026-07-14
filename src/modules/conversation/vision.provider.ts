@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import path from 'path';
 import { generateCompletion } from '../../llm';
-import type { ObservationCategory, ScreenFrame } from './conversation.events';
+import type { ConversationResearchContext, ObservationCategory, ScreenFrame } from './conversation.events';
 
 export type VisionAnalysis = {
     observation: string;
@@ -9,10 +9,14 @@ export type VisionAnalysis = {
     importance: number;
     extractedText?: string;
     comment?: string;
+    contextLabel?: string;
+    contextConfidence?: number;
+    researchFocus?: 'overview' | 'gameplay' | 'mechanics' | 'characters' | 'items' | 'builds' | 'quests' | 'troubleshooting';
+    researchDepth?: 'simple' | 'concrete';
 };
 
 export interface VisionProvider {
-    analyze(frame: ScreenFrame, previousObservation?: string, signal?: AbortSignal): Promise<VisionAnalysis>;
+    analyze(frame: ScreenFrame, previousObservation?: string, signal?: AbortSignal, researchContext?: ConversationResearchContext): Promise<VisionAnalysis>;
 }
 
 const categories = new Set<ObservationCategory>(['info', 'suggestion', 'warning', 'error', 'success']);
@@ -24,11 +28,15 @@ const getPromptTemplate = () => {
 };
 
 export class LocalVisionProvider implements VisionProvider {
-    async analyze(frame: ScreenFrame, previousObservation?: string, signal?: AbortSignal): Promise<VisionAnalysis> {
+    async analyze(frame: ScreenFrame, previousObservation?: string, signal?: AbortSignal, researchContext?: ConversationResearchContext): Promise<VisionAnalysis> {
+        const researchedReference = researchContext
+            ? `Topic: ${researchContext.topic}\n${researchContext.summary.slice(-4500)}`
+            : 'None yet. Identify a specific stable context before proposing research.';
         const prompt = getPromptTemplate()
             .replace(/\{\{\s*visual_source\s*\}\}/g, frame.stream === 'camera' ? 'live camera view' : 'shared screen')
             .replace(/\{\{\s*previous_context\s*\}\}/g, previousObservation || 'None. This is the first analyzed frame.')
-            .replace(/\{\{\s*user_question\s*\}\}/g, frame.query || 'None. This is a periodic observation.');
+            .replace(/\{\{\s*user_question\s*\}\}/g, frame.query || 'None. This is a periodic observation.')
+            .replace(/\{\{\s*research_context\s*\}\}/g, researchedReference);
         const response = await this.complete(prompt, frame, signal);
         return this.parse(response);
     }
@@ -84,6 +92,12 @@ export class LocalVisionProvider implements VisionProvider {
                     importance: Math.max(0, Math.min(1, Number(parsed.importance) || 0.5)),
                     extractedText: String(parsed.extractedText || '').trim().slice(0, 1200) || undefined,
                     comment: String(parsed.comment || '').trim().slice(0, 400) || undefined,
+                    contextLabel: String(parsed.contextLabel || '').trim().slice(0, 120) || undefined,
+                    contextConfidence: Math.max(0, Math.min(1, Number(parsed.contextConfidence) || 0)),
+                    researchFocus: ['overview', 'gameplay', 'mechanics', 'characters', 'items', 'builds', 'quests', 'troubleshooting'].includes(parsed.researchFocus)
+                        ? parsed.researchFocus
+                        : 'overview',
+                    researchDepth: parsed.researchDepth === 'concrete' ? 'concrete' : 'simple',
                 };
             } catch {
                 // Fall through to a text observation when a model adds prose around malformed JSON.

@@ -24,13 +24,14 @@ import type { ConversationEvents } from './modules/conversation/conversation.eve
 import { ConversationRuntime } from './modules/conversation/conversation.runtime';
 import { ModuleManager } from './services/module-manager.service';
 import { LocalVisionProvider } from './modules/conversation/vision.provider';
+import { WebContextResearchService } from './modules/conversation/context-research.service';
 
 export let io: Server;
 
 (async () => {
     try {
         const eventBus = new EventBus<ConversationEvents>();
-        const conversationRuntime = new ConversationRuntime(eventBus, new LocalVisionProvider());
+        const conversationRuntime = new ConversationRuntime(eventBus, new LocalVisionProvider(), new WebContextResearchService());
         const moduleManager = new ModuleManager(conversationRuntime);
         await init(moduleManager);
 

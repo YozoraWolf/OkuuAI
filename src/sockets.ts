@@ -77,7 +77,13 @@ function maybeProactiveComment(userId: string, ownerId: number, sessionId: strin
     void proactiveScreenComment(
         sessionId,
         ownerId,
-        { message: observation.message, timestamp: observation.timestamp, extractedText: observation.extractedText, stream: observation.stream },
+        {
+            message: observation.message,
+            timestamp: observation.timestamp,
+            extractedText: observation.extractedText,
+            stream: observation.stream,
+            research: observation.research,
+        },
         comment,
     ).then(sent => {
         if (!sent) return;
@@ -120,8 +126,7 @@ export const setupSockets = (server: HTTPServer, conversationRuntime: Conversati
 
     io.on('connection', (socket) => {
         Logger.INFO('A client connected: ' + socket.id);
-        const conversationSubscriptions = new AbortController();
-        let observingConversation = false;
+        let conversationSubscriptions = new AbortController();
         let conversationSessionId = '';
 
         socket.on('conversation:join', async (
@@ -136,15 +141,15 @@ export const setupSockets = (server: HTTPServer, conversationRuntime: Conversati
                 ack?.({ enabled: false, observations: [] });
                 return;
             }
-            conversationSessionId = data.sessionId;
-            if (!observingConversation) {
-                observingConversation = true;
-                conversationRuntime.subscribe(String(socket.data.user.id), observation => {
-                    socket.emit('conversation:observation', observation);
-                    maybeProactiveComment(String(socket.data.user.id), socket.data.user.id, conversationSessionId, observation);
-                }, conversationSubscriptions.signal);
-            }
-            ack?.({ enabled: true, observations: conversationRuntime.getHistory(socket.data.user.id) });
+            conversationSubscriptions.abort();
+            conversationSubscriptions = new AbortController();
+            const joinedSessionId = data.sessionId;
+            conversationSessionId = joinedSessionId;
+            conversationRuntime.subscribe(String(socket.data.user.id), joinedSessionId, observation => {
+                socket.emit('conversation:observation', observation);
+                maybeProactiveComment(String(socket.data.user.id), socket.data.user.id, joinedSessionId, observation);
+            }, conversationSubscriptions.signal);
+            ack?.({ enabled: true, observations: conversationRuntime.getHistory(String(socket.data.user.id), conversationSessionId) });
         });
 
         socket.on('conversation:screen-state', async (data: { shared?: boolean; application?: string; stream?: 'screen' | 'camera' }) => {
@@ -171,6 +176,16 @@ export const setupSockets = (server: HTTPServer, conversationRuntime: Conversati
             } catch (error) {
                 ack?.({ accepted: false, error: error instanceof Error ? error.message : 'Unable to analyze frame' });
             }
+        });
+
+        socket.on('conversation:research-consent', async (data: { topic?: string; approved?: boolean }) => {
+            if (!conversationSessionId || typeof data?.topic !== 'string' || typeof data?.approved !== 'boolean') return;
+            await conversationRuntime.setResearchConsent(
+                String(socket.data.user.id),
+                conversationSessionId,
+                data.topic.slice(0, 120),
+                data.approved,
+            );
         });
 
         socket.on('joinChat', async (sessionId: string) => {

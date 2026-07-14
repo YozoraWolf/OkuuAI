@@ -19,10 +19,12 @@
         <div>
           <div class="observation-meta"><span>{{ observation.category }}</span><time>{{ formatTime(observation.timestamp) }}</time></div>
           <p>{{ observation.message }}</p>
-          <small v-if="observation.application || observation.stream">
-            <q-icon v-if="observation.stream === 'camera'" name="videocam" size="12px" class="source-icon" />
+          <small v-if="observation.application || observation.stream || observation.contextLabel">
+            <q-icon v-if="observation.research" name="travel_explore" size="12px" class="source-icon" />
+            <q-icon v-else-if="observation.stream === 'camera'" name="videocam" size="12px" class="source-icon" />
             <q-icon v-else-if="observation.stream === 'screen'" name="desktop_windows" size="12px" class="source-icon" />
-            {{ observation.application || (observation.stream === 'camera' ? 'camera' : 'screen') }}
+            {{ observation.contextLabel || observation.application || (observation.stream === 'camera' ? 'camera' : 'screen') }}
+            <span v-if="observation.research"> · researched context</span>
           </small>
         </div>
       </article>

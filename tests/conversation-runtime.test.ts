@@ -8,7 +8,7 @@ test('ConversationRuntime emits and retains structured observations while active
     const eventBus = new EventBus<ConversationEvents>();
     const runtime = new ConversationRuntime(eventBus);
     const received: string[] = [];
-    runtime.subscribe('user-1', observation => { received.push(observation.message); });
+    runtime.subscribe('user-1', 'session-1', observation => { received.push(observation.message); });
 
     await runtime.start();
     await runtime.reportScreenState('user-1', 'session-1', true, 'browser');
@@ -31,13 +31,25 @@ test('ConversationRuntime rejects screen events when disabled', async () => {
 test('ConversationRuntime isolates user observations', async () => {
     const runtime = new ConversationRuntime(new EventBus<ConversationEvents>());
     const userTwoMessages: string[] = [];
-    runtime.subscribe('user-2', observation => { userTwoMessages.push(observation.message); });
+    runtime.subscribe('user-2', 'session-1', observation => { userTwoMessages.push(observation.message); });
     await runtime.start();
 
     await runtime.reportScreenState('user-1', 'session-1', true, 'window');
 
     assert.equal(userTwoMessages.length, 1);
     assert.equal(runtime.getHistory('user-2').length, 1);
+});
+
+test('ConversationRuntime isolates observations between sessions for the same user', async () => {
+    const runtime = new ConversationRuntime(new EventBus<ConversationEvents>());
+    const otherSessionMessages: string[] = [];
+    runtime.subscribe('user-1', 'session-2', observation => { otherSessionMessages.push(observation.message); });
+    await runtime.start();
+
+    await runtime.reportScreenState('user-1', 'session-1', true, 'window');
+
+    assert.equal(otherSessionMessages.length, 1);
+    assert.equal(runtime.getHistory('user-1', 'session-2').length, 1);
 });
 
 test('ConversationRuntime analyzes frames and exposes session context', async () => {
@@ -101,4 +113,69 @@ test('ConversationRuntime queues a forced frame and waits for that exact visual 
     assert.equal(context?.capturedAt, 2000);
     assert.equal(context?.requestedVisualContext, true);
     assert.match(context?.message || '', /earbud case/);
+});
+
+test('ConversationRuntime does not revive an old frame after screen sharing restarts', async () => {
+    let resolveAnalysis: ((value: any) => void) | undefined;
+    const visionProvider = {
+        analyze: () => new Promise(resolve => { resolveAnalysis = resolve; }),
+    };
+    const runtime = new ConversationRuntime(new EventBus<ConversationEvents>(), visionProvider);
+    await runtime.start();
+    await runtime.reportScreenState('user-1', 'session-1', true, 'window');
+    runtime.submitFrame('user-1', 'session-1', {
+        capturedAt: 1000, mimeType: 'image/jpeg', base64: 'old-stream-frame', width: 640, height: 360, stream: 'screen',
+    });
+
+    await runtime.reportScreenState('user-1', 'session-1', false, 'window');
+    await runtime.reportScreenState('user-1', 'session-1', true, 'window');
+    resolveAnalysis?.({ observation: 'Stale content from the old stream.', category: 'info', importance: 0.7 });
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    assert.equal(runtime.getScreenContext('user-1', 'session-1'), undefined);
+});
+
+test('ConversationRuntime injects accumulated research and emits new research signals', async () => {
+    const researchContext = {
+        topic: 'Neverness to Everness',
+        summary: 'An urban supernatural open-world RPG with vehicle exploration.',
+        sources: [{ title: 'Official site', url: 'https://nte.perfectworld.com/' }],
+        updatedAt: Date.now(),
+    };
+    let receivedResearch: typeof researchContext | undefined;
+    let receivedSignal: any;
+    const researchProvider = {
+        get: () => researchContext,
+        observe: async (_userId: string, _sessionId: string, signal: any) => {
+            receivedSignal = signal;
+            return researchContext;
+        },
+        clearSession: () => undefined,
+    };
+    const visionProvider = {
+        analyze: async (_frame: any, _previous: any, _signal: any, research: typeof researchContext) => {
+            receivedResearch = research;
+            return {
+                observation: 'The vehicle customization menu is open.',
+                comment: 'That paint choice has considerably more confidence than restraint. ^^',
+                category: 'info' as const,
+                importance: 0.8,
+                contextLabel: 'Neverness to Everness',
+                contextConfidence: 0.96,
+                researchFocus: 'mechanics' as const,
+                researchDepth: 'simple' as const,
+            };
+        },
+    };
+    const runtime = new ConversationRuntime(new EventBus<ConversationEvents>(), visionProvider, researchProvider);
+    await runtime.start();
+    runtime.submitFrame('user-1', 'session-1', {
+        capturedAt: Date.now(), mimeType: 'image/jpeg', base64: 'nte-frame', width: 640, height: 360, stream: 'screen',
+    });
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    assert.equal(receivedResearch?.topic, 'Neverness to Everness');
+    assert.equal(receivedSignal?.depth, 'simple');
+    assert.equal(receivedSignal?.focus, 'mechanics');
+    assert.equal(runtime.getScreenContext('user-1', 'session-1')?.research?.topic, 'Neverness to Everness');
 });
