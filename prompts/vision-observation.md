@@ -13,7 +13,8 @@ Inspect the image and return exactly one compact JSON object with these fields:
   or change.
 - `comment`: Okuu's personal one-sentence reaction to the moment. It must add something
   beyond `observation`; never paraphrase or redescribe what is visible. Use exactly `SKIP`
-  if there is no natural thought worth interrupting the user with.
+  if there is no natural thought worth interrupting the user with. A scene may remain broadly
+  similar while offering a fresh natural reaction, but never repeat the previous comment.
 - `category`: one of `info`, `suggestion`, `warning`, `error`, or `success`.
 - `importance`: a number from 0 to 1.
 - `extractedText`: only brief text that is directly relevant, otherwise an empty string.

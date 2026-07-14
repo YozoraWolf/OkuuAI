@@ -61,6 +61,7 @@ const mode = ref<VisualStream>('screen');
 const activeMode = ref<VisualStream | undefined>(undefined);
 let captureTimer: ReturnType<typeof setInterval> | undefined;
 let lastSignature: Uint8ClampedArray | undefined;
+let lastFrameSentAt = 0;
 let application: string = 'shared screen';
 const unavailableReason = computed(() => {
   if (!window.isSecureContext) return 'Visual capture requires HTTPS or a localhost URL.';
@@ -77,6 +78,7 @@ const stopSharing = (notifyRuntime = true) => {
   if (captureTimer) clearInterval(captureTimer);
   captureTimer = undefined;
   lastSignature = undefined;
+  lastFrameSentAt = 0;
   current?.getTracks().forEach(track => track.stop());
   if (video.value) video.value.srcObject = null;
   if (notifyRuntime && current) emit('stateChanged', { shared: false, stream: mode.value });
@@ -98,7 +100,7 @@ const startCapture = async () => {
     track?.addEventListener('ended', () => stopSharing(), { once: true });
     application = mode.value === 'camera' ? 'camera' : (track?.getSettings().displaySurface || 'shared screen');
     emit('stateChanged', { shared: true, application, stream: mode.value });
-    captureTimer = setInterval(captureFrame, 2000);
+    captureTimer = setInterval(captureFrame, 1500);
     setTimeout(captureFrame, 500);
   } catch (error) {
     const isCamera = mode.value === 'camera';
@@ -124,6 +126,8 @@ const captureFrame = () => {
   if (!signatureContext) return;
   signatureContext.drawImage(source, 0, 0, 32, 18);
   const signature = signatureContext.getImageData(0, 0, 32, 18).data;
+  const now = Date.now();
+  const heartbeatMs = activeMode.value === 'camera' ? 6000 : 10000;
   if (lastSignature) {
     let difference = 0;
     for (let index = 0; index < signature.length; index += 4) {
@@ -131,7 +135,8 @@ const captureFrame = () => {
       difference += Math.abs((signature[index + 1] ?? 0) - (lastSignature[index + 1] ?? 0));
       difference += Math.abs((signature[index + 2] ?? 0) - (lastSignature[index + 2] ?? 0));
     }
-    if (difference / (signature.length * 0.75 * 255) < 0.015) return;
+    const changed = difference / (signature.length * 0.75 * 255) >= 0.006;
+    if (!changed && now - lastFrameSentAt < heartbeatMs) return;
   }
   lastSignature = new Uint8ClampedArray(signature);
 
@@ -145,7 +150,10 @@ const captureFrame = () => {
   if (!context) return;
   context.drawImage(source, 0, 0, width, height);
   const base64 = canvas.toDataURL('image/jpeg', 0.58).split(',')[1];
-  if (base64) emit('frame', { capturedAt: Date.now(), mimeType: 'image/jpeg', base64, width, height, application, stream: mode.value });
+  if (base64) {
+    lastFrameSentAt = now;
+    emit('frame', { capturedAt: now, mimeType: 'image/jpeg', base64, width, height, application, stream: mode.value });
+  }
 };
 
 onBeforeUnmount(() => stopSharing());
