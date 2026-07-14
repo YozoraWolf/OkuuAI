@@ -18,6 +18,12 @@ export interface Message {
     metadata?: {
         web_search?: { sources: { title: string; url: string }[] };
         weather?: any;
+        vision_context?: {
+            observation: string;
+            extractedText?: string;
+            stream?: 'screen' | 'camera';
+            timestamp: number;
+        };
         [key: string]: any;
     };
 }

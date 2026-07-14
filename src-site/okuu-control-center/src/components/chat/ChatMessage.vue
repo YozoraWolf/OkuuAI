@@ -19,6 +19,16 @@
                     @delete="deleteMessage" @edit="editMessage" />
             </div>
             <div class="flex column">
+                <div v-if="message.metadata?.vision_context" class="vision-reference q-mt-xs">
+                    <div class="vision-reference-label">
+                        <q-icon :name="message.metadata.vision_context.stream === 'camera' ? 'videocam' : 'desktop_windows'" size="14px" />
+                        <span>{{ message.metadata.vision_context.stream === 'camera' ? 'Camera observation' : 'Screen observation' }}</span>
+                    </div>
+                    <p>{{ message.metadata.vision_context.observation }}</p>
+                    <small v-if="message.metadata.vision_context.extractedText">
+                        {{ message.metadata.vision_context.extractedText }}
+                    </small>
+                </div>
                 <div class="message-body q-mt-xs">
                     <template v-for="(part, idx) in generateComponents(message.message, message.thinking)" :key="idx">
                         <component v-if="part.type === 'component'" :is="part.component" v-bind="part.props" />
@@ -331,6 +341,27 @@ onMounted(async () => {
     white-space: pre-wrap;
     word-break: break-word;
 }
+
+.vision-reference {
+    padding: .6rem .72rem;
+    border-left: 3px solid color-mix(in srgb, var(--accent-1) 72%, transparent);
+    border-radius: 0 10px 10px 0;
+    background: color-mix(in srgb, var(--surface-2) 84%, transparent);
+    color: var(--text-muted);
+}
+.vision-reference-label {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin-bottom: .3rem;
+    color: var(--accent-1);
+    font-size: .64rem;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+.vision-reference p { margin: 0; color: var(--text-strong); font-size: .76rem; line-height: 1.4; }
+.vision-reference small { display: block; margin-top: .3rem; font-size: .66rem; line-height: 1.35; }
 
 .generation-indicator { margin-top: 0.5rem; }
 

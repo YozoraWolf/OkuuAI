@@ -532,7 +532,17 @@ export const proactiveScreenComment = async (
         sessionId,
         timestamp,
         memoryUser: 'okuu',
-        metadata: { proactive: true, vision: true, stream: screenContext.stream },
+        metadata: {
+            proactive: true,
+            vision: true,
+            stream: screenContext.stream,
+            vision_context: {
+                observation: screenContext.message,
+                extractedText: screenContext.extractedText,
+                stream: screenContext.stream,
+                timestamp: screenContext.timestamp,
+            },
+        },
         memoryKey: `vision-${timestamp}-${id}`,
     };
     io.to(sessionId).emit('chat', reply);
