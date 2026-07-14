@@ -27,7 +27,8 @@ export class LocalVisionProvider implements VisionProvider {
     async analyze(frame: ScreenFrame, previousObservation?: string, signal?: AbortSignal): Promise<VisionAnalysis> {
         const prompt = getPromptTemplate()
             .replace(/\{\{\s*visual_source\s*\}\}/g, frame.stream === 'camera' ? 'live camera view' : 'shared screen')
-            .replace(/\{\{\s*previous_context\s*\}\}/g, previousObservation || 'None. This is the first analyzed frame.');
+            .replace(/\{\{\s*previous_context\s*\}\}/g, previousObservation || 'None. This is the first analyzed frame.')
+            .replace(/\{\{\s*user_question\s*\}\}/g, frame.query || 'None. This is a periodic observation.');
         const response = await this.complete(prompt, frame, signal);
         return this.parse(response);
     }

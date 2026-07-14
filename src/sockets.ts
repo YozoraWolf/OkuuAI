@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { Server } from "socket.io";
+import { Server, type Socket } from "socket.io";
 import { Server as HTTPServer } from "http";
 import { Core } from "./core";
 import { SESSION_ID, startSession } from "./langchain/memory/memory";
@@ -29,6 +29,26 @@ const textSimilarity = (left: string, right: string) => {
     return shared / denominator;
 };
 
+const requestsVisualContext = (message: string) => [
+    /\b(?:look|take a look|check)\s+(?:at\s+)?(?:this|that|my (?:screen|camera)|the (?:screen|camera))\b/i,
+    /\bcan you see\b/i,
+    /\bwhat(?:'s| is)\s+(?:this|that|in my hands?|on (?:my|the) screen|in (?:my|the) camera)\b/i,
+    /\bwhat (?:am i|are we) (?:holding|showing|looking at)\b/i,
+    /\b(?:read|identify|recognize)\s+(?:this|that|what(?:'s| is) (?:here|visible)|the screen)\b/i,
+].some(pattern => pattern.test(message));
+
+const requestFreshFrame = (socket: Socket) => new Promise<ScreenFrame | undefined>(resolve => {
+    let settled = false;
+    const finish = (frame?: ScreenFrame) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(frame);
+    };
+    const timer = setTimeout(() => finish(), 4000);
+    socket.emit('conversation:request-frame', { requestedAt: Date.now() }, finish);
+});
+
 /**
  * Decide whether Okuu should voice a comment about the current screen observation.
  * The vision model produces Okuu's opinion in the same call as the observation. This avoids
@@ -36,7 +56,7 @@ const textSimilarity = (left: string, right: string) => {
  */
 function maybeProactiveComment(userId: string, ownerId: number, sessionId: string, observation: ConversationObservation) {
     const comment = observation.comment?.trim();
-    if (observation.source !== 'perception' || !observation.message || !comment || /^SKIP[.!]?$/i.test(comment)) return;
+    if (observation.requestedVisualContext || observation.source !== 'perception' || !observation.message || !comment || /^SKIP[.!]?$/i.test(comment)) return;
 
     const cooldownMs = Number(process.env.PROACTIVE_COMMENT_COOLDOWN_MS || 12000);
     const importanceThreshold = Number(process.env.PROACTIVE_COMMENT_IMPORTANCE || 0.55);
@@ -178,8 +198,30 @@ export const setupSockets = (server: HTTPServer, conversationRuntime: Conversati
 
                 data.ownerId = socket.data.user.id;
                 data.user = socket.data.user.username;
-                const screenContext = conversationRuntime.getScreenContext(String(socket.data.user.id), data.sessionId);
                 data.metadata = { ...(data.metadata || {}) };
+                const userId = String(socket.data.user.id);
+                let screenContext;
+                if (
+                    conversationRuntime.isActive()
+                    && conversationSessionId === data.sessionId
+                    && requestsVisualContext(data.message)
+                ) {
+                    const frame = await requestFreshFrame(socket);
+                    if (frame) {
+                        frame.query = String(data.message).slice(0, 500);
+                        data.metadata.visual_context_requested = true;
+                        const accepted = conversationRuntime.submitFrame(userId, data.sessionId, frame, true);
+                        if (accepted) {
+                            screenContext = await conversationRuntime.waitForFreshScreenContext(
+                                userId,
+                                data.sessionId,
+                                frame.capturedAt,
+                                Number(process.env.VISION_ON_DEMAND_TIMEOUT_MS || 25000),
+                            );
+                        }
+                    }
+                }
+                screenContext ||= conversationRuntime.getScreenContext(userId, data.sessionId);
                 if (screenContext) data.metadata.screen_context = screenContext;
                 else delete data.metadata.screen_context;
                 Logger.DEBUG(`Received chat message: ${JSON.stringify(data)}`);

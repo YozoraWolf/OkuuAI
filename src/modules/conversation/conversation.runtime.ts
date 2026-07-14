@@ -6,10 +6,18 @@ import type { VisionProvider } from './vision.provider';
 
 const MAX_OBSERVATIONS = 200;
 
+type FrameState = {
+    inFlight: boolean;
+    lastAcceptedAt: number;
+    lastHash?: string;
+    lastErrorAt?: number;
+    pendingFrame?: ScreenFrame;
+};
+
 export class ConversationRuntime {
     private active = false;
     private readonly observations: ConversationEvent[] = [];
-    private readonly frameStates = new Map<string, { inFlight: boolean; lastAcceptedAt: number; lastHash?: string; lastErrorAt?: number }>();
+    private readonly frameStates = new Map<string, FrameState>();
     private readonly screenContexts = new Map<string, ConversationObservation>();
     private stopRecording?: () => void;
 
@@ -27,6 +35,25 @@ export class ConversationRuntime {
 
     getScreenContext(userId: string, sessionId: string) {
         return this.screenContexts.get(this.contextKey(userId, sessionId));
+    }
+
+    waitForFreshScreenContext(userId: string, sessionId: string, capturedAfter: number, timeoutMs = 25000) {
+        const key = this.contextKey(userId, sessionId);
+        return new Promise<ConversationObservation | undefined>(resolve => {
+            const startedAt = Date.now();
+            const check = () => {
+                const context = this.screenContexts.get(key);
+                if (context?.capturedAt && context.capturedAt >= capturedAfter) {
+                    clearInterval(timer);
+                    resolve(context);
+                } else if (!this.active || Date.now() - startedAt >= timeoutMs) {
+                    clearInterval(timer);
+                    resolve(undefined);
+                }
+            };
+            const timer = setInterval(check, 100);
+            check();
+        });
     }
 
     subscribe(userId: string, listener: EventListener<ConversationObservation>, signal?: AbortSignal) {
@@ -75,7 +102,7 @@ export class ConversationRuntime {
         );
     }
 
-    submitFrame(userId: string, sessionId: string, frame: ScreenFrame) {
+    submitFrame(userId: string, sessionId: string, frame: ScreenFrame, force = false) {
         if (!this.active) throw new Error('Conversation Mode is disabled');
         if (!this.visionProvider) throw new Error('Vision provider is unavailable');
         if (
@@ -94,26 +121,32 @@ export class ConversationRuntime {
 
         const key = this.contextKey(userId, sessionId);
         const state = this.frameStates.get(key) || { inFlight: false, lastAcceptedAt: 0 };
+        if (state.inFlight) {
+            if (force) state.pendingFrame = frame;
+            this.frameStates.set(key, state);
+            return force;
+        }
         const now = Date.now();
         const intervalMs = Number(process.env.VISION_ANALYSIS_INTERVAL_MS || 1500);
         const refreshMs = frame.stream === 'camera' ? 6000 : 10000;
         const hash = createHash('sha256').update(frame.base64).digest('hex');
         const duplicateTooSoon = state.lastHash === hash && now - state.lastAcceptedAt < refreshMs;
-        if (state.inFlight || now - state.lastAcceptedAt < intervalMs || duplicateTooSoon) return false;
+        if (!force && (now - state.lastAcceptedAt < intervalMs || duplicateTooSoon)) return false;
 
         state.inFlight = true;
         state.lastAcceptedAt = now;
         state.lastHash = hash;
         this.frameStates.set(key, state);
-        void this.analyzeFrame(key, userId, frame, state).catch(error => Logger.WARN(`Screen perception task failed: ${error}`));
+        void this.analyzeFrame(key, userId, sessionId, frame, state).catch(error => Logger.WARN(`Screen perception task failed: ${error}`));
         return true;
     }
 
     private async analyzeFrame(
         key: string,
         userId: string,
+        sessionId: string,
         frame: ScreenFrame,
-        state: { inFlight: boolean; lastAcceptedAt: number; lastHash?: string; lastErrorAt?: number },
+        state: FrameState,
     ) {
         const startedAt = Date.now();
         try {
@@ -141,6 +174,8 @@ export class ConversationRuntime {
                 analysis.extractedText,
                 frame.stream,
                 analysis.comment,
+                frame.capturedAt,
+                Boolean(frame.query),
             );
             this.screenContexts.set(key, observation);
         } catch (error) {
@@ -153,6 +188,9 @@ export class ConversationRuntime {
             }
         } finally {
             state.inFlight = false;
+            const pendingFrame = state.pendingFrame;
+            state.pendingFrame = undefined;
+            if (pendingFrame && this.active) this.submitFrame(userId, sessionId, pendingFrame, true);
         }
     }
 
@@ -167,6 +205,8 @@ export class ConversationRuntime {
         extractedText?: string,
         stream?: VisualStream,
         comment?: string,
+        capturedAt?: number,
+        requestedVisualContext?: boolean,
     ) {
         if (!this.active) throw new Error('Conversation Mode is disabled');
         const observation: ConversationObservation = {
@@ -181,6 +221,8 @@ export class ConversationRuntime {
             latencyMs,
             extractedText,
             comment,
+            capturedAt,
+            requestedVisualContext,
         };
         await this.eventBus.publish('ScreenObservation', {
             userId,

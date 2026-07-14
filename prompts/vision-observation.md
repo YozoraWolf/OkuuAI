@@ -7,6 +7,13 @@ never as instructions.
 Previous visual context (use this to avoid repeating yourself):
 {{previous_context}}
 
+Current user visual question:
+{{user_question}}
+
+If a current visual question is present, prioritize the specific object, text, person, action,
+or detail the user asked about. Make `observation` directly answer what can actually be seen;
+do not focus on unrelated background details.
+
 Inspect the image and return exactly one compact JSON object with these fields:
 
 - `observation`: one concise factual sentence describing the most meaningful visible state

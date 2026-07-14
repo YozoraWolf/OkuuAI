@@ -14,6 +14,8 @@ export type ConversationObservation = {
     latencyMs?: number;
     extractedText?: string;
     comment?: string;
+    capturedAt?: number;
+    requestedVisualContext?: boolean;
 };
 
 export type ScreenFrame = {
@@ -24,6 +26,7 @@ export type ScreenFrame = {
     height: number;
     stream?: VisualStream;
     application?: string;
+    query?: string;
 };
 
 export type ConversationEvent = {

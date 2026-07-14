@@ -38,6 +38,7 @@
                 </nav>
                 <SharedScreenPanel
                     v-if="conversationMode"
+                    ref="sharedScreenRef"
                     :class="{ 'mobile-panel-hidden': conversationPanel !== 'vision' }"
                     @state-changed="handleScreenState"
                     @frame="handleScreenFrame"
@@ -113,6 +114,7 @@ const { sessions, currentSession, isStreaming, isGenerating } = storeToRefs(sess
 const selectedSessionId = ref<string | undefined>(undefined);
 const sidebarOpen = ref(false);
 const chatMessagesRef = ref();
+const sharedScreenRef = ref<InstanceType<typeof SharedScreenPanel>>();
 const conversationMode = ref(false);
 const observations = ref<ConversationObservation[]>([]);
 const conversationPanel = ref<'vision' | 'chat' | 'observations'>('vision');
@@ -200,6 +202,7 @@ watch(
 
 onBeforeUnmount(() => {
     socket.value?.off('conversation:observation', receiveObservation);
+    socket.value?.off('conversation:request-frame', receiveFrameRequest);
     socket.value?.off('chat', receiveConversationMessage);
     socket.value?.disconnect();
 });
@@ -225,6 +228,7 @@ const selectSession = async (sessionId: string) => {
     socketIO.value = new SocketioService();
     socket.value = await socketIO.value.initializeSocket(sessionId, sessionStore);
     socket.value.on('conversation:observation', receiveObservation);
+    socket.value.on('conversation:request-frame', receiveFrameRequest);
     socket.value.on('chat', receiveConversationMessage);
     socket.value.on('conversation:error', (error: { message?: string }) => {
         $q.notify({ type: 'warning', message: error.message || 'Conversation Mode is unavailable.' });
@@ -240,6 +244,10 @@ const receiveObservation = (observation: ConversationObservation) => {
     if (observations.value.some(item => item.id === observation.id)) return;
     observations.value.push(observation);
     if (observations.value.length > 200) observations.value.shift();
+};
+
+const receiveFrameRequest = (_request: { requestedAt: number }, acknowledge: (frame?: ScreenFrame) => void) => {
+    acknowledge(sharedScreenRef.value?.captureFreshFrame());
 };
 
 const receiveConversationMessage = (message: Message) => {

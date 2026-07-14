@@ -115,7 +115,7 @@ const startCapture = async () => {
   }
 };
 
-const captureFrame = () => {
+const createFrame = (force = false): ScreenFrame | undefined => {
   const source = video.value;
   if (!source || !stream.value || source.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !source.videoWidth) return;
 
@@ -136,7 +136,7 @@ const captureFrame = () => {
       difference += Math.abs((signature[index + 2] ?? 0) - (lastSignature[index + 2] ?? 0));
     }
     const changed = difference / (signature.length * 0.75 * 255) >= 0.006;
-    if (!changed && now - lastFrameSentAt < heartbeatMs) return;
+    if (!force && !changed && now - lastFrameSentAt < heartbeatMs) return;
   }
   lastSignature = new Uint8ClampedArray(signature);
 
@@ -152,9 +152,18 @@ const captureFrame = () => {
   const base64 = canvas.toDataURL('image/jpeg', 0.58).split(',')[1];
   if (base64) {
     lastFrameSentAt = now;
-    emit('frame', { capturedAt: now, mimeType: 'image/jpeg', base64, width, height, application, stream: mode.value });
+    return { capturedAt: now, mimeType: 'image/jpeg', base64, width, height, application, stream: activeMode.value || mode.value };
   }
 };
+
+const captureFrame = () => {
+  const frame = createFrame();
+  if (frame) emit('frame', frame);
+};
+
+const captureFreshFrame = () => createFrame(true);
+
+defineExpose({ captureFreshFrame });
 
 onBeforeUnmount(() => stopSharing());
 </script>
