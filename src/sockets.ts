@@ -39,12 +39,13 @@ function maybeProactiveComment(userId: string, ownerId: number, sessionId: strin
     if (observation.source !== 'perception' || !observation.message || !comment || /^SKIP[.!]?$/i.test(comment)) return;
 
     const cooldownMs = Number(process.env.PROACTIVE_COMMENT_COOLDOWN_MS || 30000);
-    const importanceThreshold = Number(process.env.PROACTIVE_COMMENT_IMPORTANCE || 0.72);
+    const importanceThreshold = Number(process.env.PROACTIVE_COMMENT_IMPORTANCE || 0.65);
     const state = proactiveState.get(userId) || { lastAt: 0 };
     const now = Date.now();
     if (state.inFlight || now - state.lastAt < cooldownMs) return;
     if (observation.category === 'info' && (observation.importance || 0) < importanceThreshold) return;
-    if (!/^(?:i\b|i['’](?:d|m|ve)\b|honestly\b|you\b|let['’]s\b)/i.test(comment) || /^i see\b/i.test(comment)) return;
+    if (/^(?:i see|this (?:image|screen|view|scene)|the (?:image|screen|view)|there (?:is|are)|it appears)\b/i.test(comment)) return;
+    if (observation.category === 'info' && /^(?:i['’]d (?:suggest|recommend)|you should|you might want)\b/i.test(comment)) return;
     if (textSimilarity(comment, observation.message) >= 0.55) return;
     if (state.lastComment && textSimilarity(comment, state.lastComment) >= 0.65) return;
 
