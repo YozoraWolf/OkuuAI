@@ -173,14 +173,14 @@ onBeforeUnmount(() => stopSharing());
 header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .8rem; }
 .eyebrow { color: var(--accent-1); font-size: .61rem; font-weight: 850; letter-spacing: .15em; }
 h2 { margin: .15rem 0 0; font-size: clamp(.95rem, 2vw, 1.18rem); letter-spacing: -.025em; }
-.screen-stage { position: relative; display: grid; min-height: 190px; flex: 1; place-items: center; overflow: hidden; border: 1px solid var(--surface-border); border-radius: 17px; background: #0c0a0b; }
+.screen-stage { position: relative; display: grid; min-width: 0; min-height: 190px; flex: 1 1 0; place-items: center; contain: layout paint; overflow: hidden; border: 1px solid var(--surface-border); border-radius: 17px; background: #080708; }
 .screen-stage.active { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-1) 22%, transparent); }
-video { width: 100%; height: 100%; object-fit: contain; background: #080708; }
+video { position: absolute; inset: 0; display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; object-position: center center; background: #080708; }
 .screen-placeholder { display: grid; max-width: 410px; justify-items: center; padding: 1.5rem; color: var(--text-muted); text-align: center; }
 .screen-placeholder strong { margin-top: .8rem; color: var(--text-strong); font-size: .92rem; }
 .screen-placeholder span { margin-top: .35rem; font-size: .72rem; line-height: 1.5; }
 .screen-glyph { display: grid; width: 76px; height: 58px; place-items: center; border: 1px solid var(--surface-border); border-radius: 14px; color: var(--accent-1); background: var(--surface-1); }
-.privacy-label { position: absolute; top: .65rem; right: .65rem; display: flex; align-items: center; gap: .4rem; padding: .35rem .55rem; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; color: #fff; background: rgba(12,10,11,.78); backdrop-filter: blur(8px); font-size: .58rem; font-weight: 800; letter-spacing: .08em; }
+.privacy-label { position: absolute; z-index: 2; top: .65rem; right: .65rem; display: flex; align-items: center; gap: .4rem; padding: .35rem .55rem; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; color: #fff; background: rgba(12,10,11,.78); backdrop-filter: blur(8px); font-size: .58rem; font-weight: 800; letter-spacing: .08em; }
 .privacy-label span { width: 6px; height: 6px; border-radius: 50%; background: #ef6c62; box-shadow: 0 0 0 4px rgba(239,108,98,.16); }
 .header-actions { display: flex; align-items: center; gap: .6rem; }
 .source-toggle { border: 1px solid var(--surface-border); border-radius: 10px; }
